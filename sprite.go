@@ -3,8 +3,8 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"image"
+	"io"
 
 	eb "github.com/hajimehoshi/ebiten/v2"
 )
@@ -26,10 +26,10 @@ func SpriteBounds(sprite Sprite, spriteN int) image.Rectangle {
 	}
 
 	w := sprite.Width + sprite.Margin
-	h := sprite.Height + sprite.Margin	
+	h := sprite.Height + sprite.Margin
 
 	spriteW, spriteH := ImageSize(sprite)
-	
+
 	colCount := spriteW / w
 	rowCount := spriteH / h
 
@@ -43,13 +43,15 @@ func SpriteBounds(sprite Sprite, spriteN int) image.Rectangle {
 	col := spriteN % colCount
 	row := spriteN / colCount
 
-	return image.Rectangle {
-		Min : image.Pt(col * w, row * h),
-		Max : image.Pt(col * w + sprite.Width, row * h + sprite.Height),
+	imageMin := sprite.Bounds().Min
+
+	return image.Rectangle{
+		Min: image.Pt(col*w, row*h).Add(imageMin),
+		Max: image.Pt(col*w+sprite.Width, row*h+sprite.Height).Add(imageMin),
 	}
 }
 
-func SpriteSubImage(sprite Sprite, spriteN int) *eb.Image {	
+func SpriteSubImage(sprite Sprite, spriteN int) *eb.Image {
 	return sprite.SubImage(SpriteBounds(sprite, spriteN)).(*eb.Image)
 }
 

@@ -1,116 +1,135 @@
 package main
 
 import (
-	"math"
 	"image"
-
-	eb "github.com/hajimehoshi/ebiten/v2"
+	"math"
 )
 
 // =================================
-// PointF
+// FPoint
 // =================================
 
-type PointF struct{
+type FPoint struct {
 	X, Y float64
 }
 
-func Ptf(x, y float64) PointF{
-	return PointF{X:x, Y:y}
+func FPt(x, y float64) FPoint {
+	return FPoint{X: x, Y: y}
 }
 
-func PointToPointF(p image.Point) PointF{
-	return PointF{X:float64(p.X), Y:float64(p.Y)}
+func PointToFPoint(p image.Point) FPoint {
+	return FPoint{X: float64(p.X), Y: float64(p.Y)}
 }
 
-func (p PointF) Add(q PointF) PointF{
+func (p FPoint) Add(q FPoint) FPoint {
 	p.X += q.X
 	p.Y += q.Y
 	return p
 }
 
-func (p PointF) Sub(q PointF) PointF{
+func (p FPoint) Sub(q FPoint) FPoint {
 	p.X -= q.X
 	p.Y -= q.Y
 	return p
 }
 
-func (p PointF) Rotate(theta float64) PointF {
+func (p FPoint) Div(q FPoint) FPoint {
+	p.X /= q.X
+	p.Y /= q.Y
+	return p
+}
+
+func (p FPoint) Eq(q FPoint) bool {
+	return p.X == q.X && p.Y == q.Y
+}
+
+func (p FPoint) In(r FRectangle) bool {
+	return r.Min.X <= p.X && p.X <= r.Max.X &&
+		r.Min.Y <= p.Y && p.Y <= r.Max.Y
+}
+
+func (p FPoint) Mul(q FPoint) FPoint {
+	p.X *= q.X
+	p.Y *= q.Y
+	return p
+}
+
+func (p FPoint) Rotate(theta float64) FPoint {
 	cos := math.Cos(theta)
 	sin := math.Sin(theta)
 
-	return PointF {
-		X : cos * p.X - sin * p.Y,
-		Y : sin * p.X + cos * p.Y,
+	return FPoint{
+		X: cos*p.X - sin*p.Y,
+		Y: sin*p.X + cos*p.Y,
 	}
 }
 
 // =================================
-// RectangleF
+// FRectangle
 // =================================
 
-type RectangleF struct {
-	Min, Max PointF
+type FRectangle struct {
+	Min, Max FPoint
 }
 
-func Rectf(x0, y0, x1, y1 float64) RectangleF {
-	return RectangleF {
-		Min : Ptf(x0, y0),
-		Max : Ptf(x1, y1),
+func FRect(x0, y0, x1, y1 float64) FRectangle {
+	return FRectangle{
+		Min: FPt(x0, y0),
+		Max: FPt(x1, y1),
 	}
 }
 
-func RectangleToRectangleF(rect image.Rectangle) RectangleF {
-	return RectangleF{
-		Min : PointToPointF(rect.Min),
-		Max : PointToPointF(rect.Max),
+func RectangleToFRectangle(rect image.Rectangle) FRectangle {
+	return FRectangle{
+		Min: PointToFPoint(rect.Min),
+		Max: PointToFPoint(rect.Max),
 	}
 }
 
 // =================================================
 // below is copy pasted frorm go image package
-// but modified to be used for RectangleF
+// but modified to be used for FRectangle
 // license is at below
 // =================================================
 
 // Dx returns r's width.
-func (r RectangleF) Dx() float64 {
+func (r FRectangle) Dx() float64 {
 	return r.Max.X - r.Min.X
 }
 
 // Dy returns r's height.
-func (r RectangleF) Dy() float64 {
+func (r FRectangle) Dy() float64 {
 	return r.Max.Y - r.Min.Y
 }
 
 // Size returns r's width and height.
-func (r RectangleF) Size() PointF {
-	return PointF{
+func (r FRectangle) Size() FPoint {
+	return FPoint{
 		r.Max.X - r.Min.X,
 		r.Max.Y - r.Min.Y,
 	}
 }
 
 // Add returns the rectangle r translated by p.
-func (r RectangleF) Add(p PointF) RectangleF {
-	return RectangleF{
-		PointF{r.Min.X + p.X, r.Min.Y + p.Y},
-		PointF{r.Max.X + p.X, r.Max.Y + p.Y},
+func (r FRectangle) Add(p FPoint) FRectangle {
+	return FRectangle{
+		FPoint{r.Min.X + p.X, r.Min.Y + p.Y},
+		FPoint{r.Max.X + p.X, r.Max.Y + p.Y},
 	}
 }
 
 // Sub returns the rectangle r translated by -p.
-func (r RectangleF) Sub(p PointF) RectangleF {
-	return RectangleF{
-		PointF{r.Min.X - p.X, r.Min.Y - p.Y},
-		PointF{r.Max.X - p.X, r.Max.Y - p.Y},
+func (r FRectangle) Sub(p FPoint) FRectangle {
+	return FRectangle{
+		FPoint{r.Min.X - p.X, r.Min.Y - p.Y},
+		FPoint{r.Max.X - p.X, r.Max.Y - p.Y},
 	}
 }
 
 // Inset returns the rectangle r inset by n, which may be negative. If either
 // of r's dimensions is less than 2*n then an empty rectangle near the center
 // of r will be returned.
-func (r RectangleF) Inset(n float64) RectangleF {
+func (r FRectangle) Inset(n float64) FRectangle {
 	if r.Dx() < 2*n {
 		r.Min.X = (r.Min.X + r.Max.X) / 2
 		r.Max.X = r.Min.X
@@ -130,7 +149,7 @@ func (r RectangleF) Inset(n float64) RectangleF {
 
 // Intersect returns the largest rectangle contained by both r and s. If the
 // two rectangles do not overlap then the zero rectangle will be returned.
-func (r RectangleF) Intersect(s RectangleF) RectangleF {
+func (r FRectangle) Intersect(s FRectangle) FRectangle {
 	if r.Min.X < s.Min.X {
 		r.Min.X = s.Min.X
 	}
@@ -148,13 +167,13 @@ func (r RectangleF) Intersect(s RectangleF) RectangleF {
 	//
 	// if max(r0.Min.X, s0.Min.X) >= min(r0.Max.X, s0.Max.X) || likewiseForY { etc }
 	if r.Empty() {
-		return RectangleF{}
+		return FRectangle{}
 	}
 	return r
 }
 
 // Union returns the smallest rectangle that contains both r and s.
-func (r RectangleF) Union(s RectangleF) RectangleF {
+func (r FRectangle) Union(s FRectangle) FRectangle {
 	if r.Empty() {
 		return s
 	}
@@ -177,25 +196,25 @@ func (r RectangleF) Union(s RectangleF) RectangleF {
 }
 
 // Empty reports whether the rectangle contains no points.
-func (r RectangleF) Empty() bool {
+func (r FRectangle) Empty() bool {
 	return r.Min.X >= r.Max.X || r.Min.Y >= r.Max.Y
 }
 
 // Eq reports whether r and s contain the same set of points. All empty
 // rectangles are considered equal.
-func (r RectangleF) Eq(s RectangleF) bool {
+func (r FRectangle) Eq(s FRectangle) bool {
 	return r == s || r.Empty() && s.Empty()
 }
 
 // Overlaps reports whether r and s have a non-empty intersection.
-func (r RectangleF) Overlaps(s RectangleF) bool {
+func (r FRectangle) Overlaps(s FRectangle) bool {
 	return !r.Empty() && !s.Empty() &&
 		r.Min.X < s.Max.X && s.Min.X < r.Max.X &&
 		r.Min.Y < s.Max.Y && s.Min.Y < r.Max.Y
 }
 
 // In reports whether every point in r is in s.
-func (r RectangleF) In(s RectangleF) bool {
+func (r FRectangle) In(s FRectangle) bool {
 	if r.Empty() {
 		return true
 	}
@@ -207,7 +226,7 @@ func (r RectangleF) In(s RectangleF) bool {
 
 // Canon returns the canonical version of r. The returned rectangle has minimum
 // and maximum coordinates swapped if necessary so that it is well-formed.
-func (r RectangleF) Canon() RectangleF {
+func (r FRectangle) Canon() FRectangle {
 	if r.Max.X < r.Min.X {
 		r.Min.X, r.Max.X = r.Max.X, r.Min.X
 	}
@@ -222,69 +241,75 @@ func (r RectangleF) Canon() RectangleF {
 // =======================================
 
 // =================================
-// Misc
+// collision checking
 // =================================
 
-func RectWH(w, h int) image.Rectangle{
-	return image.Rectangle {
-		Min : image.Point {},
-		Max : image.Point {w, h},
+func CheckCollisionRects(r1, r2 image.Rectangle) bool {
+	return r1.Overlaps(r2)
+}
+
+func CheckCollisionFRects(r1, r2 FRectangle) bool {
+	return r1.Overlaps(r2)
+}
+
+func CheckCollisionPtRect(pt image.Point, rect image.Rectangle) bool {
+	return pt.In(rect)
+}
+
+func CheckCollisionFPtFRect(pt FPoint, rect FRectangle) bool {
+	return pt.In(rect)
+}
+
+// =================================
+// misc
+// =================================
+
+func RectWH(w, h int) image.Rectangle {
+	return image.Rectangle{
+		Min: image.Point{},
+		Max: image.Point{w, h},
 	}
 }
 
-func RectfWH(w, h float64) RectangleF {
-	return RectangleF {
-		Min : PointF {},
-		Max : PointF {w, h},
+func FRectWH(w, h float64) FRectangle {
+	return FRectangle{
+		Min: FPoint{0, 0},
+		Max: FPoint{w, h},
 	}
 }
 
 func RectangleCenter(rect image.Rectangle) image.Point {
-	return image.Point {
-		X : (rect.Min.X + rect.Max.X) /2,
-		Y : (rect.Min.Y + rect.Max.Y) /2,
+	return image.Point{
+		X: (rect.Min.X + rect.Max.X) / 2,
+		Y: (rect.Min.Y + rect.Max.Y) / 2,
 	}
 }
 
-func CenterRectangle(rect image.Rectangle, x, y int) image.Rectangle{
+func CenterRectangle(rect image.Rectangle, x, y int) image.Rectangle {
 	halfW := rect.Dx() / 2
 	halfH := rect.Dy() / 2
 
-	return image.Rectangle {
-		Min : image.Pt(x - halfW, y - halfH),
-		Max : image.Pt(x + halfW, y + halfH),
+	return image.Rectangle{
+		Min: image.Pt(x-halfW, y-halfH),
+		Max: image.Pt(x+halfW, y+halfH),
 	}
 }
 
-func CenterRectangleF(rect RectangleF, x, y float64) RectangleF{
+func FRectangleCenter(rect FRectangle) FPoint {
+	return FPoint{
+		X: (rect.Min.X + rect.Max.X) * 0.5,
+		Y: (rect.Min.Y + rect.Max.Y) * 0.5,
+	}
+}
+
+func CenterFRectangle(rect FRectangle, x, y float64) FRectangle {
 	halfW := rect.Dx() * 0.5
 	halfH := rect.Dy() * 0.5
 
-	return RectangleF {
-		Min : Ptf(x - halfW, y - halfH),
-		Max : Ptf(x + halfW, y + halfH),
+	return FRectangle{
+		Min: FPt(x-halfW, y-halfH),
+		Max: FPt(x+halfW, y+halfH),
 	}
-}
-
-func ImageSize(img image.Image) (int, int){
-	return img.Bounds().Dx(), img.Bounds().Dy()
-}
-
-func ImageSizeF(img image.Image) (float64, float64){
-	return f64(img.Bounds().Dx()), f64(img.Bounds().Dy())
-}
-
-func RotateAround(x, y, theta float64) eb.GeoM {
-	p := Ptf(-x, -y)
-	r := p.Rotate(theta)
-	pToR := r.Sub(p)
-
-	geom := eb.GeoM{}
-	geom.Rotate(theta)
-
-	geom.Translate(pToR.X, pToR.Y)
-
-	return geom
 }
 
 /*

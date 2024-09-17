@@ -3,16 +3,16 @@
 package main
 
 import (
-	"flag"
 	"bytes"
+	"flag"
+	"fmt"
 	"image"
 	"image/color"
 	"image/draw"
 	"image/png"
-	"runtime"
-	"path/filepath"
-	"fmt"
 	"os"
+	"path/filepath"
+	"runtime"
 )
 
 var (
@@ -21,12 +21,12 @@ var (
 )
 
 var (
-	TileWidth int
+	TileWidth  int
 	TileHeight int
 )
 
 var (
-	TileCountRow int
+	TileCountRow    int
 	TileCountColumn int
 )
 
@@ -68,7 +68,7 @@ func main() {
 	drawTile(img, TileWidth, TileHeight, TileCountRow, TileCountColumn)
 
 	err := saveImage(img, fmt.Sprintf(
-		"tile-%dx%d-%dx%d", 
+		"tile-%dx%d-%dx%d",
 		TileWidth, TileHeight, TileCountColumn, TileCountRow,
 	))
 
@@ -78,7 +78,7 @@ func main() {
 }
 
 func drawTile(
-	img *image.RGBA, 
+	img *image.RGBA,
 	tileWidth, tileHeight int,
 	tileRow, tileColumn int,
 ) {
@@ -97,23 +97,23 @@ func drawTile(
 			y := r * tileHeight
 
 			draw.Draw(
-				img, 
-				image.Rect(x, y, x+TileWidth, y+TileHeight), 
-				&image.Uniform{color}, 
+				img,
+				image.Rect(x, y, x+TileWidth, y+TileHeight),
+				&image.Uniform{color},
 				image.ZP, draw.Over)
 
 			toggle = !toggle
 		}
 
-		if tileColumn %2 == 0{
+		if tileColumn%2 == 0 {
 			toggle = !toggle
 		}
 	}
 }
 
-func saveImage(img image.Image, name string) error{
+func saveImage(img image.Image, name string) error {
 	entries, err := os.ReadDir(".")
-	if err != nil {	
+	if err != nil {
 		return err
 	}
 
@@ -124,7 +124,7 @@ func saveImage(img image.Image, name string) error{
 	for _, entry := range entries {
 		if entry.Name() == imagePath {
 			imagePath = fmt.Sprintf("%s(%d).png", name, counter)
-			counter ++
+			counter++
 		}
 	}
 
@@ -138,4 +138,3 @@ func saveImage(img image.Image, name string) error{
 
 	return nil
 }
-

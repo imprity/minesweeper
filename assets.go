@@ -1,11 +1,11 @@
 package main
 
 import (
-	_ "embed"
 	"bytes"
+	_ "embed"
 	"image"
-	_ "image/png"
 	_ "image/jpeg"
+	_ "image/png"
 
 	eb "github.com/hajimehoshi/ebiten/v2"
 	ebt "github.com/hajimehoshi/ebiten/v2/text/v2"

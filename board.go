@@ -154,9 +154,9 @@ func (board *Board) CheckWin() bool {
 	return true
 }
 
-//==============================================
+// ==============================================
 // BOARD ITERACTION
-//==============================================
+// ==============================================
 type BoardInteractionType int
 
 const (
@@ -223,6 +223,7 @@ func (board *Board) InteractAt(posX int, posY int, interaction BoardInteractionT
 					for iterator.HasNext() {
 						x, y := iterator.GetNext()
 						if board.IsPosInBoard(x, y) {
+							// user flagged it incorrectly
 							if board.Flags[x][y] && !board.Mines[x][y] {
 								return InteractionResultFail
 							}
@@ -248,7 +249,7 @@ func (board *Board) InteractAt(posX int, posY int, interaction BoardInteractionT
 				return InteractionResultContinue
 			}
 		}
-	default :
+	default:
 		panic("UNREACHABLE")
 	}
 }
