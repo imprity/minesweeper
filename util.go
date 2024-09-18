@@ -3,6 +3,7 @@ package main
 import (
 	eb "github.com/hajimehoshi/ebiten/v2"
 	ebi "github.com/hajimehoshi/ebiten/v2/inpututil"
+	ebt "github.com/hajimehoshi/ebiten/v2/text/v2"
 	"image"
 	"time"
 )
@@ -60,4 +61,16 @@ func New2DArray[T any](width, height int) [][]T {
 		arr[i] = make([]T, height)
 	}
 	return arr
+}
+
+// returns recommended line height for fonts when writing horizontally
+func FontLineSpacing(face ebt.Face) float64 {
+	m := face.Metrics()
+	return m.HAscent + m.HDescent + m.HLineGap
+}
+
+// returns font's size when written horizontally
+func FontSize(face ebt.Face) float64 {
+	m := face.Metrics()
+	return m.HAscent + m.HDescent
 }

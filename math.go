@@ -1,6 +1,7 @@
 package main
 
 import (
+	"golang.org/x/exp/constraints"
 	"image"
 	"math"
 )
@@ -310,6 +311,17 @@ func CenterFRectangle(rect FRectangle, x, y float64) FRectangle {
 		Min: FPt(x-halfW, y-halfH),
 		Max: FPt(x+halfW, y+halfH),
 	}
+}
+
+func Lerp[F constraints.Float](a, b, t F) F {
+	return a + (b-a)*t
+}
+
+func Clamp[N constraints.Integer | constraints.Float](n, minN, maxN N) N {
+	n = min(n, maxN)
+	n = max(n, minN)
+
+	return n
 }
 
 /*

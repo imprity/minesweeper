@@ -8,7 +8,7 @@ import (
 	"time"
 
 	eb "github.com/hajimehoshi/ebiten/v2"
-	//ebu "github.com/hajimehoshi/ebiten/v2/ebitenutil"
+	ebt "github.com/hajimehoshi/ebiten/v2/text/v2"
 	ebv "github.com/hajimehoshi/ebiten/v2/vector"
 )
 
@@ -35,21 +35,25 @@ type App struct {
 	Board     Board
 	BoardRect FRectangle
 
-	MineCount   int
-	PlacedMines bool
+	MineCount    int
+	BoardTouched bool
 
 	TileHighLights [][]TileHighLight
 
 	GameState GameState
 
+	GameResultAnimProgress time.Duration
+
 	//constants
-	HighlightDuraiton time.Duration
+	HighlightDuraiton      time.Duration
+	GameResultAnimDuration time.Duration
 }
 
 func NewApp() *App {
 	a := new(App)
 
 	a.HighlightDuraiton = time.Millisecond * 100
+	a.GameResultAnimDuration = time.Millisecond * 300
 
 	const boardWidth = 10
 	const boardHeight = 10
@@ -180,15 +184,26 @@ func (a *App) Update() error {
 			}
 		} else { // not revealed
 			if IsMouseButtonJustPressed(eb.MouseButtonLeft) {
-				if !a.PlacedMines { // mine is not placed
-					a.Board.PlaceMines(a.MineCount, boardX, boardY)
-					a.Board.SpreadSafeArea(boardX, boardY)
-					a.PlacedMines = true
-				} else { // mine has been placed
-					if !a.Board.Mines[boardX][boardY] {
+				if !a.Board.Flags[boardX][boardY] {
+					if !a.BoardTouched { // mine is not placed
+						a.Board.PlaceMines(a.MineCount, boardX, boardY)
 						a.Board.SpreadSafeArea(boardX, boardY)
-					} else {
-						a.GameState = GameStateLost
+
+						iter := NewBoardIterator(
+							0, 0, a.Board.Width-1, a.Board.Height-1,
+						)
+						// remove any flags that might have been placed
+						for iter.HasNext() {
+							x, y := iter.GetNext()
+							a.Board.Flags[x][y] = false
+						}
+						a.BoardTouched = true
+					} else { // mine has been placed
+						if !a.Board.Mines[boardX][boardY] {
+							a.Board.SpreadSafeArea(boardX, boardY)
+						} else {
+							a.GameState = GameStateLost
+						}
 					}
 				}
 			} else if IsMouseButtonJustPressed(eb.MouseButtonRight) {
@@ -198,11 +213,9 @@ func (a *App) Update() error {
 	}
 
 	if prevState != a.GameState {
-		switch a.GameState {
-		case GameStateWon:
-			println("!!!! YOU WON !!!!")
-		case GameStateLost:
-			println("!!!! YOU LOST !!!!")
+		// reset GameResultAnimProgress
+		if a.GameState == GameStateWon || a.GameState == GameStateLost {
+			a.GameResultAnimProgress = 0
 		}
 	}
 
@@ -214,6 +227,11 @@ func (a *App) Update() error {
 				a.TileHighLights[x][y].Brightness = max(a.TileHighLights[x][y].Brightness, 0)
 			}
 		}
+	}
+
+	// update highlights
+	if a.GameState == GameStateWon || a.GameState == GameStateLost {
+		a.GameResultAnimProgress += UpdateDelta()
 	}
 
 	return nil
@@ -261,7 +279,56 @@ func (a *App) DrawTile(dst *eb.Image, boardX, boardY int, tile *eb.Image) {
 	dst.DrawImage(tile, op)
 }
 
-func (a *App) Draw(screen *eb.Image) {
+func (a *App) DrawGameResult(dst *eb.Image) {
+	if !(a.GameState == GameStateLost || a.GameState == GameStateWon) {
+		return
+	}
+
+	var resultStr string
+
+	if a.GameState == GameStateLost {
+		resultStr = "You Lost!"
+	} else {
+		resultStr = "You Won!"
+	}
+
+	textW, textH := ebt.Measure(resultStr, FontFace, FontLineSpacing(FontFace))
+
+	const textSize = 80
+	scale := textSize / FontSize(FontFace)
+
+	scaledW, scaledH := textW*scale, textH*scale
+
+	startMinY := 0 - scaledH - 10 // up extra 10 just to be safe
+	endMinY := ScreenHeight*0.5 - scaledH*0.5
+
+	t := f64(a.GameResultAnimProgress) / f64(a.GameResultAnimDuration)
+	t = Clamp(t, 0, 1)
+
+	minY := Lerp(startMinY, endMinY, t)
+	minX := ScreenWidth*0.5 - scaledW*0.5
+
+	op := &ebt.DrawOptions{}
+	op.LayoutOptions.LineSpacing = FontLineSpacing(FontFace)
+
+	op.GeoM.Concat(TransformToCenter(textW, textH, scale, scale, 0))
+	op.GeoM.Translate(minX+scaledW*0.5, minY+scaledH*0.5)
+	op.Filter = eb.FilterLinear
+
+	if a.GameState == GameStateLost {
+		op.ColorScale.ScaleWithColor(
+			color.NRGBA{245, 24, 24, 255},
+		)
+	} else {
+		op.ColorScale.ScaleWithColor(
+			color.NRGBA{255, 215, 18, 255},
+		)
+	}
+
+	ebt.Draw(dst, resultStr, FontFace, op)
+}
+
+func (a *App) Draw(dst *eb.Image) {
 	tileWidth := a.BoardRect.Dx() / f64(a.Board.Width)
 	tileHeight := a.BoardRect.Dy() / f64(a.Board.Height)
 
@@ -281,7 +348,7 @@ func (a *App) Draw(screen *eb.Image) {
 			}
 
 			ebv.DrawFilledRect(
-				screen,
+				dst,
 				f32(tileX), f32(tileY), f32(tileWidth), f32(tileHeight),
 				bgColor,
 				true,
@@ -289,17 +356,17 @@ func (a *App) Draw(screen *eb.Image) {
 
 			// draw flags
 			if a.Board.Flags[x][y] {
-				a.DrawTile(screen, x, y, GetFlagTile())
+				a.DrawTile(dst, x, y, GetFlagTile())
 			}
 
 			// draw mines
 			if a.GameState == GameStateLost && a.Board.Mines[x][y] && !a.Board.Flags[x][y] {
-				a.DrawTile(screen, x, y, GetMineTile())
+				a.DrawTile(dst, x, y, GetMineTile())
 			}
 
 			if a.Board.Revealed[x][y] {
 				if count := a.Board.GetNeighborMineCount(x, y); count > 0 {
-					a.DrawTile(screen, x, y, GetNumberTile(count))
+					a.DrawTile(dst, x, y, GetNumberTile(count))
 				}
 			}
 
@@ -307,7 +374,7 @@ func (a *App) Draw(screen *eb.Image) {
 			if a.TileHighLights[x][y].Brightness > 0 {
 				t := a.TileHighLights[x][y].Brightness
 				ebv.DrawFilledRect(
-					screen,
+					dst,
 					f32(tileX), f32(tileY), f32(tileWidth), f32(tileHeight),
 					color.NRGBA{255, 255, 255, uint8(t * 255)},
 					true,
@@ -316,7 +383,7 @@ func (a *App) Draw(screen *eb.Image) {
 
 			// draw border
 			ebv.StrokeRect(
-				screen,
+				dst,
 				f32(tileX), f32(tileY), f32(tileWidth), f32(tileHeight),
 				1,
 				color.NRGBA{0, 0, 0, 255},
@@ -324,6 +391,8 @@ func (a *App) Draw(screen *eb.Image) {
 			)
 		}
 	}
+
+	a.DrawGameResult(dst)
 }
 
 func (a *App) Layout(outsideWidth, outsideHeight int) (int, int) {
