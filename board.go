@@ -16,31 +16,17 @@ type Board struct {
 
 	Revealed [][]bool
 	Flags    [][]bool
-
-	MineCount int
-
-	Touched bool
 }
 
-func NewBoard(width int, height int, mineCount int) Board {
+func NewBoard(width int, height int) Board {
 	var board Board
 
 	board.Width = width
 	board.Height = height
 
-	make2DBoolArray := func(w int, h int) [][]bool {
-		var arr = make([][]bool, w)
-		for i := 0; i < w; i++ {
-			arr[i] = make([]bool, h)
-		}
-		return arr
-	}
-
-	board.Mines = make2DBoolArray(width, height)
-	board.Revealed = make2DBoolArray(width, height)
-	board.Flags = make2DBoolArray(width, height)
-
-	board.MineCount = mineCount
+	board.Mines = New2DArray[bool](width, height)
+	board.Revealed = New2DArray[bool](width, height)
+	board.Flags = New2DArray[bool](width, height)
 
 	return board
 }
@@ -69,9 +55,7 @@ func (board *Board) PlaceMines(count, exceptX, exceptY int) {
 }
 
 func (board *Board) Copy() Board {
-	copy := NewBoard(board.Width, board.Height, board.MineCount)
-
-	copy.Touched = board.Touched
+	copy := NewBoard(board.Width, board.Height)
 
 	iterator := NewBoardIterator(0, 0, board.Width-1, board.Height-1)
 
@@ -91,6 +75,10 @@ func (board *Board) IsPosInBoard(posX int, posY int) bool {
 }
 
 func (board *Board) SpreadSafeArea(posX int, posY int) {
+	if !board.IsPosInBoard(posX, posY) {
+		return
+	}
+
 	if board.Revealed[posX][posY] {
 		return
 	}
@@ -157,6 +145,7 @@ func (board *Board) CheckWin() bool {
 // ==============================================
 // BOARD ITERACTION
 // ==============================================
+/*
 type BoardInteractionType int
 
 const (
@@ -253,6 +242,7 @@ func (board *Board) InteractAt(posX int, posY int, interaction BoardInteractionT
 		panic("UNREACHABLE")
 	}
 }
+*/
 
 //==============================================
 // board iterator
@@ -284,19 +274,24 @@ func NewBoardIterator(x1 int, y1 int, x2 int, y2 int) BoardIterator {
 	return iterator
 }
 
-func (iterator BoardIterator) HasNext() bool {
-	return iterator.CurrentY <= iterator.MaxY
+func (bi *BoardIterator) HasNext() bool {
+	return bi.CurrentY <= bi.MaxY
 }
 
-func (iterator *BoardIterator) GetNext() (int, int) {
-	x := iterator.CurrentX
-	y := iterator.CurrentY
+func (bi *BoardIterator) GetNext() (int, int) {
+	x := bi.CurrentX
+	y := bi.CurrentY
 
-	iterator.CurrentX++
-	if iterator.CurrentX > iterator.MaxX {
-		iterator.CurrentX = iterator.MinX
-		iterator.CurrentY++
+	bi.CurrentX++
+	if bi.CurrentX > bi.MaxX {
+		bi.CurrentX = bi.MinX
+		bi.CurrentY++
 	}
 
 	return x, y
+}
+
+func (bi *BoardIterator) Reset() {
+	bi.CurrentX = bi.MinX
+	bi.CurrentY = bi.MinY
 }

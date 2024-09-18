@@ -2,12 +2,26 @@ package main
 
 import (
 	eb "github.com/hajimehoshi/ebiten/v2"
+	ebi "github.com/hajimehoshi/ebiten/v2/inpututil"
 	"image"
+	"time"
 )
+
+func UpdateDelta() time.Duration {
+	return time.Duration(f64(time.Second) / f64(eb.TPS()))
+}
 
 func CursorFPt() FPoint {
 	mx, my := eb.CursorPosition()
 	return FPt(f64(mx), f64(my))
+}
+
+func IsMouseButtonPressed(button eb.MouseButton) bool {
+	return eb.IsMouseButtonPressed(button)
+}
+
+func IsMouseButtonJustPressed(button eb.MouseButton) bool {
+	return ebi.IsMouseButtonJustPressed(button)
 }
 
 func TransformToCenter(
@@ -38,4 +52,12 @@ func ImageSizePt(img image.Image) image.Point {
 func ImageSizeFPt(img image.Image) FPoint {
 	bound := img.Bounds()
 	return FPoint{f64(bound.Dx()), f64(bound.Dy())}
+}
+
+func New2DArray[T any](width, height int) [][]T {
+	var arr = make([][]T, width)
+	for i := 0; i < width; i++ {
+		arr[i] = make([]T, height)
+	}
+	return arr
 }
