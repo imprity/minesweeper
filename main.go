@@ -153,6 +153,11 @@ func (a *App) Update() error {
 								a.Board.SpreadSafeArea(x, y)
 							}
 						}
+
+						// check if user has won the game
+						if a.Board.IsAllSafeTileRevealed() {
+							a.GameState = GameStateWon
+						}
 					} else {
 						if missedMine {
 							a.GameState = GameStateLost
@@ -282,13 +287,14 @@ func (a *App) Draw(screen *eb.Image) {
 				true,
 			)
 
-			// draw flag
+			// draw flags
 			if a.Board.Flags[x][y] {
 				a.DrawTile(screen, x, y, GetFlagTile())
 			}
 
-			if a.Board.Mines[x][y] {
-				//a.DrawTile(screen, x, y, GetMineTile())
+			// draw mines
+			if a.GameState == GameStateLost && a.Board.Mines[x][y] && !a.Board.Flags[x][y] {
+				a.DrawTile(screen, x, y, GetMineTile())
 			}
 
 			if a.Board.Revealed[x][y] {

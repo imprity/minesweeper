@@ -128,121 +128,19 @@ func (board *Board) GetNeighborFlagCount(posX int, posY int) int {
 	return flagCount
 }
 
-func (board *Board) CheckWin() bool {
-	var iterator BoardIterator = NewBoardIterator(0, 0, board.Width-1, board.Height-1)
+// win condition
+func (board *Board) IsAllSafeTileRevealed() bool {
+	var iter BoardIterator = NewBoardIterator(0, 0, board.Width-1, board.Height-1)
 
-	for iterator.HasNext() {
-		x, y := iterator.GetNext()
-
-		if !board.Mines[x][y] && !board.Revealed[x][y] {
+	for iter.HasNext() {
+		x, y := iter.GetNext()
+		if !board.Revealed[x][y] && !board.Mines[x][y] {
 			return false
 		}
 	}
 
 	return true
 }
-
-// ==============================================
-// BOARD ITERACTION
-// ==============================================
-/*
-type BoardInteractionType int
-
-const (
-	InteractionTypeStep BoardInteractionType = iota
-	InteractionTypeFlag
-	InteractionTypeCheck
-)
-
-type BoardInteractionResult int
-
-const (
-	InteractionResultContinue BoardInteractionResult = iota
-	InteractionResultFail
-	InteractionResultWin
-)
-
-func (board *Board) InteractAt(posX int, posY int, interaction BoardInteractionType) BoardInteractionResult {
-	defer func() {
-		// remove flags where it's revealed
-		for x := 0; x < board.Width; x++ {
-			for y := 0; y < board.Height; y++ {
-				if board.Revealed[x][y] {
-					board.Flags[x][y] = false
-				}
-			}
-		}
-	}()
-
-	switch interaction {
-	case InteractionTypeStep:
-		{
-			if !board.Touched {
-				board.PlaceMines(board.MineCount, posX, posY)
-				board.Touched = true
-			}
-			if !board.Revealed[posX][posY] {
-				if board.Mines[posX][posY] {
-					return InteractionResultFail // user stepped on a mine
-				}
-				//we have to spread out
-				board.SpreadSafeArea(posX, posY)
-			}
-			if board.CheckWin() {
-				return InteractionResultContinue
-			} else {
-				return InteractionResultContinue
-			}
-		}
-	case InteractionTypeFlag:
-		{
-			if !board.Revealed[posX][posY] {
-				board.Flags[posX][posY] = !board.Flags[posX][posY]
-			}
-			return InteractionResultContinue
-		}
-	case InteractionTypeCheck:
-		{
-			if board.Revealed[posX][posY] && board.GetNeighborMineCount(posX, posY) > 0 {
-				var flagCount int = board.GetNeighborFlagCount(posX, posY)
-				if board.GetNeighborMineCount(posX, posY) == flagCount {
-					//check if user flagged it correctly
-					iterator := NewBoardIterator(posX-1, posY-1, posX+1, posY+1)
-
-					for iterator.HasNext() {
-						x, y := iterator.GetNext()
-						if board.IsPosInBoard(x, y) {
-							// user flagged it incorrectly
-							if board.Flags[x][y] && !board.Mines[x][y] {
-								return InteractionResultFail
-							}
-						}
-					}
-
-					//reset iterator
-					iterator = NewBoardIterator(posX-1, posY-1, posX+1, posY+1)
-
-					for iterator.HasNext() {
-						x, y := iterator.GetNext()
-						if board.IsPosInBoard(x, y) {
-							board.SpreadSafeArea(x, y)
-						}
-					}
-
-				}
-			}
-
-			if board.CheckWin() {
-				return InteractionResultContinue
-			} else {
-				return InteractionResultContinue
-			}
-		}
-	default:
-		panic("UNREACHABLE")
-	}
-}
-*/
 
 //==============================================
 // board iterator
