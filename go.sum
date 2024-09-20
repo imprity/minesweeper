@@ -14,6 +14,8 @@ github.com/hajimehoshi/ebiten/v2 v2.7.9 h1:DYH/usAa9dMHcGkBIIEApJsVqDekrJBxYHmsB
 github.com/hajimehoshi/ebiten/v2 v2.7.9/go.mod h1:Ulbq5xDmdx47P24EJ+Mb31Zps7vQq+guieG9mghQUaA=
 github.com/jezek/xgb v1.1.1 h1:bE/r8ZZtSv7l9gk6nU0mYx51aXrvnyb44892TwSaqS4=
 github.com/jezek/xgb v1.1.1/go.mod h1:nrhwO0FX/enq75I7Y7G8iN1ubpSGZEiA3v9e9GyRFlk=
+github.com/silbinarywolf/preferdiscretegpu v1.0.0 h1:tuvXLRCnoFMFyk74/8PFvO0B5rjDmXm0JgNTaOYAHT0=
+github.com/silbinarywolf/preferdiscretegpu v1.0.0/go.mod h1:h3s2GkfAP2sWqoS7v/PxAlFOQ1azMRsZxUJNw47QhLc=
 golang.org/x/exp v0.0.0-20240909161429-701f63a606c0 h1:e66Fs6Z+fZTbFBAxKfP3PALWBtpfqks2bwGcexMxgtk=
 golang.org/x/exp v0.0.0-20240909161429-701f63a606c0/go.mod h1:2TbTHSBQa924w8M6Xs1QcRcFwyucIwBGpK1p2f1YFFY=
 golang.org/x/image v0.18.0 h1:jGzIakQa/ZXI1I0Fxvaa9W7yP25TqT6cHIHn+6CqvSQ=

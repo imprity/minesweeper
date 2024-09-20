@@ -2,7 +2,6 @@ package main
 
 import (
 	eb "github.com/hajimehoshi/ebiten/v2"
-	ebi "github.com/hajimehoshi/ebiten/v2/inpututil"
 	ebt "github.com/hajimehoshi/ebiten/v2/text/v2"
 	"image"
 	"time"
@@ -15,14 +14,6 @@ func UpdateDelta() time.Duration {
 func CursorFPt() FPoint {
 	mx, my := eb.CursorPosition()
 	return FPt(f64(mx), f64(my))
-}
-
-func IsMouseButtonPressed(button eb.MouseButton) bool {
-	return eb.IsMouseButtonPressed(button)
-}
-
-func IsMouseButtonJustPressed(button eb.MouseButton) bool {
-	return ebi.IsMouseButtonJustPressed(button)
 }
 
 func TransformToCenter(
@@ -70,6 +61,7 @@ func FontLineSpacing(face ebt.Face) float64 {
 }
 
 // returns font's size when written horizontally
+// not really a 'font size' but it's fine...
 func FontSize(face ebt.Face) float64 {
 	m := face.Metrics()
 	return m.HAscent + m.HDescent
