@@ -20,10 +20,6 @@ func FPt(x, y float64) FPoint {
 	return FPoint{X: x, Y: y}
 }
 
-func PointToFPoint(p image.Point) FPoint {
-	return FPoint{X: float64(p.X), Y: float64(p.Y)}
-}
-
 func (p FPoint) Add(q FPoint) FPoint {
 	p.X += q.X
 	p.Y += q.Y
@@ -84,13 +80,6 @@ func FRect(x0, y0, x1, y1 float64) FRectangle {
 	return FRectangle{
 		Min: FPt(x0, y0),
 		Max: FPt(x1, y1),
-	}
-}
-
-func RectangleToFRectangle(rect image.Rectangle) FRectangle {
-	return FRectangle{
-		Min: PointToFPoint(rect.Min),
-		Max: PointToFPoint(rect.Max),
 	}
 }
 
@@ -271,6 +260,28 @@ func CheckCollisionFPtFRect(pt FPoint, rect FRectangle) bool {
 // =================================
 // misc
 // =================================
+
+func PointToFPoint(p image.Point) FPoint {
+	return FPoint{X: float64(p.X), Y: float64(p.Y)}
+}
+
+func FPointToPoint(p FPoint) image.Point {
+	return image.Point{X: int(p.X), Y: int(p.Y)}
+}
+
+func RectToFRect(rect image.Rectangle) FRectangle {
+	return FRectangle{
+		Min: PointToFPoint(rect.Min),
+		Max: PointToFPoint(rect.Max),
+	}
+}
+
+func FRectToRect(rect FRectangle) image.Rectangle {
+	return image.Rectangle{
+		Min: FPointToPoint(rect.Min),
+		Max: FPointToPoint(rect.Max),
+	}
+}
 
 func RectWH(w, h int) image.Rectangle {
 	return image.Rectangle{

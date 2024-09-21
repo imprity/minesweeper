@@ -69,9 +69,9 @@ func (b *BaseButton) Update() {
 type ImageButton struct {
 	BaseButton
 
-	Image        *eb.Image
-	ImageOnHover *eb.Image
-	ImageOnDown  *eb.Image
+	Image        SubView
+	ImageOnHover SubView
+	ImageOnDown  SubView
 
 	ImageColor        color.NRGBA
 	ImageColorOnHover color.NRGBA
@@ -86,7 +86,7 @@ func (b *ImageButton) Draw(dst *eb.Image) {
 	)
 	// TEST TEST TEST TEST TEST TEST
 
-	var img *eb.Image
+	var img SubView
 
 	switch b.BaseButton.State {
 	case ButtonStateNormal:
@@ -97,8 +97,8 @@ func (b *ImageButton) Draw(dst *eb.Image) {
 		img = b.ImageOnDown
 	}
 
-	if img != nil {
-		op := &eb.DrawImageOptions{}
+	if img.Image != nil {
+		op := &DrawSubViewOptions{}
 
 		imageSize := ImageSizeFPt(img)
 		scale := float64(1)
@@ -124,6 +124,6 @@ func (b *ImageButton) Draw(dst *eb.Image) {
 
 		op.ColorScale.ScaleWithColor(imageColor)
 
-		dst.DrawImage(img, op)
+		DrawSubView(dst, img, op)
 	}
 }

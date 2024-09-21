@@ -136,9 +136,9 @@ func NewApp() *App {
 				},
 			},
 
-			Image:        SpriteSubImage(TileSprite, 11),
-			ImageOnHover: SpriteSubImage(TileSprite, 11),
-			ImageOnDown:  SpriteSubImage(TileSprite, 13),
+			Image:        SpriteSubView(TileSprite, 11),
+			ImageOnHover: SpriteSubView(TileSprite, 11),
+			ImageOnDown:  SpriteSubView(TileSprite, 13),
 
 			ImageColor:        color.NRGBA{255, 255, 255, 255},
 			ImageColorOnHover: color.NRGBA{255, 255, 255, 255},
@@ -154,9 +154,9 @@ func NewApp() *App {
 					initBoard()
 				},
 			},
-			Image:        SpriteSubImage(TileSprite, 12),
-			ImageOnHover: SpriteSubImage(TileSprite, 12),
-			ImageOnDown:  SpriteSubImage(TileSprite, 14),
+			Image:        SpriteSubView(TileSprite, 12),
+			ImageOnHover: SpriteSubView(TileSprite, 12),
+			ImageOnDown:  SpriteSubView(TileSprite, 14),
 
 			ImageColor:        color.NRGBA{255, 255, 255, 255},
 			ImageColorOnHover: color.NRGBA{255, 255, 255, 255},
@@ -421,23 +421,21 @@ func (a *App) Update() error {
 	return nil
 }
 
-/*
-func GetNumberTile(number int) *eb.Image {
+func GetNumberTile(number int) SubView {
 	if !(1 <= number && number <= 9) {
 		ErrorLogger.Fatalf("%d is not a valid number", number)
 	}
 
-	return SpriteSubImage(TileSprite, number-1)
+	return SpriteSubView(TileSprite, number-1)
 }
 
-func GetMineTile() *eb.Image {
-	return SpriteSubImage(TileSprite, 9)
+func GetMineTile() SubView {
+	return SpriteSubView(TileSprite, 9)
 }
 
-func GetFlagTile() *eb.Image {
-	return SpriteSubImage(TileSprite, 10)
+func GetFlagTile() SubView {
+	return SpriteSubView(TileSprite, 10)
 }
-*/
 
 func (a *App) GetTileRect(boardX, boardY int) FRectangle {
 	boardRect := a.BoardRect()
@@ -451,37 +449,21 @@ func (a *App) GetTileRect(boardX, boardY int) FRectangle {
 	}
 }
 
-func (a *App) DrawTile(dst *eb.Image, boardX, boardY int, tile *eb.Image) {
+func (a *App) DrawTile(dst *eb.Image, boardX, boardY int, tile SubView) {
 	tileRect := a.GetTileRect(boardX, boardY)
 
-	imgSize := ImageSizeFPt(tile.Bounds())
+	imgSize := ImageSizeFPt(tile)
 	rectSize := tileRect.Size()
 
 	scale := min(rectSize.X, rectSize.Y) / max(imgSize.X, imgSize.Y)
 
-	op := &eb.DrawImageOptions{}
+	op := &DrawSubViewOptions{}
 	op.GeoM.Concat(TransformToCenter(imgSize.X, imgSize.Y, scale, scale, 0))
 	rectCenter := FRectangleCenter(tileRect)
 	op.GeoM.Translate(rectCenter.X, rectCenter.Y)
 	op.Filter = eb.FilterLinear
 
-	dst.DrawImage(tile, op)
-}
-
-func (a *App) DrawTile2(dst *eb.Image, boardX, boardY int, tile int) {
-	spriteRect := SpriteFRect(TileSprite, tile)
-	tileRect := a.GetTileRect(boardX, boardY)
-
-	spriteSize := spriteRect.Size()
-	tileSize := tileRect.Size()
-
-	scale := min(tileSize.X, tileSize.Y) / max(spriteSize.X, spriteSize.Y)
-
-	var geom eb.GeoM
-	geom.Concat(TransformToCenter(spriteSize.X, spriteSize.Y, scale, scale, 0))
-	rectCenter := FRectangleCenter(tileRect)
-	geom.Translate(rectCenter.X, rectCenter.Y)
-	DrawSprite(dst, TileSprite, tile, geom, color.NRGBA{255, 255, 255, 255})
+	DrawSubView(dst, tile, op)
 }
 
 func (a *App) DrawGameResult(dst *eb.Image) {
@@ -604,20 +586,17 @@ func (a *App) Draw(dst *eb.Image) {
 
 			// draw flags
 			if a.Board.Flags[x][y] {
-				a.DrawTile2(dst, x, y, 10)
-				//a.DrawTile(dst, x, y, GetFlagTile())
+				a.DrawTile(dst, x, y, GetFlagTile())
 			}
 
 			// draw mines
 			if a.GameState == GameStateLost && a.Board.Mines[x][y] && !a.Board.Flags[x][y] {
-				a.DrawTile2(dst, x, y, 9)
-				// a.DrawTile(dst, x, y, GetMineTile())
+				a.DrawTile(dst, x, y, GetMineTile())
 			}
 
 			if a.Board.Revealed[x][y] {
 				if count := a.Board.GetNeighborMineCount(x, y); count > 0 {
-					//a.DrawTile(dst, x, y, GetNumberTile(count))
-					a.DrawTile2(dst, x, y, count-1)
+					a.DrawTile(dst, x, y, GetNumberTile(count))
 				}
 			}
 
