@@ -14,9 +14,9 @@ import (
 	ebv "github.com/hajimehoshi/ebiten/v2/vector"
 )
 
-const (
-	ScreenWidth  = 600
-	ScreenHeight = 600
+var (
+	ScreenWidth  float64 = 600
+	ScreenHeight float64 = 600
 )
 
 var ErrorLogger *log.Logger = log.New(os.Stderr, "ERROR : ", log.Lshortfile)
@@ -50,26 +50,27 @@ var DifficultyStrs = [DifficultySize]string{
 }
 
 type App struct {
-	Board     Board
-	BoardRect FRectangle
+	Board Board
 
-	MineCount    int
+	MineCount      [DifficultySize]int
+	BoardTileCount [DifficultySize]int
+
 	BoardTouched bool
 
-	TileHighLights [][]TileHighLight
+	TileHighLights    [][]TileHighLight
+	HighlightDuraiton time.Duration
 
 	GameState GameState
-
-	GameResultAnimProgress time.Duration
 
 	Difficulty Difficulty
 
 	DifficultyButtonLeft  *ImageButton
 	DifficultyButtonRight *ImageButton
 
-	//constants
-	HighlightDuraiton      time.Duration
-	GameResultAnimDuration time.Duration
+	GameResultAnimTimer  Timer
+	TopMenuShowAnimTimer Timer
+
+	BoardSizeRatio float64 // relative to min(ScreenWidth, ScreenHeight)
 
 	TopUIMarginHorizontal float64
 	TopUIMarginTop        float64
@@ -79,12 +80,111 @@ type App struct {
 	TopUIButtonTextRatio   float64
 }
 
-func (a *App) GetTopUIRect() FRectangle {
+func NewApp() *App {
+	a := new(App)
+
+	a.GameResultAnimTimer = Timer{
+		Duration: time.Millisecond * 300,
+	}
+	a.TopMenuShowAnimTimer = Timer{
+		Duration: time.Millisecond * 200,
+	}
+	a.TopMenuShowAnimTimer.Current = a.TopMenuShowAnimTimer.Duration
+
+	a.HighlightDuraiton = time.Millisecond * 100
+
+	a.MineCount = [DifficultySize]int{
+		10, 20, 30,
+	}
+	a.BoardTileCount = [DifficultySize]int{
+		10, 15, 20,
+	}
+
+	a.BoardSizeRatio = 0.8
+
+	a.TopUIMarginHorizontal = 5
+	a.TopUIMarginTop = 5
+	a.TopUIMarginBottom = 5
+
+	a.TopUIButtonButtonRatio = 0.2
+	a.TopUIButtonTextRatio = 0.5
+
+	initBoard := func() {
+		a.Board = NewBoard(
+			a.BoardTileCount[a.Difficulty],
+			a.BoardTileCount[a.Difficulty],
+		)
+
+		a.TileHighLights = New2DArray[TileHighLight](a.Board.Width, a.Board.Height)
+	}
+	initBoard()
+
+	// ==============================
+	// create difficulty buttons
+	// ==============================
+	{
+		leftRect := a.GetDifficultyButtonRect(false)
+		rightRect := a.GetDifficultyButtonRect(true)
+
+		a.DifficultyButtonLeft = &ImageButton{
+			BaseButton: BaseButton{
+				Rect: leftRect,
+				OnClick: func() {
+					a.Difficulty -= 1
+					a.Difficulty = max(a.Difficulty, 0)
+					initBoard()
+				},
+			},
+
+			Image:        SpriteSubImage(TileSprite, 11),
+			ImageOnHover: SpriteSubImage(TileSprite, 11),
+			ImageOnDown:  SpriteSubImage(TileSprite, 13),
+
+			ImageColor:        color.NRGBA{255, 255, 255, 255},
+			ImageColorOnHover: color.NRGBA{255, 255, 255, 255},
+			ImageColorOnDown:  color.NRGBA{255, 255, 255, 255},
+		}
+
+		a.DifficultyButtonRight = &ImageButton{
+			BaseButton: BaseButton{
+				Rect: rightRect,
+				OnClick: func() {
+					a.Difficulty += 1
+					a.Difficulty = min(a.Difficulty, DifficultySize-1)
+					initBoard()
+				},
+			},
+			Image:        SpriteSubImage(TileSprite, 12),
+			ImageOnHover: SpriteSubImage(TileSprite, 12),
+			ImageOnDown:  SpriteSubImage(TileSprite, 14),
+
+			ImageColor:        color.NRGBA{255, 255, 255, 255},
+			ImageColorOnHover: color.NRGBA{255, 255, 255, 255},
+			ImageColorOnDown:  color.NRGBA{255, 255, 255, 255},
+		}
+	}
+
+	return a
+}
+
+func (a *App) BoardRect() FRectangle {
+	size := min(ScreenWidth, ScreenHeight) * a.BoardSizeRatio
+	halfSize := size * 0.5
+	halfWidth := ScreenWidth * 0.5
+	halfHeight := ScreenHeight * 0.5
 	return FRect(
-		a.BoardRect.Min.X+a.TopUIMarginHorizontal,
+		halfWidth-halfSize, halfHeight-halfSize,
+		halfWidth+halfSize, halfHeight+halfSize,
+	)
+}
+
+func (a *App) GetTopUIRect() FRectangle {
+	boardRect := a.BoardRect()
+	return FRect(
+		boardRect.Min.X+a.TopUIMarginHorizontal,
 		a.TopUIMarginTop,
-		a.BoardRect.Max.X-a.TopUIMarginHorizontal,
-		a.BoardRect.Min.Y-a.TopUIMarginBottom,
+		boardRect.Max.X-a.TopUIMarginHorizontal,
+		boardRect.Min.Y-a.TopUIMarginBottom,
 	)
 }
 
@@ -117,92 +217,19 @@ func (a *App) GetDifficultyTextRect() FRectangle {
 	return rect
 }
 
-func NewApp() *App {
-	a := new(App)
-
-	a.HighlightDuraiton = time.Millisecond * 100
-	a.GameResultAnimDuration = time.Millisecond * 300
-
-	const boardWidth = 10
-	const boardHeight = 10
-	const rectSize = 400
-	a.BoardRect = FRect(
-		0, 0, rectSize, rectSize,
-	)
-	a.BoardRect = CenterFRectangle(
-		a.BoardRect, ScreenWidth*0.5, ScreenHeight*0.5)
-
-	const boardMineCount = 10
-	a.MineCount = boardMineCount
-
-	a.Board = NewBoard(boardWidth, boardHeight)
-
-	a.TileHighLights = New2DArray[TileHighLight](boardWidth, boardHeight)
-
-	a.TopUIMarginHorizontal = 5
-	a.TopUIMarginTop = 5
-	a.TopUIMarginBottom = 5
-
-	a.TopUIButtonButtonRatio = 0.2
-	a.TopUIButtonTextRatio = 0.5
-
-	// ==============================
-	// create difficulty buttons
-	// ==============================
-	{
-		leftRect := a.GetDifficultyButtonRect(false)
-		rightRect := a.GetDifficultyButtonRect(true)
-
-		a.DifficultyButtonLeft = &ImageButton{
-			BaseButton: BaseButton{
-				Rect: leftRect,
-				OnClick: func() {
-					a.Difficulty -= 1
-					a.Difficulty = max(a.Difficulty, 0)
-				},
-			},
-
-			Image:        SpriteSubImage(TileSprite, 11),
-			ImageOnHover: SpriteSubImage(TileSprite, 11),
-			ImageOnDown:  SpriteSubImage(TileSprite, 13),
-
-			ImageColor:        color.NRGBA{255, 255, 255, 255},
-			ImageColorOnHover: color.NRGBA{255, 255, 255, 255},
-			ImageColorOnDown:  color.NRGBA{255, 255, 255, 255},
-		}
-
-		a.DifficultyButtonRight = &ImageButton{
-			BaseButton: BaseButton{
-				Rect: rightRect,
-				OnClick: func() {
-					a.Difficulty += 1
-					a.Difficulty = min(a.Difficulty, DifficultySize-1)
-				},
-			},
-			Image:        SpriteSubImage(TileSprite, 12),
-			ImageOnHover: SpriteSubImage(TileSprite, 12),
-			ImageOnDown:  SpriteSubImage(TileSprite, 14),
-
-			ImageColor:        color.NRGBA{255, 255, 255, 255},
-			ImageColorOnHover: color.NRGBA{255, 255, 255, 255},
-			ImageColorOnDown:  color.NRGBA{255, 255, 255, 255},
-		}
-	}
-
-	return a
-}
-
 func (a *App) MousePosToBoardPos(mousePos FPoint) (int, int) {
+	boardRect := a.BoardRect()
+
 	// if mouse is outside the board return -1
-	if !mousePos.In(a.BoardRect) {
+	if !mousePos.In(boardRect) {
 		return -1, -1
 	}
 
-	mousePos.X -= a.BoardRect.Min.X
-	mousePos.Y -= a.BoardRect.Min.Y
+	mousePos.X -= boardRect.Min.X
+	mousePos.Y -= boardRect.Min.Y
 
-	boardX := int(math.Floor(mousePos.X / (a.BoardRect.Dx() / float64(a.Board.Width))))
-	boardY := int(math.Floor(mousePos.Y / (a.BoardRect.Dy() / float64(a.Board.Height))))
+	boardX := int(math.Floor(mousePos.X / (boardRect.Dx() / float64(a.Board.Width))))
+	boardY := int(math.Floor(mousePos.Y / (boardRect.Dy() / float64(a.Board.Height))))
 
 	boardX = min(boardX, a.Board.Width-1)
 	boardY = min(boardY, a.Board.Height-1)
@@ -308,7 +335,7 @@ func (a *App) Update() error {
 			if IsMouseButtonJustPressed(eb.MouseButtonLeft) {
 				if !a.Board.Flags[boardX][boardY] {
 					if !a.BoardTouched { // mine is not placed
-						a.Board.PlaceMines(a.MineCount, boardX, boardY)
+						a.Board.PlaceMines(a.MineCount[a.Difficulty], boardX, boardY)
 						a.Board.SpreadSafeArea(boardX, boardY)
 
 						iter := NewBoardIterator(
@@ -337,7 +364,7 @@ func (a *App) Update() error {
 	if prevState != a.GameState {
 		// reset GameResultAnimProgress
 		if a.GameState == GameStateWon || a.GameState == GameStateLost {
-			a.GameResultAnimProgress = 0
+			a.GameResultAnimTimer.Current = 0
 		}
 	}
 
@@ -351,14 +378,45 @@ func (a *App) Update() error {
 		}
 	}
 	if a.GameState == GameStateWon || a.GameState == GameStateLost {
-		a.GameResultAnimProgress += UpdateDelta()
+		a.GameResultAnimTimer.TickUp()
+	}
+
+	// ==========================
+	// update TopMenuShowAnimT
+	// ==========================
+	if a.BoardTouched {
+		a.TopMenuShowAnimTimer.TickDown()
+	} else {
+		a.TopMenuShowAnimTimer.TickUp()
 	}
 
 	// ==========================
 	// update buttons
 	// ==========================
+	a.DifficultyButtonLeft.Disabled = a.BoardTouched
+	a.DifficultyButtonRight.Disabled = a.BoardTouched
+
+	// update button rect
+	{
+		lRect := a.GetDifficultyButtonRect(false)
+		rRect := a.GetDifficultyButtonRect(true)
+
+		t := f64(a.TopMenuShowAnimTimer.Current) / f64(a.TopMenuShowAnimTimer.Duration)
+		t = Clamp(t, 0, 1)
+
+		lRectY := Lerp(-lRect.Dy()-10, lRect.Min.Y, t)
+		rRectY := Lerp(-rRect.Dy()-10, rRect.Min.Y, t)
+
+		lRect = FRectMoveTo(lRect, FPt(lRect.Min.X, lRectY))
+		rRect = FRectMoveTo(rRect, FPt(rRect.Min.X, rRectY))
+
+		a.DifficultyButtonLeft.Rect = lRect
+		a.DifficultyButtonRight.Rect = rRect
+	}
+
 	a.DifficultyButtonLeft.Update()
 	a.DifficultyButtonRight.Update()
+	// ==========================
 
 	return nil
 }
@@ -380,12 +438,14 @@ func GetFlagTile() *eb.Image {
 }
 
 func (a *App) GetTileRect(boardX, boardY int) FRectangle {
-	tileWidth := a.BoardRect.Dx() / f64(a.Board.Width)
-	tileHeight := a.BoardRect.Dy() / f64(a.Board.Height)
+	boardRect := a.BoardRect()
+
+	tileWidth := boardRect.Dx() / f64(a.Board.Width)
+	tileHeight := boardRect.Dy() / f64(a.Board.Height)
 
 	return FRectangle{
-		Min: FPt(f64(boardX)*tileWidth, f64(boardY)*tileHeight).Add(a.BoardRect.Min),
-		Max: FPt(f64(boardX+1)*tileWidth, f64(boardY+1)*tileHeight).Add(a.BoardRect.Min),
+		Min: FPt(f64(boardX)*tileWidth, f64(boardY)*tileHeight).Add(boardRect.Min),
+		Max: FPt(f64(boardX+1)*tileWidth, f64(boardY+1)*tileHeight).Add(boardRect.Min),
 	}
 }
 
@@ -401,6 +461,7 @@ func (a *App) DrawTile(dst *eb.Image, boardX, boardY int, tile *eb.Image) {
 	op.GeoM.Concat(TransformToCenter(imgSize.X, imgSize.Y, scale, scale, 0))
 	rectCenter := FRectangleCenter(tileRect)
 	op.GeoM.Translate(rectCenter.X, rectCenter.Y)
+	op.Filter = eb.FilterLinear
 
 	dst.DrawImage(tile, op)
 }
@@ -426,13 +487,13 @@ func (a *App) DrawGameResult(dst *eb.Image) {
 	scaledW, scaledH := textW*scale, textH*scale
 
 	startMinY := 0 - scaledH - 10 // up extra 10 just to be safe
-	endMinY := ScreenHeight*0.5 - scaledH*0.5
+	endMinY := f64(ScreenHeight)*0.5 - scaledH*0.5
 
-	t := f64(a.GameResultAnimProgress) / f64(a.GameResultAnimDuration)
+	t := f64(a.GameResultAnimTimer.Current) / f64(a.GameResultAnimTimer.Duration)
 	t = Clamp(t, 0, 1)
 
 	minY := Lerp(startMinY, endMinY, t)
-	minX := ScreenWidth*0.5 - scaledW*0.5
+	minX := f64(ScreenWidth)*0.5 - scaledW*0.5
 
 	op := &ebt.DrawOptions{}
 	op.LayoutOptions.LineSpacing = FontLineSpacing(FontFace)
@@ -472,6 +533,12 @@ func (a *App) DrawDifficultyText(dst *eb.Image) {
 
 	rect := a.GetDifficultyTextRect()
 
+	t := f64(a.TopMenuShowAnimTimer.Current) / f64(a.TopMenuShowAnimTimer.Duration)
+	t = Clamp(t, 0, 1)
+
+	rectY := Lerp(-rect.Dy()-10, rect.Min.Y, t)
+	rect = FRectMoveTo(rect, FPt(rect.Min.X, rectY))
+
 	scale := min(rect.Dx()/maxW, rect.Dy()/maxH)
 
 	rectCenter := FRectangleCenter(rect)
@@ -488,16 +555,20 @@ func (a *App) DrawDifficultyText(dst *eb.Image) {
 }
 
 func (a *App) Draw(dst *eb.Image) {
-	tileWidth := a.BoardRect.Dx() / f64(a.Board.Width)
-	tileHeight := a.BoardRect.Dy() / f64(a.Board.Height)
+	boardRect := a.BoardRect()
+	// ===========================
+	// draw board
+	// ===========================
+	tileWidth := boardRect.Dx() / f64(a.Board.Width)
+	tileHeight := boardRect.Dy() / f64(a.Board.Height)
 
 	regularBg := color.NRGBA{100, 100, 100, 255}
 	revealedBg := color.NRGBA{200, 200, 200, 255}
 
 	for y := 0; y < a.Board.Height; y++ {
 		for x := 0; x < a.Board.Width; x++ {
-			tileX := f64(x)*tileWidth + a.BoardRect.Min.X
-			tileY := f64(y)*tileHeight + a.BoardRect.Min.Y
+			tileX := f64(x)*tileWidth + boardRect.Min.X
+			tileY := f64(y)*tileHeight + boardRect.Min.Y
 
 			// draw the tile background
 			bgColor := regularBg
@@ -560,7 +631,10 @@ func (a *App) Draw(dst *eb.Image) {
 }
 
 func (a *App) Layout(outsideWidth, outsideHeight int) (int, int) {
-	return ScreenWidth, ScreenHeight
+	ScreenWidth = f64(outsideWidth)
+	ScreenHeight = f64(outsideHeight)
+
+	return outsideWidth, outsideHeight
 }
 
 func main() {
@@ -569,8 +643,8 @@ func main() {
 	app := NewApp()
 
 	eb.SetVsyncEnabled(true)
-
-	eb.SetWindowSize(ScreenWidth, ScreenHeight)
+	eb.SetWindowSize(int(ScreenWidth), int(ScreenHeight))
+	eb.SetWindowResizingMode(eb.WindowResizingModeEnabled)
 	eb.SetWindowTitle("test")
 
 	if err := eb.RunGame(app); err != nil {

@@ -17,6 +17,8 @@ type Sprite struct {
 	Margin int
 
 	Count int
+
+	SpriteCache map[int]*eb.Image
 }
 
 func SpriteBounds(sprite Sprite, spriteN int) image.Rectangle {

@@ -20,6 +20,25 @@ func TimeSinceNow(t time.Duration) time.Duration {
 	return GlobalTimerNow() - t
 }
 
+type Timer struct {
+	Duration time.Duration
+	Current  time.Duration
+}
+
+func (t *Timer) TickUp() {
+	t.Current += UpdateDelta()
+	if t.Current > t.Duration {
+		t.Current = t.Duration
+	}
+}
+
+func (t *Timer) TickDown() {
+	t.Current -= UpdateDelta()
+	if t.Current < 0 {
+		t.Current = 0
+	}
+}
+
 // Timer for profiling.
 // Usage :
 //

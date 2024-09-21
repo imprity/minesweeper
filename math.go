@@ -313,6 +313,20 @@ func CenterFRectangle(rect FRectangle, x, y float64) FRectangle {
 	}
 }
 
+func RectMoveTo(rect image.Rectangle, pt image.Point) image.Rectangle {
+	return image.Rectangle{
+		Min: pt,
+		Max: image.Pt(pt.X+rect.Dx(), pt.Y+rect.Dy()),
+	}
+}
+
+func FRectMoveTo(rect FRectangle, pt FPoint) FRectangle {
+	return FRectangle{
+		Min: pt,
+		Max: FPt(pt.X+rect.Dx(), pt.Y+rect.Dy()),
+	}
+}
+
 func Lerp[F constraints.Float](a, b, t F) F {
 	return a + (b-a)*t
 }
