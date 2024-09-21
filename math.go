@@ -4,6 +4,8 @@ import (
 	"golang.org/x/exp/constraints"
 	"image"
 	"math"
+
+	eb "github.com/hajimehoshi/ebiten/v2"
 )
 
 // =================================
@@ -63,6 +65,11 @@ func (p FPoint) Rotate(theta float64) FPoint {
 		X: cos*p.X - sin*p.Y,
 		Y: sin*p.X + cos*p.Y,
 	}
+}
+
+func FPointTransform(pt FPoint, geom eb.GeoM) FPoint {
+	x, y := geom.Apply(pt.X, pt.Y)
+	return FPt(x, y)
 }
 
 // =================================

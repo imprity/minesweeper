@@ -421,6 +421,7 @@ func (a *App) Update() error {
 	return nil
 }
 
+/*
 func GetNumberTile(number int) *eb.Image {
 	if !(1 <= number && number <= 9) {
 		ErrorLogger.Fatalf("%d is not a valid number", number)
@@ -436,6 +437,7 @@ func GetMineTile() *eb.Image {
 func GetFlagTile() *eb.Image {
 	return SpriteSubImage(TileSprite, 10)
 }
+*/
 
 func (a *App) GetTileRect(boardX, boardY int) FRectangle {
 	boardRect := a.BoardRect()
@@ -464,6 +466,22 @@ func (a *App) DrawTile(dst *eb.Image, boardX, boardY int, tile *eb.Image) {
 	op.Filter = eb.FilterLinear
 
 	dst.DrawImage(tile, op)
+}
+
+func (a *App) DrawTile2(dst *eb.Image, boardX, boardY int, tile int) {
+	spriteRect := SpriteFRect(TileSprite, tile)
+	tileRect := a.GetTileRect(boardX, boardY)
+
+	spriteSize := spriteRect.Size()
+	tileSize := tileRect.Size()
+
+	scale := min(tileSize.X, tileSize.Y) / max(spriteSize.X, spriteSize.Y)
+
+	var geom eb.GeoM
+	geom.Concat(TransformToCenter(spriteSize.X, spriteSize.Y, scale, scale, 0))
+	rectCenter := FRectangleCenter(tileRect)
+	geom.Translate(rectCenter.X, rectCenter.Y)
+	DrawSprite(dst, TileSprite, tile, geom, color.NRGBA{255, 255, 255, 255})
 }
 
 func (a *App) DrawGameResult(dst *eb.Image) {
@@ -586,17 +604,20 @@ func (a *App) Draw(dst *eb.Image) {
 
 			// draw flags
 			if a.Board.Flags[x][y] {
-				a.DrawTile(dst, x, y, GetFlagTile())
+				a.DrawTile2(dst, x, y, 10)
+				//a.DrawTile(dst, x, y, GetFlagTile())
 			}
 
 			// draw mines
 			if a.GameState == GameStateLost && a.Board.Mines[x][y] && !a.Board.Flags[x][y] {
-				a.DrawTile(dst, x, y, GetMineTile())
+				a.DrawTile2(dst, x, y, 9)
+				// a.DrawTile(dst, x, y, GetMineTile())
 			}
 
 			if a.Board.Revealed[x][y] {
 				if count := a.Board.GetNeighborMineCount(x, y); count > 0 {
-					a.DrawTile(dst, x, y, GetNumberTile(count))
+					//a.DrawTile(dst, x, y, GetNumberTile(count))
+					a.DrawTile2(dst, x, y, count-1)
 				}
 			}
 
