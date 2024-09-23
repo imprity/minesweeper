@@ -331,17 +331,17 @@ func CenterFRectangle(rect FRectangle, x, y float64) FRectangle {
 	}
 }
 
-func RectMoveTo(rect image.Rectangle, pt image.Point) image.Rectangle {
+func RectMoveTo(rect image.Rectangle, x, y int) image.Rectangle {
 	return image.Rectangle{
-		Min: pt,
-		Max: image.Pt(pt.X+rect.Dx(), pt.Y+rect.Dy()),
+		Min: image.Pt(x, y),
+		Max: image.Pt(x+rect.Dx(), y+rect.Dy()),
 	}
 }
 
-func FRectMoveTo(rect FRectangle, pt FPoint) FRectangle {
+func FRectMoveTo(rect FRectangle, x, y float64) FRectangle {
 	return FRectangle{
-		Min: pt,
-		Max: FPt(pt.X+rect.Dx(), pt.Y+rect.Dy()),
+		Min: FPt(x, y),
+		Max: FPt(x+rect.Dx(), y+rect.Dy()),
 	}
 }
 

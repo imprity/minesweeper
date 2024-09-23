@@ -52,7 +52,7 @@ type DrawSubViewOptions struct {
 
 func DrawSubView(dst *eb.Image, sv SubView, options *DrawSubViewOptions) {
 	rect := sv.Rect
-	rect0 := FRectMoveTo(rect, FPoint{})
+	rect0 := FRectMoveTo(rect, 0, 0)
 
 	var vs [4]FPoint
 

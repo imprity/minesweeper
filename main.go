@@ -49,6 +49,146 @@ var DifficultyStrs = [DifficultySize]string{
 	"Hard",
 }
 
+type RetryPopup struct {
+	DoShow bool
+	DidWin bool
+
+	Button *ImageButton
+
+	PopupHeightRatio      float64 // relative to min(ScreenWidth, ScreenHeight)
+	ButtonHeightRatio     float64 // relative to popup's height
+	TextHeightRatio       float64 // relative to popup's height
+	ButtonTextMarginRatio float64 // margin between retry button and text, relative to popup's height
+
+	AnimTimer Timer
+}
+
+func NewRetryPopup() *RetryPopup {
+	rp := new(RetryPopup)
+
+	rp.PopupHeightRatio = 0.35
+	rp.ButtonHeightRatio = 0.5
+	rp.TextHeightRatio = 0.2
+	rp.ButtonTextMarginRatio = 0.1
+
+	rp.AnimTimer = Timer{
+		Duration: time.Millisecond * 100,
+	}
+
+	rp.Button = &ImageButton{
+		Image:        SpriteSubView(TileSprite, 17),
+		ImageOnHover: SpriteSubView(TileSprite, 17),
+		ImageOnDown:  SpriteSubView(TileSprite, 17),
+
+		ImageColor:        color.NRGBA{0, 255, 0, 100},
+		ImageColorOnHover: color.NRGBA{0, 255, 0, 255},
+		ImageColorOnDown:  color.NRGBA{0, 255, 0, 255},
+	}
+
+	return rp
+}
+
+func (rp *RetryPopup) RegisterButtonCallback(cb func()) {
+	rp.Button.OnClick = cb
+}
+
+func (rp *RetryPopup) PopupRect() FRectangle {
+	animT := f64(rp.AnimTimer.Current) / f64(rp.AnimTimer.Duration)
+	animT = Clamp(animT, 0, 1)
+
+	height := min(ScreenWidth, ScreenHeight) * rp.PopupHeightRatio
+	rect := FRectWH(height, height)
+
+	rectCenterX, rectCenterY := ScreenWidth*0.5, ScreenHeight*0.5
+
+	rectCenterY += (1 - animT) * 60 // give a little bit of an offset
+
+	return CenterFRectangle(rect, rectCenterX, rectCenterY)
+}
+
+func (rp *RetryPopup) ButtonRect() FRectangle {
+	pRect := rp.PopupRect()
+
+	childrenHeight := (rp.TextHeightRatio +
+		rp.ButtonTextMarginRatio +
+		rp.ButtonHeightRatio) * pRect.Dy()
+
+	childrenMaxY := pRect.Max.Y - pRect.Dy()*0.5 + childrenHeight*0.5
+
+	buttonSize := rp.ButtonHeightRatio * pRect.Dy()
+	buttonRect := FRectWH(buttonSize, buttonSize)
+
+	buttonRect = FRectMoveTo(buttonRect, ScreenWidth*0.5-buttonSize*0.5, childrenMaxY-buttonSize)
+
+	return buttonRect
+}
+
+func (rp *RetryPopup) TextRect() FRectangle {
+	pRect := rp.PopupRect()
+
+	childrenHeight := (rp.TextHeightRatio +
+		rp.ButtonTextMarginRatio +
+		rp.ButtonHeightRatio) * pRect.Dy()
+
+	childrenMinY := pRect.Min.Y + pRect.Dy()*0.5 - childrenHeight*0.5
+
+	textHeight := rp.TextHeightRatio * pRect.Dy()
+	textRect := FRectWH(pRect.Dx(), textHeight)
+
+	textRect = FRectMoveTo(textRect, ScreenWidth*0.5-textRect.Dx()*0.5, childrenMinY)
+
+	return textRect
+}
+
+func (rp *RetryPopup) Update() error {
+	// update button
+	rp.Button.Disabled = !rp.DoShow
+
+	//update timer
+	if rp.DoShow {
+		rp.AnimTimer.TickUp()
+	} else {
+		rp.AnimTimer.Current = 0
+	}
+
+	rp.Button.Rect = rp.ButtonRect()
+
+	rp.Button.Update()
+	return nil
+}
+
+func (rp *RetryPopup) Draw(dst *eb.Image) {
+	if rp.DoShow {
+		// draw popup background
+		popupRect := rp.PopupRect()
+		DrawFilledRect(dst, popupRect, color.NRGBA{255, 255, 255, 255}, true)
+
+		// draw text
+		{
+			text := "You Lost!"
+			if rp.DidWin {
+				text = "You Won!"
+			}
+
+			textW, textH := ebt.Measure(text, FontFace, FontLineSpacing(FontFace))
+			textRect := rp.TextRect()
+			scale := min(textRect.Dx()/textW, textRect.Dy()/textH)
+
+			op := &ebt.DrawOptions{}
+			op.GeoM.Concat(TransformToCenter(textW, textH, scale, scale, 0))
+			center := FRectangleCenter(textRect)
+			op.GeoM.Translate(center.X, center.Y)
+			op.ColorScale.ScaleWithColor(color.NRGBA{0, 0, 0, 255})
+			op.Filter = eb.FilterLinear
+
+			ebt.Draw(dst, text, FontFace, op)
+		}
+
+		// draw button
+		rp.Button.Draw(dst)
+	}
+}
+
 type App struct {
 	Board Board
 
@@ -64,10 +204,11 @@ type App struct {
 
 	Difficulty Difficulty
 
+	RetryPopup *RetryPopup
+
 	DifficultyButtonLeft  *ImageButton
 	DifficultyButtonRight *ImageButton
 
-	GameResultAnimTimer  Timer
 	TopMenuShowAnimTimer Timer
 
 	BoardSizeRatio float64 // relative to min(ScreenWidth, ScreenHeight)
@@ -83,9 +224,8 @@ type App struct {
 func NewApp() *App {
 	a := new(App)
 
-	a.GameResultAnimTimer = Timer{
-		Duration: time.Millisecond * 300,
-	}
+	a.RetryPopup = NewRetryPopup()
+
 	a.TopMenuShowAnimTimer = Timer{
 		Duration: time.Millisecond * 200,
 	}
@@ -116,8 +256,14 @@ func NewApp() *App {
 		)
 
 		a.TileHighLights = New2DArray[TileHighLight](a.Board.Width, a.Board.Height)
+		a.BoardTouched = false
 	}
 	initBoard()
+
+	a.RetryPopup.RegisterButtonCallback(func() {
+		initBoard()
+		a.GameState = GameStatePlaying
+	})
 
 	// ==============================
 	// create difficulty buttons
@@ -242,7 +388,6 @@ func (a *App) SetTileHightlight(boardX, boardY int) {
 }
 
 func (a *App) Update() error {
-
 	// ==========================
 	// update global timer
 	// ==========================
@@ -254,6 +399,7 @@ func (a *App) Update() error {
 	boardX, boardY := a.MousePosToBoardPos(cursor)
 
 	prevState := a.GameState
+	_ = prevState // might be handy later
 
 	// =================================
 	// handle board interaction
@@ -361,13 +507,6 @@ func (a *App) Update() error {
 		}
 	}
 
-	if prevState != a.GameState {
-		// reset GameResultAnimProgress
-		if a.GameState == GameStateWon || a.GameState == GameStateLost {
-			a.GameResultAnimTimer.Current = 0
-		}
-	}
-
 	// update highlights
 	if !(IsMouseButtonPressed(eb.MouseButtonLeft) || IsMouseButtonPressed(eb.MouseButtonRight)) {
 		for y := 0; y < a.Board.Height; y++ {
@@ -376,9 +515,6 @@ func (a *App) Update() error {
 				a.TileHighLights[x][y].Brightness = max(a.TileHighLights[x][y].Brightness, 0)
 			}
 		}
-	}
-	if a.GameState == GameStateWon || a.GameState == GameStateLost {
-		a.GameResultAnimTimer.TickUp()
 	}
 
 	// ==========================
@@ -391,7 +527,7 @@ func (a *App) Update() error {
 	}
 
 	// ==========================
-	// update buttons
+	// update top menu buttons
 	// ==========================
 	a.DifficultyButtonLeft.Disabled = a.BoardTouched
 	a.DifficultyButtonRight.Disabled = a.BoardTouched
@@ -407,8 +543,8 @@ func (a *App) Update() error {
 		lRectY := Lerp(-lRect.Dy()-10, lRect.Min.Y, t)
 		rRectY := Lerp(-rRect.Dy()-10, rRect.Min.Y, t)
 
-		lRect = FRectMoveTo(lRect, FPt(lRect.Min.X, lRectY))
-		rRect = FRectMoveTo(rRect, FPt(rRect.Min.X, rRectY))
+		lRect = FRectMoveTo(lRect, lRect.Min.X, lRectY)
+		rRect = FRectMoveTo(rRect, rRect.Min.X, rRectY)
 
 		a.DifficultyButtonLeft.Rect = lRect
 		a.DifficultyButtonRight.Rect = rRect
@@ -417,6 +553,11 @@ func (a *App) Update() error {
 	a.DifficultyButtonLeft.Update()
 	a.DifficultyButtonRight.Update()
 	// ==========================
+
+	a.RetryPopup.DoShow = a.GameState == GameStateLost || a.GameState == GameStateWon
+	a.RetryPopup.DidWin = a.GameState == GameStateWon
+
+	a.RetryPopup.Update()
 
 	return nil
 }
@@ -466,55 +607,6 @@ func (a *App) DrawTile(dst *eb.Image, boardX, boardY int, tile SubView) {
 	DrawSubView(dst, tile, op)
 }
 
-func (a *App) DrawGameResult(dst *eb.Image) {
-	if !(a.GameState == GameStateLost || a.GameState == GameStateWon) {
-		return
-	}
-
-	var resultStr string
-
-	if a.GameState == GameStateLost {
-		resultStr = "You Lost!"
-	} else {
-		resultStr = "You Won!"
-	}
-
-	textW, textH := ebt.Measure(resultStr, FontFace, FontLineSpacing(FontFace))
-
-	const textSize = 80
-	scale := textSize / FontSize(FontFace)
-
-	scaledW, scaledH := textW*scale, textH*scale
-
-	startMinY := 0 - scaledH - 10 // up extra 10 just to be safe
-	endMinY := f64(ScreenHeight)*0.5 - scaledH*0.5
-
-	t := f64(a.GameResultAnimTimer.Current) / f64(a.GameResultAnimTimer.Duration)
-	t = Clamp(t, 0, 1)
-
-	minY := Lerp(startMinY, endMinY, t)
-	minX := f64(ScreenWidth)*0.5 - scaledW*0.5
-
-	op := &ebt.DrawOptions{}
-	op.LayoutOptions.LineSpacing = FontLineSpacing(FontFace)
-
-	op.GeoM.Concat(TransformToCenter(textW, textH, scale, scale, 0))
-	op.GeoM.Translate(minX+scaledW*0.5, minY+scaledH*0.5)
-	op.Filter = eb.FilterLinear
-
-	if a.GameState == GameStateLost {
-		op.ColorScale.ScaleWithColor(
-			color.NRGBA{245, 24, 24, 255},
-		)
-	} else {
-		op.ColorScale.ScaleWithColor(
-			color.NRGBA{255, 215, 18, 255},
-		)
-	}
-
-	ebt.Draw(dst, resultStr, FontFace, op)
-}
-
 func (a *App) DrawDifficultyText(dst *eb.Image) {
 	var maxW, maxH float64
 	var textW, textH float64
@@ -537,7 +629,7 @@ func (a *App) DrawDifficultyText(dst *eb.Image) {
 	t = Clamp(t, 0, 1)
 
 	rectY := Lerp(-rect.Dy()-10, rect.Min.Y, t)
-	rect = FRectMoveTo(rect, FPt(rect.Min.X, rectY))
+	rect = FRectMoveTo(rect, rect.Min.X, rectY)
 
 	scale := min(rect.Dx()/maxW, rect.Dy()/maxH)
 
@@ -622,12 +714,12 @@ func (a *App) Draw(dst *eb.Image) {
 		}
 	}
 
-	a.DrawGameResult(dst)
-
 	a.DifficultyButtonLeft.Draw(dst)
 	a.DifficultyButtonRight.Draw(dst)
 
 	a.DrawDifficultyText(dst)
+
+	a.RetryPopup.Draw(dst)
 }
 
 func (a *App) Layout(outsideWidth, outsideHeight int) (int, int) {
