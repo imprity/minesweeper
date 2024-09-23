@@ -46,3 +46,11 @@ func HandleMouseButtonRepeat(
 
 	return false
 }
+
+func IsKeyPressed(key eb.Key) bool {
+	return eb.IsKeyPressed(key)
+}
+
+func IsKeyJustPressed(key eb.Key) bool {
+	return ebi.IsKeyJustPressed(key)
+}

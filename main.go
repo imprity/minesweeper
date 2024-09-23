@@ -219,6 +219,8 @@ type App struct {
 
 	TopUIButtonButtonRatio float64
 	TopUIButtonTextRatio   float64
+
+	DebugMode bool
 }
 
 func NewApp() *App {
@@ -559,6 +561,12 @@ func (a *App) Update() error {
 
 	a.RetryPopup.Update()
 
+	// TEST TEST TEST TEST TEST TEST
+	if IsKeyJustPressed(eb.KeyF1) {
+		a.DebugMode = !a.DebugMode
+	}
+	// TEST TEST TEST TEST TEST TEST
+
 	return nil
 }
 
@@ -590,7 +598,7 @@ func (a *App) GetTileRect(boardX, boardY int) FRectangle {
 	}
 }
 
-func (a *App) DrawTile(dst *eb.Image, boardX, boardY int, tile SubView) {
+func (a *App) DrawTile(dst *eb.Image, boardX, boardY int, tile SubView, clr color.Color) {
 	tileRect := a.GetTileRect(boardX, boardY)
 
 	imgSize := ImageSizeFPt(tile)
@@ -602,6 +610,7 @@ func (a *App) DrawTile(dst *eb.Image, boardX, boardY int, tile SubView) {
 	op.GeoM.Concat(TransformToCenter(imgSize.X, imgSize.Y, scale, scale, 0))
 	rectCenter := FRectangleCenter(tileRect)
 	op.GeoM.Translate(rectCenter.X, rectCenter.Y)
+	op.ColorScale.ScaleWithColor(clr)
 	op.Filter = eb.FilterLinear
 
 	DrawSubView(dst, tile, op)
@@ -678,17 +687,17 @@ func (a *App) Draw(dst *eb.Image) {
 
 			// draw flags
 			if a.Board.Flags[x][y] {
-				a.DrawTile(dst, x, y, GetFlagTile())
+				a.DrawTile(dst, x, y, GetFlagTile(), color.NRGBA{255, 255, 255, 255})
 			}
 
 			// draw mines
 			if a.GameState == GameStateLost && a.Board.Mines[x][y] && !a.Board.Flags[x][y] {
-				a.DrawTile(dst, x, y, GetMineTile())
+				a.DrawTile(dst, x, y, GetMineTile(), color.NRGBA{255, 255, 255, 255})
 			}
 
 			if a.Board.Revealed[x][y] {
 				if count := a.Board.GetNeighborMineCount(x, y); count > 0 {
-					a.DrawTile(dst, x, y, GetNumberTile(count))
+					a.DrawTile(dst, x, y, GetNumberTile(count), color.NRGBA{255, 255, 255, 255})
 				}
 			}
 
@@ -711,6 +720,12 @@ func (a *App) Draw(dst *eb.Image) {
 				color.NRGBA{0, 0, 0, 255},
 				true,
 			)
+
+			// TEST TEST TEST TEST TEST TEST
+			if a.DebugMode && a.Board.Mines[x][y] {
+				a.DrawTile(dst, x, y, GetMineTile(), color.NRGBA{255, 0, 0, 255})
+			}
+			// TEST TEST TEST TEST TEST TEST
 		}
 	}
 

@@ -93,6 +93,8 @@ func (board *Board) SpreadSafeArea(posX int, posY int) {
 		return
 	}
 
+	board.Flags[posX][posY] = false
+
 	iterator := NewBoardIterator(posX-1, posY-1, posX+1, posY+1)
 	for iterator.HasNext() {
 		x, y := iterator.GetNext()
