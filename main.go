@@ -11,7 +11,6 @@ import (
 
 	eb "github.com/hajimehoshi/ebiten/v2"
 	ebt "github.com/hajimehoshi/ebiten/v2/text/v2"
-	ebv "github.com/hajimehoshi/ebiten/v2/vector"
 )
 
 var (
@@ -187,6 +186,40 @@ func (rp *RetryPopup) Draw(dst *eb.Image) {
 		// draw button
 		rp.Button.Draw(dst)
 	}
+}
+
+var ColorTable struct  {
+	Bg  color.NRGBA
+
+	TileNormal1  color.NRGBA
+	TileNormal2  color.NRGBA
+	TileNormalStroke color.NRGBA
+
+	TileRevealed1  color.NRGBA
+	TileRevealed2  color.NRGBA
+	TileRevealedStroke color.NRGBA
+
+	Number color.NRGBA
+
+	Mine color.NRGBA
+	Flag color.NRGBA
+}
+
+func init() {
+	ColorTable.Bg = color.NRGBA{10,10,10,255}
+
+	ColorTable.TileNormal1 = color.NRGBA{30,30,30,255}
+	ColorTable.TileNormal2 = color.NRGBA{50,50,50,255}
+	ColorTable.TileNormalStroke = color.NRGBA{150,150,150,255}
+
+	ColorTable.TileRevealed1 = color.NRGBA{255,255,255,255}
+	ColorTable.TileRevealed2 = color.NRGBA{255,255,255,255}
+	ColorTable.TileRevealedStroke = color.NRGBA{150,150,150,255}
+
+	ColorTable.Number = color.NRGBA{10,10,10,255}
+
+	ColorTable.Mine = color.NRGBA{255,255,255,255}
+	ColorTable.Flag = color.NRGBA{255,200,200,255}
 }
 
 type App struct {
@@ -422,11 +455,7 @@ func (a *App) Update() error {
 					flaggedCorrectly := true
 					missedMine := false
 
-					iter := NewBoardIterator(
-						boardX-1, boardY-1,
-						boardX+1, boardY+1,
-					)
-
+					iter := NewBoardIterator(boardX-1, boardY-1, boardX+1, boardY+1)
 					for iter.HasNext() {
 						x, y := iter.GetNext()
 
@@ -434,11 +463,9 @@ func (a *App) Update() error {
 							if a.Board.Mines[x][y] != a.Board.Flags[x][y] {
 								flaggedCorrectly = false
 							}
-
 							if a.Board.Mines[x][y] && !a.Board.Flags[x][y] {
 								missedMine = true
 							}
-
 							if a.Board.Flags[x][y] {
 								flagCount += 1
 							}
@@ -447,28 +474,19 @@ func (a *App) Update() error {
 
 					if flaggedCorrectly {
 						iter.Reset()
-
 						for iter.HasNext() {
 							x, y := iter.GetNext()
 							if a.Board.IsPosInBoard(x, y) {
 								a.Board.SpreadSafeArea(x, y)
 							}
 						}
-
-						// check if user has won the game
-						if a.Board.IsAllSafeTileRevealed() {
-							a.GameState = GameStateWon
-						}
 					} else {
 						if missedMine {
 							a.GameState = GameStateLost
 						}
 					}
-				} else { // just highlight the area
-					iter := NewBoardIterator(
-						boardX-1, boardY-1,
-						boardX+1, boardY+1,
-					)
+				} else { // if not flagged correctly just highlight the area
+					iter := NewBoardIterator(boardX-1, boardY-1, boardX+1, boardY+1)
 
 					for iter.HasNext() {
 						x, y := iter.GetNext()
@@ -486,9 +504,7 @@ func (a *App) Update() error {
 						a.Board.PlaceMines(a.MineCount[a.Difficulty], boardX, boardY)
 						a.Board.SpreadSafeArea(boardX, boardY)
 
-						iter := NewBoardIterator(
-							0, 0, a.Board.Width-1, a.Board.Height-1,
-						)
+						iter := NewBoardIterator(0, 0, a.Board.Width-1, a.Board.Height-1)
 						// remove any flags that might have been placed
 						for iter.HasNext() {
 							x, y := iter.GetNext()
@@ -505,6 +521,16 @@ func (a *App) Update() error {
 				}
 			} else if IsMouseButtonJustPressed(eb.MouseButtonRight) {
 				a.Board.Flags[boardX][boardY] = !a.Board.Flags[boardX][boardY]
+			}
+		}
+
+		justPressedL := IsMouseButtonJustPressed(eb.MouseButtonLeft)
+		justPressedR := IsMouseButtonJustPressed(eb.MouseButtonRight)
+
+		if justPressedL || justPressedR {
+			// check if user has won the game
+			if a.Board.IsAllSafeTileRevealed() {
+				a.GameState = GameStateWon
 			}
 		}
 	}
@@ -656,77 +682,98 @@ func (a *App) DrawDifficultyText(dst *eb.Image) {
 }
 
 func (a *App) Draw(dst *eb.Image) {
-	boardRect := a.BoardRect()
+	// background
+	dst.Fill(ColorTable.Bg)
+
+	isOddTile := func(x, y int) bool {
+		index := x + a.Board.Height * y
+		if a.Board.Width %2 == 0 {
+			if y %2 == 0 {
+				return index % 2 != 0
+			}else {
+				return index % 2 == 0
+			}
+		}else {
+			return index %2 != 0
+		}
+	}
+
 	// ===========================
 	// draw board
 	// ===========================
-	tileWidth := boardRect.Dx() / f64(a.Board.Width)
-	tileHeight := boardRect.Dy() / f64(a.Board.Height)
+	iter := NewBoardIterator(0, 0, a.Board.Width-1, a.Board.Height-1)
 
-	regularBg := color.NRGBA{100, 100, 100, 255}
-	revealedBg := color.NRGBA{200, 200, 200, 255}
+	// draw regular tile background
+	for iter.HasNext() {
+		x, y := iter.GetNext()
+		tileRect := a.GetTileRect(x, y)
 
-	for y := 0; y < a.Board.Height; y++ {
-		for x := 0; x < a.Board.Width; x++ {
-			tileX := f64(x)*tileWidth + boardRect.Min.X
-			tileY := f64(y)*tileHeight + boardRect.Min.Y
-
-			// draw the tile background
-			bgColor := regularBg
-
-			if a.Board.Revealed[x][y] {
-				bgColor = revealedBg
+		if !a.Board.Revealed[x][y] {
+			bgColor := ColorTable.TileNormal1
+			if isOddTile(x, y) {
+				bgColor = ColorTable.TileNormal2
 			}
 
-			ebv.DrawFilledRect(
-				dst,
-				f32(tileX), f32(tileY), f32(tileWidth), f32(tileHeight),
-				bgColor,
-				true,
-			)
-
-			// draw flags
-			if a.Board.Flags[x][y] {
-				a.DrawTile(dst, x, y, GetFlagTile(), color.NRGBA{255, 255, 255, 255})
-			}
-
-			// draw mines
-			if a.GameState == GameStateLost && a.Board.Mines[x][y] && !a.Board.Flags[x][y] {
-				a.DrawTile(dst, x, y, GetMineTile(), color.NRGBA{255, 255, 255, 255})
-			}
-
-			if a.Board.Revealed[x][y] {
-				if count := a.Board.GetNeighborMineCount(x, y); count > 0 {
-					a.DrawTile(dst, x, y, GetNumberTile(count), color.NRGBA{255, 255, 255, 255})
-				}
-			}
-
-			// draw highlight
-			if a.TileHighLights[x][y].Brightness > 0 {
-				t := a.TileHighLights[x][y].Brightness
-				ebv.DrawFilledRect(
-					dst,
-					f32(tileX), f32(tileY), f32(tileWidth), f32(tileHeight),
-					color.NRGBA{255, 255, 255, uint8(t * 255)},
-					true,
-				)
-			}
-
-			// draw border
-			ebv.StrokeRect(
-				dst,
-				f32(tileX), f32(tileY), f32(tileWidth), f32(tileHeight),
-				1,
-				color.NRGBA{0, 0, 0, 255},
-				true,
-			)
-
-			// TEST TEST TEST TEST TEST TEST
-			if a.DebugMode && a.Board.Mines[x][y] {
-				a.DrawTile(dst, x, y, GetMineTile(), color.NRGBA{255, 0, 0, 255})
-			}
-			// TEST TEST TEST TEST TEST TEST
+			DrawFilledRect(dst, tileRect, bgColor, true)
+			StrokeRect(dst, tileRect, 1, ColorTable.TileNormalStroke, true)
 		}
+
+		// draw highlight
+		if a.TileHighLights[x][y].Brightness > 0 {
+			t := a.TileHighLights[x][y].Brightness
+			DrawFilledRect(
+				dst,
+				tileRect,
+				color.NRGBA{255, 255, 255, uint8(t * 180)},
+				true,
+			)
+		}
+	}
+
+	// draw revealed tiles
+	iter.Reset()
+	for iter.HasNext() {
+		x, y := iter.GetNext()
+		tileRect := a.GetTileRect(x, y)
+
+		if a.Board.Revealed[x][y] {
+			bgColor := ColorTable.TileRevealed1
+			if isOddTile(x, y) {
+				bgColor = ColorTable.TileRevealed2
+			}
+
+			DrawFilledRect(dst, tileRect, bgColor, true)
+			StrokeRect(dst, tileRect, 1, ColorTable.TileRevealedStroke, true)
+		}
+	}
+
+	// draw foreground elements
+	iter.Reset()
+	for iter.HasNext() {
+		x, y := iter.GetNext()
+
+		// draw flags
+		if a.Board.Flags[x][y] {
+			a.DrawTile(dst, x, y, GetFlagTile(), ColorTable.Flag)
+		}
+
+		// draw mines
+		if a.GameState == GameStateLost && a.Board.Mines[x][y] && !a.Board.Flags[x][y] {
+			a.DrawTile(dst, x, y, GetMineTile(), ColorTable.Mine)
+		}
+
+		// draw number
+		if a.Board.Revealed[x][y] {
+			if count := a.Board.GetNeighborMineCount(x, y); count > 0 {
+				a.DrawTile(dst, x, y, GetNumberTile(count), ColorTable.Number)
+			}
+		}
+
+		// TEST TEST TEST TEST TEST TEST
+		if a.DebugMode && a.Board.Mines[x][y] {
+			a.DrawTile(dst, x, y, GetMineTile(), color.NRGBA{255, 0, 0, 255})
+		}
+		// TEST TEST TEST TEST TEST TEST
 	}
 
 	a.DifficultyButtonLeft.Draw(dst)
