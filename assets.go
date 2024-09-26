@@ -4,6 +4,7 @@ import (
 	"bytes"
 	_ "embed"
 	"image"
+	"image/color"
 	_ "image/jpeg"
 	_ "image/png"
 
@@ -12,16 +13,36 @@ import (
 )
 
 var (
-	//go:embed spritesheet-100x100-5x5.png
+	//go:embed assets/spritesheet-100x100-5x5.png
 	tileSpriteImageData []byte
-	//go:embed spritesheet-100x100-5x5.json
+	//go:embed assets/spritesheet-100x100-5x5.json
 	tileSpriteJson []byte
 )
 var TileSprite Sprite
 
-//go:embed COOPBL.TTF
-var fontFile []byte
-var FontFace *ebt.GoTextFace
+var (
+	//go:embed "assets/COOPBL.TTF"
+	decoFontFile []byte
+	DecoFace     *ebt.GoTextFace
+)
+var (
+	//go:embed dejavu-fonts-ttf-2.37/ttf/DejaVuSansMono.ttf
+	clearFontFile []byte
+	ClearFace     *ebt.GoTextFace
+)
+
+var WhiteImage *eb.Image
+
+func init() {
+	whiteImg := image.NewNRGBA(RectWH(3, 3))
+	for x := range 3 {
+		for y := range 3 {
+			whiteImg.Set(x, y, color.NRGBA{255, 255, 255, 255})
+		}
+	}
+	wholeWhiteImage := eb.NewImageFromImage(whiteImg)
+	WhiteImage = wholeWhiteImage.SubImage(image.Rect(1, 1, 2, 2)).(*eb.Image)
+}
 
 func LoadAssets() {
 	// load tile sprite
@@ -39,14 +60,25 @@ func LoadAssets() {
 		TileSprite.Image = eb.NewImageFromImage(image)
 	}
 
-	// load font
+	// load fonts
 	{
-		faceSource, err := ebt.NewGoTextFaceSource(bytes.NewReader(fontFile))
+		faceSource, err := ebt.NewGoTextFaceSource(bytes.NewReader(decoFontFile))
 		if err != nil {
 			ErrorLogger.Fatalf("failed to load font : %v", err)
 		}
 
-		FontFace = &ebt.GoTextFace{
+		DecoFace = &ebt.GoTextFace{
+			Source: faceSource,
+			Size:   64,
+		}
+	}
+	{
+		faceSource, err := ebt.NewGoTextFaceSource(bytes.NewReader(clearFontFile))
+		if err != nil {
+			ErrorLogger.Fatalf("failed to load font : %v", err)
+		}
+
+		ClearFace = &ebt.GoTextFace{
 			Source: faceSource,
 			Size:   64,
 		}

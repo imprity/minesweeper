@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"image/color"
 	"log"
 	"math"
@@ -169,7 +170,7 @@ func (rp *RetryPopup) Draw(dst *eb.Image) {
 				text = "You Won!"
 			}
 
-			textW, textH := ebt.Measure(text, FontFace, FontLineSpacing(FontFace))
+			textW, textH := ebt.Measure(text, DecoFace, FontLineSpacing(DecoFace))
 			textRect := rp.TextRect()
 			scale := min(textRect.Dx()/textW, textRect.Dy()/textH)
 
@@ -180,46 +181,12 @@ func (rp *RetryPopup) Draw(dst *eb.Image) {
 			op.ColorScale.ScaleWithColor(color.NRGBA{0, 0, 0, 255})
 			op.Filter = eb.FilterLinear
 
-			ebt.Draw(dst, text, FontFace, op)
+			ebt.Draw(dst, text, DecoFace, op)
 		}
 
 		// draw button
 		rp.Button.Draw(dst)
 	}
-}
-
-var ColorTable struct  {
-	Bg  color.NRGBA
-
-	TileNormal1  color.NRGBA
-	TileNormal2  color.NRGBA
-	TileNormalStroke color.NRGBA
-
-	TileRevealed1  color.NRGBA
-	TileRevealed2  color.NRGBA
-	TileRevealedStroke color.NRGBA
-
-	Number color.NRGBA
-
-	Mine color.NRGBA
-	Flag color.NRGBA
-}
-
-func init() {
-	ColorTable.Bg = color.NRGBA{10,10,10,255}
-
-	ColorTable.TileNormal1 = color.NRGBA{30,30,30,255}
-	ColorTable.TileNormal2 = color.NRGBA{50,50,50,255}
-	ColorTable.TileNormalStroke = color.NRGBA{150,150,150,255}
-
-	ColorTable.TileRevealed1 = color.NRGBA{255,255,255,255}
-	ColorTable.TileRevealed2 = color.NRGBA{255,255,255,255}
-	ColorTable.TileRevealedStroke = color.NRGBA{150,150,150,255}
-
-	ColorTable.Number = color.NRGBA{10,10,10,255}
-
-	ColorTable.Mine = color.NRGBA{255,255,255,255}
-	ColorTable.Flag = color.NRGBA{255,200,200,255}
 }
 
 type App struct {
@@ -253,7 +220,10 @@ type App struct {
 	TopUIButtonButtonRatio float64
 	TopUIButtonTextRatio   float64
 
-	DebugMode bool
+	DebugMode       bool
+	ColorPickerMode bool
+
+	ColorPicker ColorPicker
 }
 
 func NewApp() *App {
@@ -587,11 +557,30 @@ func (a *App) Update() error {
 
 	a.RetryPopup.Update()
 
-	// TEST TEST TEST TEST TEST TEST
+	// ==========================
+	// debug mode
+	// ==========================
 	if IsKeyJustPressed(eb.KeyF1) {
 		a.DebugMode = !a.DebugMode
 	}
-	// TEST TEST TEST TEST TEST TEST
+
+	// ==========================
+	// color picker mode
+	// ==========================
+	if IsKeyJustPressed(eb.KeyF2) {
+		a.ColorPickerMode = !a.ColorPickerMode
+	}
+
+	if a.ColorPickerMode {
+		a.ColorPicker.Rect = FRectWH(200, 400)
+		a.ColorPicker.Rect = FRectMoveTo(a.ColorPicker.Rect, ScreenWidth-210, 10)
+		a.ColorPicker.Update()
+	}
+
+	// ==========================
+	// update fps
+	// ==========================
+	eb.SetWindowTitle(fmt.Sprintf("FPS : %.2f", eb.ActualFPS()))
 
 	return nil
 }
@@ -649,7 +638,7 @@ func (a *App) DrawDifficultyText(dst *eb.Image) {
 	// TODO : cache this if you can
 	for d := Difficulty(0); d < DifficultySize; d++ {
 		str := DifficultyStrs[d]
-		w, h := ebt.Measure(str, FontFace, FontLineSpacing(FontFace))
+		w, h := ebt.Measure(str, DecoFace, FontLineSpacing(DecoFace))
 		maxW = max(w, maxW)
 		maxH = max(h, maxH)
 
@@ -678,23 +667,23 @@ func (a *App) DrawDifficultyText(dst *eb.Image) {
 
 	op.ColorScale.ScaleWithColor(color.NRGBA{255, 255, 255, 255})
 
-	ebt.Draw(dst, DifficultyStrs[a.Difficulty], FontFace, op)
+	ebt.Draw(dst, DifficultyStrs[a.Difficulty], DecoFace, op)
 }
 
 func (a *App) Draw(dst *eb.Image) {
 	// background
-	dst.Fill(ColorTable.Bg)
+	dst.Fill(ColorTable[ColorBg])
 
 	isOddTile := func(x, y int) bool {
-		index := x + a.Board.Height * y
-		if a.Board.Width %2 == 0 {
-			if y %2 == 0 {
-				return index % 2 != 0
-			}else {
-				return index % 2 == 0
+		index := x + a.Board.Height*y
+		if a.Board.Width%2 == 0 {
+			if y%2 == 0 {
+				return index%2 != 0
+			} else {
+				return index%2 == 0
 			}
-		}else {
-			return index %2 != 0
+		} else {
+			return index%2 != 0
 		}
 	}
 
@@ -709,13 +698,13 @@ func (a *App) Draw(dst *eb.Image) {
 		tileRect := a.GetTileRect(x, y)
 
 		if !a.Board.Revealed[x][y] {
-			bgColor := ColorTable.TileNormal1
+			bgColor := ColorTable[ColorTileNormal1]
 			if isOddTile(x, y) {
-				bgColor = ColorTable.TileNormal2
+				bgColor = ColorTable[ColorTileNormal2]
 			}
 
 			DrawFilledRect(dst, tileRect, bgColor, true)
-			StrokeRect(dst, tileRect, 1, ColorTable.TileNormalStroke, true)
+			StrokeRect(dst, tileRect, 1, ColorTable[ColorTileNormalStroke], true)
 		}
 
 		// draw highlight
@@ -737,13 +726,13 @@ func (a *App) Draw(dst *eb.Image) {
 		tileRect := a.GetTileRect(x, y)
 
 		if a.Board.Revealed[x][y] {
-			bgColor := ColorTable.TileRevealed1
+			bgColor := ColorTable[ColorTileRevealed1]
 			if isOddTile(x, y) {
-				bgColor = ColorTable.TileRevealed2
+				bgColor = ColorTable[ColorTileRevealed2]
 			}
 
 			DrawFilledRect(dst, tileRect, bgColor, true)
-			StrokeRect(dst, tileRect, 1, ColorTable.TileRevealedStroke, true)
+			StrokeRect(dst, tileRect, 1, ColorTable[ColorTileRevealedStroke], true)
 		}
 	}
 
@@ -754,26 +743,24 @@ func (a *App) Draw(dst *eb.Image) {
 
 		// draw flags
 		if a.Board.Flags[x][y] {
-			a.DrawTile(dst, x, y, GetFlagTile(), ColorTable.Flag)
+			a.DrawTile(dst, x, y, GetFlagTile(), ColorTable[ColorFlag])
 		}
 
 		// draw mines
 		if a.GameState == GameStateLost && a.Board.Mines[x][y] && !a.Board.Flags[x][y] {
-			a.DrawTile(dst, x, y, GetMineTile(), ColorTable.Mine)
+			a.DrawTile(dst, x, y, GetMineTile(), ColorTable[ColorMine])
 		}
 
 		// draw number
 		if a.Board.Revealed[x][y] {
 			if count := a.Board.GetNeighborMineCount(x, y); count > 0 {
-				a.DrawTile(dst, x, y, GetNumberTile(count), ColorTable.Number)
+				a.DrawTile(dst, x, y, GetNumberTile(count), ColorTable[ColorNumber])
 			}
 		}
 
-		// TEST TEST TEST TEST TEST TEST
 		if a.DebugMode && a.Board.Mines[x][y] {
 			a.DrawTile(dst, x, y, GetMineTile(), color.NRGBA{255, 0, 0, 255})
 		}
-		// TEST TEST TEST TEST TEST TEST
 	}
 
 	a.DifficultyButtonLeft.Draw(dst)
@@ -782,6 +769,10 @@ func (a *App) Draw(dst *eb.Image) {
 	a.DrawDifficultyText(dst)
 
 	a.RetryPopup.Draw(dst)
+
+	if a.ColorPickerMode {
+		a.ColorPicker.Draw(dst)
+	}
 }
 
 func (a *App) Layout(outsideWidth, outsideHeight int) (int, int) {

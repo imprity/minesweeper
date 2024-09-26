@@ -8,6 +8,8 @@ import (
 	eb "github.com/hajimehoshi/ebiten/v2"
 )
 
+const Pi = math.Pi
+
 // =================================
 // FPoint
 // =================================
@@ -294,6 +296,20 @@ func FRectWH(w, h float64) FRectangle {
 	return FRectangle{
 		Min: FPoint{0, 0},
 		Max: FPoint{w, h},
+	}
+}
+
+func RectXYWH(x, y, w, h int) image.Rectangle {
+	return image.Rectangle{
+		Min: image.Point{x, y},
+		Max: image.Point{x + w, y + h},
+	}
+}
+
+func FRectXYWH(x, y, w, h float64) FRectangle {
+	return FRectangle{
+		Min: FPoint{x, y},
+		Max: FPoint{x + w, y + h},
 	}
 }
 

@@ -1,0 +1,85 @@
+package main
+
+import (
+	"encoding/json"
+	"image/color"
+)
+
+type ColorTableIndex int
+
+const (
+	ColorBg ColorTableIndex = iota
+
+	ColorTileNormal1
+	ColorTileNormal2
+	ColorTileNormalStroke
+
+	ColorTileRevealed1
+	ColorTileRevealed2
+	ColorTileRevealedStroke
+
+	ColorNumber
+
+	ColorMine
+	ColorFlag
+
+	ColorTableSize
+)
+
+var ColorTable [ColorTableSize]color.NRGBA
+
+func init() {
+	ColorTable[ColorBg] = color.NRGBA{10, 10, 10, 255}
+
+	ColorTable[ColorTileNormal1] = color.NRGBA{30, 30, 30, 255}
+	ColorTable[ColorTileNormal2] = color.NRGBA{50, 50, 50, 255}
+	ColorTable[ColorTileNormalStroke] = color.NRGBA{150, 150, 150, 255}
+
+	ColorTable[ColorTileRevealed1] = color.NRGBA{255, 255, 255, 255}
+	ColorTable[ColorTileRevealed2] = color.NRGBA{255, 255, 255, 255}
+	ColorTable[ColorTileRevealedStroke] = color.NRGBA{150, 150, 150, 255}
+
+	ColorTable[ColorNumber] = color.NRGBA{10, 10, 10, 255}
+
+	ColorTable[ColorMine] = color.NRGBA{255, 255, 255, 255}
+	ColorTable[ColorFlag] = color.NRGBA{255, 200, 200, 255}
+}
+
+func ColorTableToJson() []byte {
+	tableMap := make(map[string]color.NRGBA)
+
+	for i := ColorTableIndex(0); i < ColorTableSize; i++ {
+		tableMap[i.String()] = ColorTable[i]
+	}
+
+	jsonBytes, err := json.Marshal(tableMap)
+	if err != nil {
+		ErrorLogger.Fatal("failed to convert color table to json : %v", err)
+	}
+
+	return jsonBytes
+}
+
+func LoadColorTable(tableJson []byte) [ColorTableSize]color.NRGBA {
+	var tableMap map[string]color.NRGBA
+
+	err := json.Unmarshal(tableJson, tableMap)
+	if err != nil {
+		ErrorLogger.Fatal("failed to parse json : %v", err)
+	}
+
+	stringToIndex := make(map[string]int)
+	for i := ColorTableIndex(0); i < ColorTableSize; i++ {
+		stringToIndex[i.String()] = int(i)
+	}
+
+	var colorTable [ColorTableSize]color.NRGBA
+
+	for k, v := range tableMap {
+		if index, ok := stringToIndex[k]; ok {
+			colorTable[index] = v
+		}
+	}
+
+	return colorTable
+}
