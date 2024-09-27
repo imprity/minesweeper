@@ -54,3 +54,35 @@ func IsKeyPressed(key eb.Key) bool {
 func IsKeyJustPressed(key eb.Key) bool {
 	return ebi.IsKeyJustPressed(key)
 }
+
+var keyRepeatMap = make(map[eb.Key]time.Duration)
+
+func HandleKeyRepeat(
+	firstRate, repeatRate time.Duration,
+	key eb.Key,
+) bool {
+	if !IsKeyPressed(key) {
+		keyRepeatMap[key] = 0
+		return false
+	}
+
+	if IsKeyJustPressed(key) {
+		keyRepeatMap[key] = GlobalTimerNow() + firstRate
+		return true
+	}
+
+	time, ok := keyRepeatMap[key]
+
+	if !ok {
+		keyRepeatMap[key] = GlobalTimerNow() + firstRate
+		return true
+	} else {
+		now := GlobalTimerNow()
+		if now-time > repeatRate {
+			keyRepeatMap[key] = now
+			return true
+		}
+	}
+
+	return false
+}

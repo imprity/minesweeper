@@ -34,6 +34,13 @@ func (cp *ColorPicker) Color() color.NRGBA {
 	return ColorFromHSV(cp.Hue, cp.Saturation, cp.Value)
 }
 
+func (cp *ColorPicker) SetColor(c color.NRGBA) {
+	hsv := ColorToHSV(c)
+	cp.Hue = hsv[0]
+	cp.Saturation = hsv[1]
+	cp.Value = hsv[2]
+}
+
 func (cp *ColorPicker) SvRect() FRectangle {
 	return FRect(
 		cp.Rect.Min.X, cp.Rect.Min.Y,

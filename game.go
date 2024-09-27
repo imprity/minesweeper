@@ -178,6 +178,108 @@ func (rp *RetryPopup) Draw(dst *eb.Image) {
 	}
 }
 
+type ColorTablePicker struct {
+	DoShow bool
+
+	ColorPicker ColorPicker
+
+	TableIndex ColorTableIndex
+
+	wasShowing bool
+}
+
+func NewColorTablePicker() *ColorTablePicker {
+	return new(ColorTablePicker)
+}
+
+func (ct *ColorTablePicker) Update() {
+	if !ct.DoShow {
+		return
+	}
+
+	if !ct.wasShowing && ct.DoShow {
+		ct.ColorPicker.SetColor(ColorTable[ct.TableIndex])
+	}
+	ct.wasShowing = ct.DoShow
+
+	ct.ColorPicker.Rect = FRectWH(200, 400)
+	ct.ColorPicker.Rect = FRectMoveTo(ct.ColorPicker.Rect, ScreenWidth-210, 10)
+	ct.ColorPicker.Update()
+
+	const firstRate = 200 * time.Millisecond
+	const repeatRate = 50 * time.Millisecond
+	changed := false
+
+	if HandleKeyRepeat(firstRate, repeatRate, eb.KeyW) {
+		ct.TableIndex--
+		changed = true
+	}
+	if HandleKeyRepeat(firstRate, repeatRate, eb.KeyS) {
+		ct.TableIndex++
+		changed = true
+	}
+	ct.TableIndex = Clamp(ct.TableIndex, 0, ColorTableSize-1)
+
+	if changed {
+		ct.ColorPicker.SetColor(ColorTable[ct.TableIndex])
+	}
+
+	ColorTable[ct.TableIndex] = ct.ColorPicker.Color()
+}
+
+func (ct *ColorTablePicker) Draw(dst *eb.Image) {
+	if !ct.DoShow {
+		return
+	}
+
+	ct.ColorPicker.Draw(dst)
+
+	// draw list of table entries
+	{
+		const textScale = 0.3
+
+		lineSpacing := FontLineSpacing(ClearFace)
+
+		// get bg width
+		bgWidth := float64(0)
+		for i := ColorTableIndex(0); i < ColorTableSize; i++ {
+			text := i.String()
+			w, _ := ebt.Measure(text, ClearFace, lineSpacing)
+			bgWidth = max(bgWidth, w*textScale)
+		}
+		bgHeight := lineSpacing * textScale * f64(ColorTableSize)
+
+		bgWidth += 20
+		bgHeight += 20
+
+		// draw bg
+		DrawFilledRect(
+			dst, FRectWH(bgWidth, bgHeight), color.NRGBA{0, 0, 0, 150}, true,
+		)
+
+		// draw list texts
+		offsetY := float64(0)
+
+		for i := ColorTableIndex(0); i < ColorTableSize; i++ {
+			text := i.String()
+			op := &ebt.DrawOptions{}
+
+			op.GeoM.Scale(textScale, textScale)
+			op.GeoM.Translate(0, offsetY)
+			if i == ct.TableIndex {
+				op.ColorScale.ScaleWithColor(color.NRGBA{255, 0, 0, 255})
+			} else {
+				op.ColorScale.ScaleWithColor(color.NRGBA{255, 255, 255, 255})
+			}
+			op.Filter = eb.FilterLinear
+
+			ebt.Draw(dst, text, ClearFace, op)
+
+			offsetY += lineSpacing * textScale
+		}
+	}
+}
+
 type Game struct {
 	Board Board
 
@@ -212,13 +314,15 @@ type Game struct {
 	DebugMode       bool
 	ColorPickerMode bool
 
-	ColorPicker ColorPicker
+	ColorTablePicker *ColorTablePicker
 }
 
 func NewGame() *Game {
 	g := new(Game)
 
 	g.RetryPopup = NewRetryPopup()
+
+	g.ColorTablePicker = NewColorTablePicker()
 
 	g.TopMenuShowAnimTimer = Timer{
 		Duration: time.Millisecond * 200,
@@ -548,17 +652,12 @@ func (g *Game) Update() error {
 	}
 
 	// ==========================
-	// color picker mode
+	// color table picker
 	// ==========================
 	if IsKeyJustPressed(eb.KeyF2) {
-		g.ColorPickerMode = !g.ColorPickerMode
+		g.ColorTablePicker.DoShow = !g.ColorTablePicker.DoShow
 	}
-
-	if g.ColorPickerMode {
-		g.ColorPicker.Rect = FRectWH(200, 400)
-		g.ColorPicker.Rect = FRectMoveTo(g.ColorPicker.Rect, ScreenWidth-210, 10)
-		g.ColorPicker.Update()
-	}
+	g.ColorTablePicker.Update()
 
 	return nil
 }
@@ -748,9 +847,7 @@ func (g *Game) Draw(dst *eb.Image) {
 
 	g.RetryPopup.Draw(dst)
 
-	if g.ColorPickerMode {
-		g.ColorPicker.Draw(dst)
-	}
+	g.ColorTablePicker.Draw(dst)
 }
 
 func (a *Game) Layout(outsideWidth, outsideHeight int) (int, int) {

@@ -106,7 +106,7 @@ func LoadAssets() {
 		}
 	}
 	{
-		clearFontFile := mustLoadData("assets/COOPBL.TTF")
+		clearFontFile := mustLoadData("dejavu-fonts-ttf-2.37/ttf/DejaVuSansMono.ttf")
 		faceSource, err := ebt.NewGoTextFaceSource(bytes.NewReader(clearFontFile))
 		if err != nil {
 			ErrorLogger.Fatalf("failed to load font: %v", err)
