@@ -1,0 +1,62 @@
+{
+    "ColorBg": {
+        "R": 10,
+        "G": 10,
+        "B": 10,
+        "A": 255
+    },
+    "ColorFlag": {
+        "R": 255,
+        "G": 200,
+        "B": 200,
+        "A": 255
+    },
+    "ColorMine": {
+        "R": 255,
+        "G": 255,
+        "B": 255,
+        "A": 255
+    },
+    "ColorNumber": {
+        "R": 10,
+        "G": 10,
+        "B": 10,
+        "A": 255
+    },
+    "ColorTileNormal1": {
+        "R": 30,
+        "G": 30,
+        "B": 30,
+        "A": 255
+    },
+    "ColorTileNormal2": {
+        "R": 50,
+        "G": 50,
+        "B": 50,
+        "A": 255
+    },
+    "ColorTileNormalStroke": {
+        "R": 150,
+        "G": 150,
+        "B": 150,
+        "A": 255
+    },
+    "ColorTileRevealed1": {
+        "R": 255,
+        "G": 255,
+        "B": 255,
+        "A": 255
+    },
+    "ColorTileRevealed2": {
+        "R": 255,
+        "G": 255,
+        "B": 255,
+        "A": 255
+    },
+    "ColorTileRevealedStroke": {
+        "R": 150,
+        "G": 150,
+        "B": 150,
+        "A": 255
+    }
+}

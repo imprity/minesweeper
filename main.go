@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -15,8 +16,14 @@ var (
 	ScreenHeight float64 = 600
 )
 
-var ErrorLogger *log.Logger = log.New(os.Stderr, "ERROR : ", log.Lshortfile)
-var InfoLogger *log.Logger = log.New(os.Stdout, "INFO : ", log.Lshortfile)
+var ErrorLogger *log.Logger = log.New(os.Stderr, "ERROR: ", log.Lshortfile)
+var InfoLogger *log.Logger = log.New(os.Stdout, "INFO: ", log.Lshortfile)
+
+var HotReload bool
+
+func init() {
+	flag.BoolVar(&HotReload, "hot", false, "enable hot reloading")
+}
 
 type App struct {
 	Game *Game
@@ -39,6 +46,17 @@ func (a *App) Update() error {
 	// ==========================
 	eb.SetWindowTitle(fmt.Sprintf("FPS : %.2f", eb.ActualFPS()))
 
+	// ==========================
+	// asset loading and saving
+	// ==========================
+	if IsKeyJustPressed(eb.KeyF5) {
+		LoadAssets()
+	}
+
+	if IsKeyJustPressed(eb.KeyF6) {
+		SaveColorTable()
+	}
+
 	if err := a.Game.Update(); err != nil {
 		return err
 	}
@@ -58,6 +76,8 @@ func (a *App) Layout(outsideWidth, outsideHeight int) (int, int) {
 }
 
 func main() {
+	flag.Parse()
+
 	LoadAssets()
 
 	app := NewApp()

@@ -45,27 +45,29 @@ func init() {
 	ColorTable[ColorFlag] = color.NRGBA{255, 200, 200, 255}
 }
 
-func ColorTableToJson() []byte {
+func ColorTableToJson(table [ColorTableSize]color.NRGBA) ([]byte, error) {
 	tableMap := make(map[string]color.NRGBA)
 
 	for i := ColorTableIndex(0); i < ColorTableSize; i++ {
-		tableMap[i.String()] = ColorTable[i]
+		tableMap[i.String()] = table[i]
 	}
 
-	jsonBytes, err := json.Marshal(tableMap)
+	jsonBytes, err := json.MarshalIndent(tableMap, "", "    ")
 	if err != nil {
-		ErrorLogger.Fatal("failed to convert color table to json : %v", err)
+		return nil, err
 	}
 
-	return jsonBytes
+	return jsonBytes, nil
 }
 
-func LoadColorTable(tableJson []byte) [ColorTableSize]color.NRGBA {
+func ColorTableFromJson(tableJson []byte) ([ColorTableSize]color.NRGBA, error) {
+	var colorTable [ColorTableSize]color.NRGBA
+
 	var tableMap map[string]color.NRGBA
 
-	err := json.Unmarshal(tableJson, tableMap)
+	err := json.Unmarshal(tableJson, &tableMap)
 	if err != nil {
-		ErrorLogger.Fatal("failed to parse json : %v", err)
+		return colorTable, err
 	}
 
 	stringToIndex := make(map[string]int)
@@ -73,13 +75,11 @@ func LoadColorTable(tableJson []byte) [ColorTableSize]color.NRGBA {
 		stringToIndex[i.String()] = int(i)
 	}
 
-	var colorTable [ColorTableSize]color.NRGBA
-
 	for k, v := range tableMap {
 		if index, ok := stringToIndex[k]; ok {
 			colorTable[index] = v
 		}
 	}
 
-	return colorTable
+	return colorTable, nil
 }
