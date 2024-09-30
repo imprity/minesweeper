@@ -78,6 +78,8 @@ func (a *App) Layout(outsideWidth, outsideHeight int) (int, int) {
 func main() {
 	flag.Parse()
 
+	InitClipboardManager()
+
 	LoadAssets()
 
 	app := NewApp()

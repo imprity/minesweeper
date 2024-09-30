@@ -181,7 +181,7 @@ func (rp *RetryPopup) Draw(dst *eb.Image) {
 type ColorTablePicker struct {
 	DoShow bool
 
-	ColorPicker ColorPicker
+	ColorPicker *ColorPicker
 
 	TableIndex ColorTableIndex
 
@@ -189,7 +189,10 @@ type ColorTablePicker struct {
 }
 
 func NewColorTablePicker() *ColorTablePicker {
-	return new(ColorTablePicker)
+	ct := new(ColorTablePicker)
+	ct.ColorPicker = NewColorPicker()
+
+	return ct
 }
 
 func (ct *ColorTablePicker) Update() {

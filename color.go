@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+	css "github.com/mazznoer/csscolorparser"
 	"image/color"
 	"math"
 )
@@ -76,4 +78,25 @@ func ColorFromHSV(hue, saturation, value float64) color.NRGBA {
 	r, g, b = r+m, g+m, b+m
 
 	return color.NRGBA{uint8(r * 255), uint8(g * 255), uint8(b * 255), 255}
+}
+
+func ColorToString(c color.NRGBA) string {
+	return fmt.Sprintf("#%02X%02X%02X%02X", c.R, c.G, c.B, c.A)
+}
+
+func ParseColorString(str string) (color.NRGBA, error) {
+	c, err := css.Parse(str)
+
+	if err != nil {
+		return color.NRGBA{}, err
+	}
+
+	nrgba := color.NRGBA{
+		R: uint8(255 * c.R),
+		G: uint8(255 * c.G),
+		B: uint8(255 * c.B),
+		A: uint8(255 * c.A),
+	}
+
+	return nrgba, nil
 }

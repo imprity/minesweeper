@@ -5,7 +5,7 @@ import (
 	"time"
 
 	eb "github.com/hajimehoshi/ebiten/v2"
-	//ebt "github.com/hajimehoshi/ebiten/v2/text/v2"
+	ebt "github.com/hajimehoshi/ebiten/v2/text/v2"
 )
 
 type ButtonState int
@@ -79,13 +79,6 @@ type ImageButton struct {
 }
 
 func (b *ImageButton) Draw(dst *eb.Image) {
-	// TEST TEST TEST TEST TEST TEST
-	// draw button rect
-	StrokeRect(
-		dst, b.Rect, 3, color.NRGBA{255, 0, 0, 255}, true,
-	)
-	// TEST TEST TEST TEST TEST TEST
-
 	var img SubView
 
 	switch b.BaseButton.State {
@@ -125,5 +118,74 @@ func (b *ImageButton) Draw(dst *eb.Image) {
 		op.ColorScale.ScaleWithColor(imageColor)
 
 		DrawSubView(dst, img, op)
+	}
+}
+
+type TextButton struct {
+	BaseButton
+
+	Text string
+
+	BgColor        color.NRGBA
+	BgColorOnHover color.NRGBA
+	BgColorOnDown  color.NRGBA
+
+	TextColor        color.NRGBA
+	TextColorOnHover color.NRGBA
+	TextColorOnDown  color.NRGBA
+}
+
+var DefaultTextButton = TextButton{
+	Text: "Button",
+
+	BgColor:        color.NRGBA{0x68, 0x84, 0x97, 255},
+	BgColorOnHover: color.NRGBA{0x51, 0x99, 0xCC, 255},
+	BgColorOnDown:  color.NRGBA{0x8D, 0xBC, 0xDE, 255},
+
+	TextColor:        color.NRGBA{255, 255, 255, 255},
+	TextColorOnHover: color.NRGBA{255, 255, 255, 255},
+	TextColorOnDown:  color.NRGBA{255, 255, 255, 255},
+}
+
+func NewTextButton() *TextButton {
+	copy := DefaultTextButton
+	return &copy
+}
+
+func (b *TextButton) Draw(dst *eb.Image) {
+	// determine color
+	var bgColor color.NRGBA
+	var textColor color.NRGBA
+
+	switch b.BaseButton.State {
+	case ButtonStateNormal:
+		bgColor = b.BgColor
+		textColor = b.TextColor
+	case ButtonStateHover:
+		bgColor = b.BgColorOnHover
+		textColor = b.TextColorOnHover
+	case ButtonStateDown:
+		bgColor = b.BgColorOnDown
+		textColor = b.TextColorOnDown
+	}
+
+	// draw background color
+	DrawFilledRect(dst, b.Rect, bgColor, true)
+
+	// draw text color
+	if len(b.Text) > 0 {
+		textW, textH := ebt.Measure(b.Text, ClearFace, FontLineSpacing(ClearFace))
+
+		scale := min(b.Rect.Dx()*0.9/textW, b.Rect.Dy()*0.9/textH)
+
+		op := &ebt.DrawOptions{}
+		op.ColorScale.ScaleWithColor(textColor)
+		op.Filter = eb.FilterLinear
+
+		op.GeoM.Concat(TransformToCenter(textW, textH, scale, scale, 0))
+		center := FRectangleCenter(b.Rect)
+		op.GeoM.Translate(center.X, center.Y)
+
+		ebt.Draw(dst, b.Text, ClearFace, op)
 	}
 }
