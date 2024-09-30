@@ -9,20 +9,25 @@ func _() {
 	// Re-run the stringer command to generate them again.
 	var x [1]struct{}
 	_ = x[ColorBg-0]
-	_ = x[ColorTileNormal1-1]
-	_ = x[ColorTileNormal2-2]
-	_ = x[ColorTileNormalStroke-3]
-	_ = x[ColorTileRevealed1-4]
-	_ = x[ColorTileRevealed2-5]
-	_ = x[ColorTileRevealedStroke-6]
-	_ = x[ColorNumber-7]
-	_ = x[ColorMine-8]
-	_ = x[ColorFlag-9]
+	_ = x[ColorTopUITitle-1]
+	_ = x[ColorTopUIButton-2]
+	_ = x[ColorTopUIButtonOnHover-3]
+	_ = x[ColorTopUIButtonOnDown-4]
+	_ = x[ColorTileNormal1-5]
+	_ = x[ColorTileNormal2-6]
+	_ = x[ColorTileNormalStroke-7]
+	_ = x[ColorTileRevealed1-8]
+	_ = x[ColorTileRevealed2-9]
+	_ = x[ColorTileRevealedStroke-10]
+	_ = x[ColorNumber-11]
+	_ = x[ColorMine-12]
+	_ = x[ColorFlag-13]
+	_ = x[ColorTableSize-14]
 }
 
-const _ColorTableIndex_name = "ColorBgColorTileNormal1ColorTileNormal2ColorTileNormalStrokeColorTileRevealed1ColorTileRevealed2ColorTileRevealedStrokeColorNumberColorMineColorFlag"
+const _ColorTableIndex_name = "ColorBgColorTopUITitleColorTopUIButtonColorTopUIButtonOnHoverColorTopUIButtonOnDownColorTileNormal1ColorTileNormal2ColorTileNormalStrokeColorTileRevealed1ColorTileRevealed2ColorTileRevealedStrokeColorNumberColorMineColorFlagColorTableSize"
 
-var _ColorTableIndex_index = [...]uint8{0, 7, 23, 39, 60, 78, 96, 119, 130, 139, 148}
+var _ColorTableIndex_index = [...]uint8{0, 7, 22, 38, 61, 83, 99, 115, 136, 154, 172, 195, 206, 215, 224, 238}
 
 func (i ColorTableIndex) String() string {
 	if i < 0 || i >= ColorTableIndex(len(_ColorTableIndex_index)-1) {

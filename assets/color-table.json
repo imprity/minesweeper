@@ -1,14 +1,14 @@
 {
     "ColorBg": {
-        "R": 255,
-        "G": 255,
-        "B": 255,
+        "R": 243,
+        "G": 243,
+        "B": 243,
         "A": 255
     },
     "ColorFlag": {
-        "R": 4,
-        "G": 4,
-        "B": 4,
+        "R": 221,
+        "G": 57,
+        "B": 57,
         "A": 255
     },
     "ColorMine": {
@@ -24,36 +24,60 @@
         "A": 255
     },
     "ColorTileNormal1": {
-        "R": 255,
-        "G": 255,
-        "B": 255,
+        "R": 231,
+        "G": 231,
+        "B": 231,
         "A": 255
     },
     "ColorTileNormal2": {
-        "R": 238,
-        "G": 238,
-        "B": 238,
+        "R": 243,
+        "G": 243,
+        "B": 243,
         "A": 255
     },
     "ColorTileNormalStroke": {
-        "R": 157,
-        "G": 157,
-        "B": 157,
-        "A": 255
+        "R": 67,
+        "G": 59,
+        "B": 162,
+        "A": 0
     },
     "ColorTileRevealed1": {
-        "R": 35,
-        "G": 32,
-        "B": 27,
+        "R": 21,
+        "G": 21,
+        "B": 21,
         "A": 255
     },
     "ColorTileRevealed2": {
-        "R": 62,
-        "G": 57,
-        "B": 51,
+        "R": 67,
+        "G": 67,
+        "B": 67,
         "A": 255
     },
     "ColorTileRevealedStroke": {
+        "R": 0,
+        "G": 0,
+        "B": 0,
+        "A": 255
+    },
+    "ColorTopUIButton": {
+        "R": 0,
+        "G": 0,
+        "B": 0,
+        "A": 255
+    },
+    "ColorTopUIButtonOnDown": {
+        "R": 0,
+        "G": 0,
+        "B": 0,
+        "A": 255
+    },
+    "ColorTopUIButtonOnHover": {
+        "R": 91,
+        "G": 91,
+        "B": 91,
+        "A": 255
+    },
+    "ColorTopUITitle": {
         "R": 0,
         "G": 0,
         "B": 0,

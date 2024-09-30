@@ -387,9 +387,9 @@ func NewGame() *Game {
 			ImageOnHover: SpriteSubView(TileSprite, 11),
 			ImageOnDown:  SpriteSubView(TileSprite, 13),
 
-			ImageColor:        color.NRGBA{255, 255, 255, 255},
-			ImageColorOnHover: color.NRGBA{255, 255, 255, 255},
-			ImageColorOnDown:  color.NRGBA{255, 255, 255, 255},
+			ImageColor:        ColorTable[ColorTopUIButton],
+			ImageColorOnHover: ColorTable[ColorTopUIButtonOnHover],
+			ImageColorOnDown:  ColorTable[ColorTopUIButtonOnDown],
 		}
 
 		g.DifficultyButtonRight = &ImageButton{
@@ -405,9 +405,9 @@ func NewGame() *Game {
 			ImageOnHover: SpriteSubView(TileSprite, 12),
 			ImageOnDown:  SpriteSubView(TileSprite, 14),
 
-			ImageColor:        color.NRGBA{255, 255, 255, 255},
-			ImageColorOnHover: color.NRGBA{255, 255, 255, 255},
-			ImageColorOnDown:  color.NRGBA{255, 255, 255, 255},
+			ImageColor:        ColorTable[ColorTopUIButton],
+			ImageColorOnHover: ColorTable[ColorTopUIButtonOnHover],
+			ImageColorOnDown:  ColorTable[ColorTopUIButtonOnDown],
 		}
 	}
 
@@ -620,6 +620,14 @@ func (g *Game) Update() error {
 	g.DifficultyButtonLeft.Disabled = g.BoardTouched
 	g.DifficultyButtonRight.Disabled = g.BoardTouched
 
+	g.DifficultyButtonLeft.ImageColor = ColorTable[ColorTopUIButton]
+	g.DifficultyButtonLeft.ImageColorOnHover = ColorTable[ColorTopUIButtonOnHover]
+	g.DifficultyButtonLeft.ImageColorOnDown = ColorTable[ColorTopUIButtonOnDown]
+
+	g.DifficultyButtonRight.ImageColor = ColorTable[ColorTopUIButton]
+	g.DifficultyButtonRight.ImageColorOnHover = ColorTable[ColorTopUIButtonOnHover]
+	g.DifficultyButtonRight.ImageColorOnDown = ColorTable[ColorTopUIButtonOnDown]
+
 	// update button rect
 	{
 		lRect := g.GetDifficultyButtonRect(false)
@@ -745,7 +753,7 @@ func (g *Game) DrawDifficultyText(dst *eb.Image) {
 
 	op.Filter = eb.FilterLinear
 
-	op.ColorScale.ScaleWithColor(color.NRGBA{255, 255, 255, 255})
+	op.ColorScale.ScaleWithColor(ColorTable[ColorTopUITitle])
 
 	ebt.Draw(dst, DifficultyStrs[g.Difficulty], DecoFace, op)
 }
