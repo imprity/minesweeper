@@ -27,10 +27,19 @@ const (
 	ColorTileRevealed2
 	ColorTileRevealedStroke
 
-	ColorNumber
+	ColorNumber1
+	ColorNumber2
+	ColorNumber3
+	ColorNumber4
+	ColorNumber5
+	ColorNumber6
+	ColorNumber7
+	ColorNumber8
 
 	ColorMine
 	ColorFlag
+
+	ColorTileHighLight
 
 	ColorTableSize
 )
@@ -61,10 +70,19 @@ func init() {
 	setColor(ColorTileRevealed2, color.NRGBA{255, 255, 255, 255})
 	setColor(ColorTileRevealedStroke, color.NRGBA{150, 150, 150, 255})
 
-	setColor(ColorNumber, color.NRGBA{10, 10, 10, 255})
+	setColor(ColorNumber1, color.NRGBA{255, 0, 0, 255})
+	setColor(ColorNumber2, color.NRGBA{0, 255, 0, 255})
+	setColor(ColorNumber3, color.NRGBA{0, 0, 255, 255})
+	setColor(ColorNumber4, color.NRGBA{255, 255, 0, 255})
+	setColor(ColorNumber5, color.NRGBA{0, 255, 255, 255})
+	setColor(ColorNumber6, color.NRGBA{255, 0, 255, 255})
+	setColor(ColorNumber7, color.NRGBA{255, 255, 255, 255})
+	setColor(ColorNumber8, color.NRGBA{100, 100, 100, 255})
 
 	setColor(ColorMine, color.NRGBA{255, 255, 255, 255})
 	setColor(ColorFlag, color.NRGBA{255, 200, 200, 255})
+
+	setColor(ColorTileHighLight, color.NRGBA{255, 255, 255, 255})
 
 	for i := ColorTableIndex(0); i < ColorTableSize; i++ {
 		if !colorSet[i] {
@@ -73,6 +91,10 @@ func init() {
 	}
 
 	ColorTable = DefaultcolorTable
+}
+
+func ColorTableGetNumber(i int) ColorTableIndex {
+	return ColorNumber1 + ColorTableIndex(i-1)
 }
 
 func ColorTableToJson(table [ColorTableSize]color.NRGBA) ([]byte, error) {

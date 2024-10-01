@@ -1,0 +1,140 @@
+{
+    "ColorBg": {
+        "R": 8,
+        "G": 8,
+        "B": 8,
+        "A": 255
+    },
+    "ColorFlag": {
+        "R": 221,
+        "G": 56,
+        "B": 56,
+        "A": 255
+    },
+    "ColorMine": {
+        "R": 224,
+        "G": 32,
+        "B": 32,
+        "A": 255
+    },
+    "ColorNumber1": {
+        "R": 255,
+        "G": 0,
+        "B": 0,
+        "A": 255
+    },
+    "ColorNumber2": {
+        "R": 0,
+        "G": 255,
+        "B": 0,
+        "A": 255
+    },
+    "ColorNumber3": {
+        "R": 0,
+        "G": 0,
+        "B": 255,
+        "A": 255
+    },
+    "ColorNumber4": {
+        "R": 255,
+        "G": 255,
+        "B": 0,
+        "A": 255
+    },
+    "ColorNumber5": {
+        "R": 0,
+        "G": 255,
+        "B": 255,
+        "A": 255
+    },
+    "ColorNumber6": {
+        "R": 255,
+        "G": 0,
+        "B": 255,
+        "A": 255
+    },
+    "ColorNumber7": {
+        "R": 255,
+        "G": 255,
+        "B": 255,
+        "A": 255
+    },
+    "ColorNumber8": {
+        "R": 100,
+        "G": 100,
+        "B": 100,
+        "A": 255
+    },
+    "ColorNumber9": {
+        "R": 50,
+        "G": 50,
+        "B": 50,
+        "A": 255
+    },
+    "ColorTileHighLight": {
+        "R": 255,
+        "G": 255,
+        "B": 255,
+        "A": 197
+    },
+    "ColorTileNormal1": {
+        "R": 0,
+        "G": 0,
+        "B": 0,
+        "A": 0
+    },
+    "ColorTileNormal2": {
+        "R": 255,
+        "G": 255,
+        "B": 255,
+        "A": 0
+    },
+    "ColorTileNormalStroke": {
+        "R": 131,
+        "G": 255,
+        "B": 0,
+        "A": 255
+    },
+    "ColorTileRevealed1": {
+        "R": 68,
+        "G": 202,
+        "B": 40,
+        "A": 255
+    },
+    "ColorTileRevealed2": {
+        "R": 68,
+        "G": 202,
+        "B": 40,
+        "A": 255
+    },
+    "ColorTileRevealedStroke": {
+        "R": 0,
+        "G": 0,
+        "B": 0,
+        "A": 255
+    },
+    "ColorTopUIButton": {
+        "R": 255,
+        "G": 255,
+        "B": 255,
+        "A": 198
+    },
+    "ColorTopUIButtonOnDown": {
+        "R": 255,
+        "G": 255,
+        "B": 255,
+        "A": 255
+    },
+    "ColorTopUIButtonOnHover": {
+        "R": 255,
+        "G": 255,
+        "B": 255,
+        "A": 255
+    },
+    "ColorTopUITitle": {
+        "R": 255,
+        "G": 255,
+        "B": 255,
+        "A": 255
+    }
+}

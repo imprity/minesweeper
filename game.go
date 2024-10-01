@@ -3,6 +3,7 @@ package main
 import (
 	"image/color"
 	"math"
+	"math/rand/v2"
 	"time"
 
 	_ "github.com/silbinarywolf/preferdiscretegpu"
@@ -652,6 +653,9 @@ func (g *Game) Update() error {
 	if IsKeyJustPressed(eb.KeyF1) {
 		g.DebugMode = !g.DebugMode
 	}
+	if IsKeyJustPressed(eb.KeyF10) {
+		g.SetDebugBoardForDecoration()
+	}
 
 	// ==========================
 	// color table picker
@@ -664,8 +668,82 @@ func (g *Game) Update() error {
 	return nil
 }
 
+func (g *Game) SetDebugBoardForDecoration() {
+	//MINE_COUNT doesn't really matter here
+	g.Board = NewBoard(15, 15)
+	g.TileHighLights = New2DArray[TileHighLight](g.Board.Width, g.Board.Height)
+
+	g.BoardTouched = true
+
+	// . : unrevealed
+	// @ : revealed
+	// * : mine
+	// + : flagged
+	newBoard := [][]rune{
+		[]rune("....@*@*@*"),
+		[]rune("......@.@*"),
+		[]rune("***+****.."),
+		[]rune("*@+@*@*..."),
+		[]rune("++**.*...."),
+	}
+
+	newBoardHeight := len(newBoard)
+	newBoardWidth := len(newBoard[0])
+
+	iter := NewBoardIterator(0, 0, newBoardWidth-1, newBoardHeight-1)
+	for iter.HasNext() {
+		x, y := iter.GetNext()
+		if g.Board.IsPosInBoard(x, y) {
+			char := newBoard[y][x] //yeah y and x is reversed
+
+			switch char {
+			case '@':
+				g.Board.Revealed[x][y] = true
+			case '*':
+				g.Board.Mines[x][y] = true
+			case '+':
+				g.Board.Mines[x][y] = true
+				g.Board.Flags[x][y] = true
+			}
+		}
+	}
+
+	iter = NewBoardIterator(0, 0, g.Board.Width-1, g.Board.Height-1)
+	for iter.HasNext() {
+		x, y := iter.GetNext()
+		if x < newBoardWidth+1 && y < newBoardHeight+1 {
+			continue
+		}
+
+		if rand.Int64N(100) < 30 {
+			g.Board.Mines[x][y] = true
+		}
+	}
+
+	iter.Reset()
+
+	for iter.HasNext() {
+		x, y := iter.GetNext()
+
+		if !g.Board.Mines[x][y] {
+			if rand.Int64N(100) < 30 {
+				// flag the surrounding
+				innerIter := NewBoardIterator(x-1, y-1, x+1, y+1)
+				for innerIter.HasNext() {
+					inX, inY := innerIter.GetNext()
+					if g.Board.IsPosInBoard(inX, inY) && g.Board.Mines[inX][inY] {
+						g.Board.Flags[inX][inY] = true
+					}
+				}
+
+				g.Board.SpreadSafeArea(x, y)
+			}
+		}
+	}
+}
+
 func GetNumberTile(number int) SubView {
-	if !(1 <= number && number <= 9) {
+	if !(1 <= number && number <= 8) {
 		ErrorLogger.Fatalf("%d is not a valid number", number)
 	}
 
@@ -789,10 +867,11 @@ func (g *Game) Draw(dst *eb.Image) {
 		// draw highlight
 		if g.TileHighLights[x][y].Brightness > 0 {
 			t := g.TileHighLights[x][y].Brightness
+			c := ColorTable[ColorTileHighLight]
 			DrawFilledRect(
 				dst,
 				tileRect,
-				color.NRGBA{255, 255, 255, uint8(t * 180)},
+				color.NRGBA{c.R, c.G, c.B, uint8(f64(c.A) * t)},
 				true,
 			)
 		}
@@ -833,7 +912,7 @@ func (g *Game) Draw(dst *eb.Image) {
 		// draw number
 		if g.Board.Revealed[x][y] {
 			if count := g.Board.GetNeighborMineCount(x, y); count > 0 {
-				g.DrawTile(dst, x, y, GetNumberTile(count), ColorTable[ColorNumber])
+				g.DrawTile(dst, x, y, GetNumberTile(count), ColorTableGetNumber(count))
 			}
 		}
 
