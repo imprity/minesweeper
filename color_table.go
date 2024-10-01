@@ -7,6 +7,10 @@ import (
 
 type ColorTableIndex int
 
+func (c ColorTableIndex) RGBA() (r, g, b, a uint32) {
+	return ColorTable[c].RGBA()
+}
+
 const (
 	ColorBg ColorTableIndex = iota
 

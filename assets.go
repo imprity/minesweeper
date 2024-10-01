@@ -28,6 +28,7 @@ var (
 )
 
 var WhiteImage *eb.Image
+var MissingImage *eb.Image
 
 func init() {
 	// create WhiteImage
@@ -39,6 +40,30 @@ func init() {
 	}
 	wholeWhiteImage := eb.NewImageFromImage(whiteImg)
 	WhiteImage = wholeWhiteImage.SubImage(image.Rect(1, 1, 2, 2)).(*eb.Image)
+
+	// create checker board
+	checkerBoard := image.NewNRGBA(RectWH(6, 6))
+	for x := range 6 {
+		for y := range 6 {
+			doPurple := false
+			if x <= 2 {
+				if y <= 2 {
+					doPurple = true
+				}
+			} else {
+				if y > 2 {
+					doPurple = true
+				}
+			}
+
+			if doPurple {
+				checkerBoard.Set(x, y, color.NRGBA{255, 0, 255, 255})
+			} else {
+				checkerBoard.Set(x, y, color.NRGBA{0, 0, 0, 255})
+			}
+		}
+	}
+	MissingImage = eb.NewImageFromImage(checkerBoard)
 }
 
 func LoadAssets() {

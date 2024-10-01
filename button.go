@@ -73,9 +73,19 @@ type ImageButton struct {
 	ImageOnHover SubView
 	ImageOnDown  SubView
 
-	ImageColor        color.NRGBA
-	ImageColorOnHover color.NRGBA
-	ImageColorOnDown  color.NRGBA
+	ImageColor        color.Color
+	ImageColorOnHover color.Color
+	ImageColorOnDown  color.Color
+}
+
+func NewImageButton() *ImageButton {
+	b := new(ImageButton)
+
+	b.ImageColor = color.NRGBA{255, 255, 255, 255}
+	b.ImageColorOnHover = color.NRGBA{255, 255, 255, 255}
+	b.ImageColorOnDown = color.NRGBA{255, 255, 255, 255}
+
+	return b
 }
 
 func (b *ImageButton) Draw(dst *eb.Image) {
@@ -104,7 +114,7 @@ func (b *ImageButton) Draw(dst *eb.Image) {
 
 		op.Filter = eb.FilterLinear
 
-		var imageColor color.NRGBA
+		var imageColor color.Color
 
 		switch b.BaseButton.State {
 		case ButtonStateNormal:
@@ -126,13 +136,13 @@ type TextButton struct {
 
 	Text string
 
-	BgColor        color.NRGBA
-	BgColorOnHover color.NRGBA
-	BgColorOnDown  color.NRGBA
+	BgColor        color.Color
+	BgColorOnHover color.Color
+	BgColorOnDown  color.Color
 
-	TextColor        color.NRGBA
-	TextColorOnHover color.NRGBA
-	TextColorOnDown  color.NRGBA
+	TextColor        color.Color
+	TextColorOnHover color.Color
+	TextColorOnDown  color.Color
 }
 
 var DefaultTextButton = TextButton{
@@ -154,8 +164,8 @@ func NewTextButton() *TextButton {
 
 func (b *TextButton) Draw(dst *eb.Image) {
 	// determine color
-	var bgColor color.NRGBA
-	var textColor color.NRGBA
+	var bgColor color.Color = color.NRGBA{}
+	var textColor color.Color = color.NRGBA{}
 
 	switch b.BaseButton.State {
 	case ButtonStateNormal:

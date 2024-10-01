@@ -63,7 +63,8 @@ func (cp *ColorPicker) Color() color.NRGBA {
 	return c
 }
 
-func (cp *ColorPicker) SetColor(c color.NRGBA) {
+func (cp *ColorPicker) SetColor(clr color.Color) {
+	c := ColorToNRGBA(clr)
 	hsv := ColorToHSV(c)
 	cp.Hue = hsv[0]
 	cp.Saturation = hsv[1]

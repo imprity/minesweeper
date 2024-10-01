@@ -7,8 +7,9 @@ import (
 	"math"
 )
 
-func ColorNormalized(clr color.NRGBA, multiplyAlpha bool) [4]float64 {
-	r, g, b, a := f64(clr.R)/255, f64(clr.G)/255, f64(clr.B)/255, f64(clr.A)/255
+func ColorNormalized(clr color.Color, multiplyAlpha bool) [4]float64 {
+	c := ColorToNRGBA(clr)
+	r, g, b, a := f64(c.R)/255, f64(c.G)/255, f64(c.B)/255, f64(c.A)/255
 
 	if multiplyAlpha {
 		r *= a
@@ -19,8 +20,9 @@ func ColorNormalized(clr color.NRGBA, multiplyAlpha bool) [4]float64 {
 	return [4]float64{r, g, b, a}
 }
 
-func ColorToHSV(color color.NRGBA) [3]float64 {
-	r, g, b := f64(color.R)/255, f64(color.G)/255, f64(color.B)/255
+func ColorToHSV(clr color.Color) [3]float64 {
+	c := ColorToNRGBA(clr)
+	r, g, b := f64(c.R)/255, f64(c.G)/255, f64(c.B)/255
 
 	cMax := max(r, g, b)
 	cMin := min(r, g, b)
@@ -80,7 +82,15 @@ func ColorFromHSV(hue, saturation, value float64) color.NRGBA {
 	return color.NRGBA{uint8(r * 255), uint8(g * 255), uint8(b * 255), 255}
 }
 
-func ColorToString(c color.NRGBA) string {
+func ColorToNRGBA(clr color.Color) color.NRGBA {
+	if clr == nil {
+		return color.NRGBA{}
+	}
+	return color.NRGBAModel.Convert(clr).(color.NRGBA)
+}
+
+func ColorToString(clr color.Color) string {
+	c := ColorToNRGBA(clr)
 	return fmt.Sprintf("#%02X%02X%02X%02X", c.R, c.G, c.B, c.A)
 }
 

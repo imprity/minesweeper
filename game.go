@@ -64,15 +64,15 @@ func NewRetryPopup() *RetryPopup {
 		Duration: time.Millisecond * 100,
 	}
 
-	rp.Button = &ImageButton{
-		Image:        SpriteSubView(TileSprite, 17),
-		ImageOnHover: SpriteSubView(TileSprite, 17),
-		ImageOnDown:  SpriteSubView(TileSprite, 17),
+	rp.Button = NewImageButton()
 
-		ImageColor:        color.NRGBA{0, 255, 0, 100},
-		ImageColorOnHover: color.NRGBA{0, 255, 0, 255},
-		ImageColorOnDown:  color.NRGBA{0, 255, 0, 255},
-	}
+	rp.Button.Image = SpriteSubView(TileSprite, 17)
+	rp.Button.ImageOnHover = SpriteSubView(TileSprite, 17)
+	rp.Button.ImageOnDown = SpriteSubView(TileSprite, 17)
+
+	rp.Button.ImageColor = color.NRGBA{0, 255, 0, 100}
+	rp.Button.ImageColorOnHover = color.NRGBA{0, 255, 0, 255}
+	rp.Button.ImageColorOnDown = color.NRGBA{0, 255, 0, 255}
 
 	return rp
 }
@@ -373,42 +373,41 @@ func NewGame() *Game {
 		leftRect := g.GetDifficultyButtonRect(false)
 		rightRect := g.GetDifficultyButtonRect(true)
 
-		g.DifficultyButtonLeft = &ImageButton{
-			BaseButton: BaseButton{
-				Rect: leftRect,
-				OnClick: func() {
-					g.Difficulty -= 1
-					g.Difficulty = max(g.Difficulty, 0)
-					initBoard()
-				},
-			},
+		// DifficultyButtonLeft
+		g.DifficultyButtonLeft = NewImageButton()
 
-			Image:        SpriteSubView(TileSprite, 11),
-			ImageOnHover: SpriteSubView(TileSprite, 11),
-			ImageOnDown:  SpriteSubView(TileSprite, 13),
-
-			ImageColor:        ColorTable[ColorTopUIButton],
-			ImageColorOnHover: ColorTable[ColorTopUIButtonOnHover],
-			ImageColorOnDown:  ColorTable[ColorTopUIButtonOnDown],
+		g.DifficultyButtonLeft.Rect = leftRect
+		g.DifficultyButtonLeft.OnClick = func() {
+			g.Difficulty -= 1
+			g.Difficulty = max(g.Difficulty, 0)
+			initBoard()
 		}
 
-		g.DifficultyButtonRight = &ImageButton{
-			BaseButton: BaseButton{
-				Rect: rightRect,
-				OnClick: func() {
-					g.Difficulty += 1
-					g.Difficulty = min(g.Difficulty, DifficultySize-1)
-					initBoard()
-				},
-			},
-			Image:        SpriteSubView(TileSprite, 12),
-			ImageOnHover: SpriteSubView(TileSprite, 12),
-			ImageOnDown:  SpriteSubView(TileSprite, 14),
+		g.DifficultyButtonLeft.Image = SpriteSubView(TileSprite, 11)
+		g.DifficultyButtonLeft.ImageOnHover = SpriteSubView(TileSprite, 11)
+		g.DifficultyButtonLeft.ImageOnDown = SpriteSubView(TileSprite, 13)
 
-			ImageColor:        ColorTable[ColorTopUIButton],
-			ImageColorOnHover: ColorTable[ColorTopUIButtonOnHover],
-			ImageColorOnDown:  ColorTable[ColorTopUIButtonOnDown],
+		g.DifficultyButtonLeft.ImageColor = ColorTopUIButton
+		g.DifficultyButtonLeft.ImageColorOnHover = ColorTopUIButtonOnHover
+		g.DifficultyButtonLeft.ImageColorOnDown = ColorTopUIButtonOnDown
+
+		// DifficultyButtonRight
+		g.DifficultyButtonRight = NewImageButton()
+
+		g.DifficultyButtonRight.Rect = rightRect
+		g.DifficultyButtonRight.OnClick = func() {
+			g.Difficulty += 1
+			g.Difficulty = min(g.Difficulty, DifficultySize-1)
+			initBoard()
 		}
+
+		g.DifficultyButtonRight.Image = SpriteSubView(TileSprite, 12)
+		g.DifficultyButtonRight.ImageOnHover = SpriteSubView(TileSprite, 12)
+		g.DifficultyButtonRight.ImageOnDown = SpriteSubView(TileSprite, 14)
+
+		g.DifficultyButtonRight.ImageColor = ColorTopUIButton
+		g.DifficultyButtonRight.ImageColorOnHover = ColorTopUIButtonOnHover
+		g.DifficultyButtonRight.ImageColorOnDown = ColorTopUIButtonOnDown
 	}
 
 	return g
@@ -619,14 +618,6 @@ func (g *Game) Update() error {
 	// ==========================
 	g.DifficultyButtonLeft.Disabled = g.BoardTouched
 	g.DifficultyButtonRight.Disabled = g.BoardTouched
-
-	g.DifficultyButtonLeft.ImageColor = ColorTable[ColorTopUIButton]
-	g.DifficultyButtonLeft.ImageColorOnHover = ColorTable[ColorTopUIButtonOnHover]
-	g.DifficultyButtonLeft.ImageColorOnDown = ColorTable[ColorTopUIButtonOnDown]
-
-	g.DifficultyButtonRight.ImageColor = ColorTable[ColorTopUIButton]
-	g.DifficultyButtonRight.ImageColorOnHover = ColorTable[ColorTopUIButtonOnHover]
-	g.DifficultyButtonRight.ImageColorOnDown = ColorTable[ColorTopUIButtonOnDown]
 
 	// update button rect
 	{

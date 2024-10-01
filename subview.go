@@ -26,6 +26,13 @@ func (s SubView) At(x, y int) color.Color {
 	return s.Image.At(x, y)
 }
 
+func SubViewWholeImage(img *eb.Image) SubView {
+	return SubView{
+		Image: img,
+		Rect:  RectToFRect(img.Bounds()),
+	}
+}
+
 type DrawSubViewOptions struct {
 	// GeoM is a geometry matrix to draw.
 	// The default (zero) value is identity, which draws the image at (0, 0).
