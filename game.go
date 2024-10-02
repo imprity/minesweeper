@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"image/color"
 	"math"
 	"math/rand/v2"
@@ -12,6 +13,8 @@ import (
 	ebt "github.com/hajimehoshi/ebiten/v2/text/v2"
 	ebv "github.com/hajimehoshi/ebiten/v2/vector"
 )
+
+var _ = fmt.Printf
 
 type TileHighLight struct {
 	Brightness float64
@@ -558,6 +561,7 @@ func (g *Game) Update() error {
 					}
 				}
 			}
+
 		} else { // not revealed
 			if IsMouseButtonJustPressed(eb.MouseButtonLeft) {
 				if !g.Board.Flags[boardX][boardY] {
@@ -583,6 +587,12 @@ func (g *Game) Update() error {
 			} else if IsMouseButtonJustPressed(eb.MouseButtonRight) {
 				g.Board.Flags[boardX][boardY] = !g.Board.Flags[boardX][boardY]
 			}
+
+			// TEST TEST TEST TEST TEST TEST
+			if IsMouseButtonJustPressed(eb.MouseButtonMiddle) {
+				g.Board.Revealed[boardX][boardY] = true
+			}
+			// TEST TEST TEST TEST TEST TEST
 		}
 
 		justPressedL := IsMouseButtonJustPressed(eb.MouseButtonLeft)
@@ -836,7 +846,7 @@ func (g *Game) DrawRoundBoard(dst *eb.Image) {
 		return g.Board.Revealed[x][y]
 	}
 
-	const radius = 0.8
+	const radius = 1
 
 	isOddTile := func(x, y int) bool {
 		index := x + g.Board.Height*y
@@ -881,11 +891,20 @@ func (g *Game) DrawRoundBoard(dst *eb.Image) {
 		halfDx := rect.Dx() * 0.5
 		halfDy := rect.Dy() * 0.5
 
+		rectCenter := FRectangleCenter(rect)
+
 		cornerRects := [4]FRectangle{
 			FRectXYWH(rect.Min.X, rect.Min.Y, halfDx, halfDy),
 			FRectXYWH(rect.Min.X+halfDx, rect.Min.Y, halfDx, halfDy),
 			FRectXYWH(rect.Min.X+halfDx, rect.Min.Y+halfDx, halfDx, halfDy),
 			FRectXYWH(rect.Min.X, rect.Min.Y+halfDx, halfDx, halfDy),
+		}
+
+		cornerDirs := [4]FPoint{
+			{-1, -1},
+			{1, -1},
+			{1, 1},
+			{-1, 1},
 		}
 
 		isOddCorner := func(corner int) bool {
@@ -911,6 +930,16 @@ func (g *Game) DrawRoundBoard(dst *eb.Image) {
 			{rect.Min.X, rect.Max.Y},
 		}
 
+		cornerCornerVert := func(parentCorner, childCorner int) FPoint {
+			cr := cornerRects[parentCorner]
+			crCenter := FRectangleCenter(cr)
+			return FPoint{
+				X: crCenter.X + cornerDirs[childCorner].X*cr.Dx()*0.5,
+				Y: crCenter.Y + cornerDirs[childCorner].Y*cr.Dy()*0.5,
+			}
+		}
+		_ = cornerCornerVert
+
 		// +--1--+
 		// |     |
 		// 0     2
@@ -934,28 +963,18 @@ func (g *Game) DrawRoundBoard(dst *eb.Image) {
 			for i := range 4 {
 				next := (i + 1) % 4
 				if isConcave[i] {
-					var arcCenter FPoint
-					{
-						rectCenter := FRectangleCenter(rect)
-						switch i {
-						case 0:
-							arcCenter.X = rectCenter.X - concaveRadius[i]
-							arcCenter.Y = rectCenter.Y - concaveRadius[i]
-						case 1:
-							arcCenter.X = rectCenter.X + concaveRadius[i]
-							arcCenter.Y = rectCenter.Y - concaveRadius[i]
-						case 2:
-							arcCenter.X = rectCenter.X + concaveRadius[i]
-							arcCenter.Y = rectCenter.Y + concaveRadius[i]
-						case 3:
-							arcCenter.X = rectCenter.X - concaveRadius[i]
-							arcCenter.Y = rectCenter.Y + concaveRadius[i]
-						}
+					arcCenter := FPoint{
+						X: rectCenter.X + cornerDirs[i].X*concaveRadius[i],
+						Y: rectCenter.Y + cornerDirs[i].Y*concaveRadius[i],
 					}
 
 					startAngle := Pi*0.5 + Pi*0.5*f32(i)
 					endAngle := startAngle - Pi*0.5
-					p.Arc(f32(arcCenter.X), f32(arcCenter.Y), f32(concaveRadius[i]), startAngle, endAngle, ebv.CounterClockwise)
+					p.Arc(
+						f32(arcCenter.X), f32(arcCenter.Y),
+						f32(concaveRadius[i]), startAngle, endAngle, ebv.CounterClockwise,
+					)
+
 					p.LineTo(f32(centerVerts[next].X), f32(centerVerts[next].Y))
 				} else {
 					p.LineTo(f32(cornerVerts[i].X), f32(cornerVerts[i].Y))
@@ -969,32 +988,36 @@ func (g *Game) DrawRoundBoard(dst *eb.Image) {
 		}
 
 		drawCorner := func(corner int) {
-			switch corner {
-			case 0:
-				cornerRect := cornerRects[corner]
-				DrawFilledRoundRectEx(dst, cornerRect,
-					[4]float64{0, 0, radiusPx, 0},
-					cornerColor(corner), true,
-				)
-			case 1:
-				cornerRect := cornerRects[corner]
-				DrawFilledRoundRectEx(dst, cornerRect,
-					[4]float64{0, 0, 0, radiusPx},
-					cornerColor(corner), true,
-				)
-			case 2:
-				cornerRect := cornerRects[corner]
-				DrawFilledRoundRectEx(dst, cornerRect,
-					[4]float64{radiusPx, 0, 0, 0},
-					cornerColor(corner), true,
-				)
-			case 3:
-				cornerRect := cornerRects[corner]
-				DrawFilledRoundRectEx(dst, cornerRect,
-					[4]float64{0, radiusPx, 0, 0},
-					cornerColor(corner), true,
-				)
+			p := &ebv.Path{}
+
+			oppositeCorner := (corner + 2) % 4
+			oppositeVert := cornerCornerVert(corner, oppositeCorner)
+
+			arcCenter := FPoint{
+				X: oppositeVert.X + cornerDirs[corner].X*radiusPx,
+				Y: oppositeVert.Y + cornerDirs[corner].Y*radiusPx,
 			}
+
+			startAngle := 2*Pi + Pi*0.5*f64(corner)
+			endAngle := startAngle + Pi*0.5
+
+			p.Arc(
+				f32(arcCenter.X), f32(arcCenter.Y),
+				f32(radiusPx), f32(startAngle), f32(endAngle), ebv.Clockwise,
+			)
+
+			c := oppositeCorner
+			c = (c + 1) % 4
+			for range 3 {
+				v := cornerCornerVert(corner, c)
+				p.LineTo(f32(v.X), f32(v.Y))
+				c = (c + 1) % 4
+			}
+
+			p.Close()
+
+			vs, is := p.AppendVerticesAndIndicesForFilling(nil, nil)
+			DrawVerticies(dst, vs, is, cornerColor(corner), true)
 		}
 
 		switch revealCount {
@@ -1057,7 +1080,6 @@ func (g *Game) DrawRoundBoard(dst *eb.Image) {
 			radiuses[unRevealed] = radiusPx
 
 			DrawFilledRoundRectEx(dst, cornerRects[(unRevealed+2)%4], radiuses, cornerColor((unRevealed+2)%4), true)
-			//DrawFilledRect(dst, cornerRects[(unRevealed+2)%4], cornerColor((unRevealed+2)%4), true)
 		case 4:
 			for i, v := range revealed {
 				if v {
