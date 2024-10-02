@@ -836,6 +836,21 @@ func (g *Game) DrawRoundBoard(dst *eb.Image) {
 		return g.Board.Revealed[x][y]
 	}
 
+	const radius = 0.8
+
+	isOddTile := func(x, y int) bool {
+		index := x + g.Board.Height*y
+		if g.Board.Width%2 == 0 {
+			if y%2 == 0 {
+				return index%2 != 0
+			} else {
+				return index%2 == 0
+			}
+		} else {
+			return index%2 != 0
+		}
+	}
+
 	iter := NewBoardIterator(0, 0, g.Board.Width, g.Board.Height)
 	for iter.HasNext() {
 		x, y := iter.GetNext()
@@ -861,7 +876,7 @@ func (g *Game) DrawRoundBoard(dst *eb.Image) {
 			}
 		}
 
-		radius := min(rect.Dx()*0.5, rect.Dy()*0.5) * 0.6
+		radiusPx := min(rect.Dx()*0.5, rect.Dy()*0.5) * radius
 
 		halfDx := rect.Dx() * 0.5
 		halfDy := rect.Dy() * 0.5
@@ -873,33 +888,111 @@ func (g *Game) DrawRoundBoard(dst *eb.Image) {
 			FRectXYWH(rect.Min.X, rect.Min.Y+halfDx, halfDx, halfDy),
 		}
 
-		//DrawFilledRect(dst, rect, ColorTileNormal1, true)
+		isOddCorner := func(corner int) bool {
+			if isOddTile(x, y) {
+				return corner%2 == 0
+			} else {
+				return corner%2 != 0
+			}
+		}
+
+		cornerColor := func(corner int) color.Color {
+			if isOddCorner(corner) {
+				return ColorTileRevealed1
+			} else {
+				return ColorTileRevealed2
+			}
+		}
+
+		cornerVerts := [4]FPoint{
+			rect.Min,
+			{rect.Max.X, rect.Min.Y},
+			rect.Max,
+			{rect.Min.X, rect.Max.Y},
+		}
+
+		// +--1--+
+		// |     |
+		// 0     2
+		// |     |
+		// +--3--+
+		centerVerts := [4]FPoint{
+			{rect.Min.X, rect.Min.Y + halfDy},
+			{rect.Min.X + halfDx, rect.Min.Y},
+			{rect.Max.X, rect.Min.Y + halfDy},
+			{rect.Min.X + halfDx, rect.Max.Y},
+		}
+
+		getConcaveOrSharpCornersRectPath := func(
+			isConcave [4]bool,
+			concaveRadius [4]float64,
+		) *ebv.Path {
+			p := &ebv.Path{}
+
+			p.MoveTo(f32(centerVerts[0].X), f32(centerVerts[0].Y))
+
+			for i := range 4 {
+				next := (i + 1) % 4
+				if isConcave[i] {
+					var arcCenter FPoint
+					{
+						rectCenter := FRectangleCenter(rect)
+						switch i {
+						case 0:
+							arcCenter.X = rectCenter.X - concaveRadius[i]
+							arcCenter.Y = rectCenter.Y - concaveRadius[i]
+						case 1:
+							arcCenter.X = rectCenter.X + concaveRadius[i]
+							arcCenter.Y = rectCenter.Y - concaveRadius[i]
+						case 2:
+							arcCenter.X = rectCenter.X + concaveRadius[i]
+							arcCenter.Y = rectCenter.Y + concaveRadius[i]
+						case 3:
+							arcCenter.X = rectCenter.X - concaveRadius[i]
+							arcCenter.Y = rectCenter.Y + concaveRadius[i]
+						}
+					}
+
+					startAngle := Pi*0.5 + Pi*0.5*f32(i)
+					endAngle := startAngle - Pi*0.5
+					p.Arc(f32(arcCenter.X), f32(arcCenter.Y), f32(concaveRadius[i]), startAngle, endAngle, ebv.CounterClockwise)
+					p.LineTo(f32(centerVerts[next].X), f32(centerVerts[next].Y))
+				} else {
+					p.LineTo(f32(cornerVerts[i].X), f32(cornerVerts[i].Y))
+					p.LineTo(f32(centerVerts[next].X), f32(centerVerts[next].Y))
+				}
+			}
+
+			p.Close()
+
+			return p
+		}
 
 		drawCorner := func(corner int) {
 			switch corner {
 			case 0:
 				cornerRect := cornerRects[corner]
 				DrawFilledRoundRectEx(dst, cornerRect,
-					[4]float64{0, 0, radius, 0},
-					color.NRGBA{255, 0, 0, 100}, true,
+					[4]float64{0, 0, radiusPx, 0},
+					cornerColor(corner), true,
 				)
 			case 1:
 				cornerRect := cornerRects[corner]
 				DrawFilledRoundRectEx(dst, cornerRect,
-					[4]float64{0, 0, 0, radius},
-					color.NRGBA{255, 0, 0, 100}, true,
+					[4]float64{0, 0, 0, radiusPx},
+					cornerColor(corner), true,
 				)
 			case 2:
 				cornerRect := cornerRects[corner]
 				DrawFilledRoundRectEx(dst, cornerRect,
-					[4]float64{radius, 0, 0, 0},
-					color.NRGBA{255, 0, 0, 100}, true,
+					[4]float64{radiusPx, 0, 0, 0},
+					cornerColor(corner), true,
 				)
 			case 3:
 				cornerRect := cornerRects[corner]
 				DrawFilledRoundRectEx(dst, cornerRect,
-					[4]float64{0, radius, 0, 0},
-					color.NRGBA{255, 0, 0, 100}, true,
+					[4]float64{0, radiusPx, 0, 0},
+					cornerColor(corner), true,
 				)
 			}
 		}
@@ -914,33 +1007,27 @@ func (g *Game) DrawRoundBoard(dst *eb.Image) {
 				}
 			}
 		case 2:
-			if revealed[0] && revealed[1] {
-				DrawFilledRect(
-					dst,
-					FRect(rect.Min.X, rect.Min.Y, rect.Max.X, rect.Min.Y+halfDy),
-					color.NRGBA{255, 0, 0, 100}, true,
-				)
-			} else if revealed[1] && revealed[2] {
-				DrawFilledRect(
-					dst,
-					FRect(rect.Min.X+halfDx, rect.Min.Y, rect.Max.X, rect.Max.Y),
-					color.NRGBA{255, 0, 0, 100}, true,
-				)
-			} else if revealed[2] && revealed[3] {
-				DrawFilledRect(
-					dst,
-					FRect(rect.Min.X, rect.Min.Y+halfDy, rect.Max.X, rect.Max.Y),
-					color.NRGBA{255, 0, 0, 100}, true,
-				)
-			} else if revealed[3] && revealed[0] {
-				DrawFilledRect(
-					dst,
-					FRect(rect.Min.X, rect.Min.Y, rect.Min.X+halfDx, rect.Max.Y),
-					color.NRGBA{255, 0, 0, 100}, true,
-				)
-			} else {
+			{
+				/*
+					var isConcave [4]bool
+					var concaveRadius [4]float64
+
+					for i, v := range revealed {
+						if !v {
+							isConcave[i] = true
+							concaveRadius[i] = radiusPx * 1.5
+						}
+					}
+					p := getConcaveOrSharpCornersRectPath(
+						isConcave, concaveRadius,
+					)
+
+					vs, is := p.AppendVerticesAndIndicesForFilling(nil, nil)
+					DrawVerticies(dst, vs, is, ColorTileRevealed1, true)
+				*/
 				for i, v := range revealed {
 					if v {
+						//DrawFilledRect(dst, cornerRects[i], cornerColor(i), true)
 						drawCorner(i)
 					}
 				}
@@ -953,70 +1040,30 @@ func (g *Game) DrawRoundBoard(dst *eb.Image) {
 					break
 				}
 			}
+			var isConcave [4]bool
+			var concaveRadius [4]float64
 
-			var arcCenter FPoint
-			{
-				rectCenter := FRectangleCenter(rect)
+			isConcave[unRevealed] = true
+			concaveRadius[unRevealed] = radiusPx
 
-				switch unRevealed {
-				case 0:
-					arcCenter.X = rectCenter.X - radius
-					arcCenter.Y = rectCenter.Y - radius
-				case 1:
-					arcCenter.X = rectCenter.X + radius
-					arcCenter.Y = rectCenter.Y - radius
-				case 2:
-					arcCenter.X = rectCenter.X + radius
-					arcCenter.Y = rectCenter.Y + radius
-				case 3:
-					arcCenter.X = rectCenter.X - radius
-					arcCenter.Y = rectCenter.Y + radius
-				}
-			}
-
-			cornerVerts := [4]FPoint{
-				rect.Min,
-				{rect.Max.X, rect.Min.Y},
-				rect.Max,
-				{rect.Min.X, rect.Max.Y},
-			}
-
-			// +--1--+
-			// |     |
-			// 0     2
-			// |     |
-			// +--3--+
-			arcVerts := [4]FPoint{
-				{rect.Min.X, rect.Min.Y + halfDy},
-				{rect.Min.X + halfDx, rect.Min.Y},
-				{rect.Max.X, rect.Min.Y + halfDy},
-				{rect.Min.X + halfDx, rect.Max.Y},
-			}
-
-			start := unRevealed
-			p := &ebv.Path{}
-
-			// first draw arc
-			p.MoveTo(f32(arcVerts[start].X), f32(arcVerts[start].Y))
-			startAngle := Pi*0.5 + Pi*0.5*f32(start)
-			endAngle := startAngle - Pi*0.5
-			p.Arc(f32(arcCenter.X), f32(arcCenter.Y), f32(radius), startAngle, endAngle, ebv.CounterClockwise)
-			start = (start + 1) % 4
-			p.LineTo(f32(arcVerts[start].X), f32(arcVerts[start].Y))
-
-			// draw rest of the corners
-			for range 3 {
-				p.LineTo(f32(cornerVerts[start].X), f32(cornerVerts[start].Y))
-				start = (start + 1) % 4
-			}
-
-			// close
-			p.Close()
+			p := getConcaveOrSharpCornersRectPath(
+				isConcave, concaveRadius,
+			)
 
 			vs, is := p.AppendVerticesAndIndicesForFilling(nil, nil)
-			DrawVerticies(dst, vs, is, color.NRGBA{255, 0, 0, 100}, true)
+			DrawVerticies(dst, vs, is, cornerColor((unRevealed+1)%4), true)
+
+			radiuses := [4]float64{}
+			radiuses[unRevealed] = radiusPx
+
+			DrawFilledRoundRectEx(dst, cornerRects[(unRevealed+2)%4], radiuses, cornerColor((unRevealed+2)%4), true)
+			//DrawFilledRect(dst, cornerRects[(unRevealed+2)%4], cornerColor((unRevealed+2)%4), true)
 		case 4:
-			DrawFilledRect(dst, rect, color.NRGBA{255, 0, 0, 100}, true)
+			for i, v := range revealed {
+				if v {
+					DrawFilledRect(dst, cornerRects[i], cornerColor(i), true)
+				}
+			}
 		}
 	}
 }
@@ -1072,21 +1119,24 @@ func (g *Game) Draw(dst *eb.Image) {
 	}
 
 	// draw revealed tiles
-	iter.Reset()
-	for iter.HasNext() {
-		x, y := iter.GetNext()
-		tileRect := g.GetTileRect(x, y)
+	/*
+		iter.Reset()
+		for iter.HasNext() {
+			x, y := iter.GetNext()
+			tileRect := g.GetTileRect(x, y)
 
-		if g.Board.Revealed[x][y] {
-			bgColor := ColorTable[ColorTileRevealed1]
-			if isOddTile(x, y) {
-				bgColor = ColorTable[ColorTileRevealed2]
+			if g.Board.Revealed[x][y] {
+				bgColor := ColorTable[ColorTileRevealed1]
+				if isOddTile(x, y) {
+					bgColor = ColorTable[ColorTileRevealed2]
+				}
+
+				DrawFilledRect(dst, tileRect, bgColor, true)
+				StrokeRect(dst, tileRect, 1, ColorTable[ColorTileRevealedStroke], true)
 			}
-
-			DrawFilledRect(dst, tileRect, bgColor, true)
-			StrokeRect(dst, tileRect, 1, ColorTable[ColorTileRevealedStroke], true)
 		}
-	}
+	*/
+	g.DrawRoundBoard(dst)
 
 	// draw foreground elements
 	iter.Reset()
@@ -1123,10 +1173,6 @@ func (g *Game) Draw(dst *eb.Image) {
 	g.RetryPopup.Draw(dst)
 
 	g.ColorTablePicker.Draw(dst)
-
-	// TEST TEST TEST TEST TEST TEST
-	g.DrawRoundBoard(dst)
-	// TEST TEST TEST TEST TEST TEST
 }
 
 func (a *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
