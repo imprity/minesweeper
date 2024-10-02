@@ -65,6 +65,23 @@ func (p FPoint) Rotate(theta float64) FPoint {
 	}
 }
 
+func (p FPoint) Scale(s float64) FPoint {
+	return FPt(p.X*s, p.Y*s)
+}
+
+func (p FPoint) LengthSquared() float64 {
+	return p.X*p.X + p.Y*p.Y
+}
+
+func (p FPoint) Length() float64 {
+	return math.Sqrt(p.LengthSquared())
+}
+
+func (p FPoint) Normalize() FPoint {
+	length := p.Length()
+	return FPt(p.X/length, p.Y/length)
+}
+
 func FPointTransform(pt FPoint, geom eb.GeoM) FPoint {
 	x, y := geom.Apply(pt.X, pt.Y)
 	return FPt(x, y)

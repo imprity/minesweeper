@@ -10,6 +10,7 @@ import (
 
 	eb "github.com/hajimehoshi/ebiten/v2"
 	ebt "github.com/hajimehoshi/ebiten/v2/text/v2"
+	ebv "github.com/hajimehoshi/ebiten/v2/vector"
 )
 
 type TileHighLight struct {
@@ -827,6 +828,199 @@ func (g *Game) DrawDifficultyText(dst *eb.Image) {
 	ebt.Draw(dst, DifficultyStrs[g.Difficulty], DecoFace, op)
 }
 
+func (g *Game) DrawRoundBoard(dst *eb.Image) {
+	isRevealed := func(x, y int) bool {
+		if !g.Board.IsPosInBoard(x, y) {
+			return false
+		}
+		return g.Board.Revealed[x][y]
+	}
+
+	iter := NewBoardIterator(0, 0, g.Board.Width, g.Board.Height)
+	for iter.HasNext() {
+		x, y := iter.GetNext()
+
+		boardTileRect := g.GetTileRect(x, y)
+		rect := boardTileRect.Add(FPt(-boardTileRect.Dx()*0.5, -boardTileRect.Dy()*0.5))
+
+		//	0 --- 1
+		//	|     |
+		//	|     |
+		//	3 --- 2
+		revealed := [4]bool{}
+
+		revealed[0] = isRevealed(x-1, y-1)
+		revealed[1] = isRevealed(x, y-1)
+		revealed[2] = isRevealed(x, y)
+		revealed[3] = isRevealed(x-1, y)
+
+		revealCount := 0
+		for _, v := range revealed {
+			if v {
+				revealCount++
+			}
+		}
+
+		radius := min(rect.Dx()*0.5, rect.Dy()*0.5) * 0.6
+
+		halfDx := rect.Dx() * 0.5
+		halfDy := rect.Dy() * 0.5
+
+		cornerRects := [4]FRectangle{
+			FRectXYWH(rect.Min.X, rect.Min.Y, halfDx, halfDy),
+			FRectXYWH(rect.Min.X+halfDx, rect.Min.Y, halfDx, halfDy),
+			FRectXYWH(rect.Min.X+halfDx, rect.Min.Y+halfDx, halfDx, halfDy),
+			FRectXYWH(rect.Min.X, rect.Min.Y+halfDx, halfDx, halfDy),
+		}
+
+		//DrawFilledRect(dst, rect, ColorTileNormal1, true)
+
+		drawCorner := func(corner int) {
+			switch corner {
+			case 0:
+				cornerRect := cornerRects[corner]
+				DrawFilledRoundRectEx(dst, cornerRect,
+					[4]float64{0, 0, radius, 0},
+					color.NRGBA{255, 0, 0, 100}, true,
+				)
+			case 1:
+				cornerRect := cornerRects[corner]
+				DrawFilledRoundRectEx(dst, cornerRect,
+					[4]float64{0, 0, 0, radius},
+					color.NRGBA{255, 0, 0, 100}, true,
+				)
+			case 2:
+				cornerRect := cornerRects[corner]
+				DrawFilledRoundRectEx(dst, cornerRect,
+					[4]float64{radius, 0, 0, 0},
+					color.NRGBA{255, 0, 0, 100}, true,
+				)
+			case 3:
+				cornerRect := cornerRects[corner]
+				DrawFilledRoundRectEx(dst, cornerRect,
+					[4]float64{0, radius, 0, 0},
+					color.NRGBA{255, 0, 0, 100}, true,
+				)
+			}
+		}
+
+		switch revealCount {
+		case 0:
+			// pass
+		case 1:
+			for i, v := range revealed {
+				if v {
+					drawCorner(i)
+				}
+			}
+		case 2:
+			if revealed[0] && revealed[1] {
+				DrawFilledRect(
+					dst,
+					FRect(rect.Min.X, rect.Min.Y, rect.Max.X, rect.Min.Y+halfDy),
+					color.NRGBA{255, 0, 0, 100}, true,
+				)
+			} else if revealed[1] && revealed[2] {
+				DrawFilledRect(
+					dst,
+					FRect(rect.Min.X+halfDx, rect.Min.Y, rect.Max.X, rect.Max.Y),
+					color.NRGBA{255, 0, 0, 100}, true,
+				)
+			} else if revealed[2] && revealed[3] {
+				DrawFilledRect(
+					dst,
+					FRect(rect.Min.X, rect.Min.Y+halfDy, rect.Max.X, rect.Max.Y),
+					color.NRGBA{255, 0, 0, 100}, true,
+				)
+			} else if revealed[3] && revealed[0] {
+				DrawFilledRect(
+					dst,
+					FRect(rect.Min.X, rect.Min.Y, rect.Min.X+halfDx, rect.Max.Y),
+					color.NRGBA{255, 0, 0, 100}, true,
+				)
+			} else {
+				for i, v := range revealed {
+					if v {
+						drawCorner(i)
+					}
+				}
+			}
+		case 3:
+			var unRevealed int
+			for i, v := range revealed {
+				if !v {
+					unRevealed = i
+					break
+				}
+			}
+
+			var arcCenter FPoint
+			{
+				rectCenter := FRectangleCenter(rect)
+
+				switch unRevealed {
+				case 0:
+					arcCenter.X = rectCenter.X - radius
+					arcCenter.Y = rectCenter.Y - radius
+				case 1:
+					arcCenter.X = rectCenter.X + radius
+					arcCenter.Y = rectCenter.Y - radius
+				case 2:
+					arcCenter.X = rectCenter.X + radius
+					arcCenter.Y = rectCenter.Y + radius
+				case 3:
+					arcCenter.X = rectCenter.X - radius
+					arcCenter.Y = rectCenter.Y + radius
+				}
+			}
+
+			cornerVerts := [4]FPoint{
+				rect.Min,
+				{rect.Max.X, rect.Min.Y},
+				rect.Max,
+				{rect.Min.X, rect.Max.Y},
+			}
+
+			// +--1--+
+			// |     |
+			// 0     2
+			// |     |
+			// +--3--+
+			arcVerts := [4]FPoint{
+				{rect.Min.X, rect.Min.Y + halfDy},
+				{rect.Min.X + halfDx, rect.Min.Y},
+				{rect.Max.X, rect.Min.Y + halfDy},
+				{rect.Min.X + halfDx, rect.Max.Y},
+			}
+
+			start := unRevealed
+			p := &ebv.Path{}
+
+			// first draw arc
+			p.MoveTo(f32(arcVerts[start].X), f32(arcVerts[start].Y))
+			startAngle := Pi*0.5 + Pi*0.5*f32(start)
+			endAngle := startAngle - Pi*0.5
+			p.Arc(f32(arcCenter.X), f32(arcCenter.Y), f32(radius), startAngle, endAngle, ebv.CounterClockwise)
+			start = (start + 1) % 4
+			p.LineTo(f32(arcVerts[start].X), f32(arcVerts[start].Y))
+
+			// draw rest of the corners
+			for range 3 {
+				p.LineTo(f32(cornerVerts[start].X), f32(cornerVerts[start].Y))
+				start = (start + 1) % 4
+			}
+
+			// close
+			p.Close()
+
+			vs, is := p.AppendVerticesAndIndicesForFilling(nil, nil)
+			DrawVerticies(dst, vs, is, color.NRGBA{255, 0, 0, 100}, true)
+		case 4:
+			DrawFilledRect(dst, rect, color.NRGBA{255, 0, 0, 100}, true)
+		}
+	}
+}
+
 func (g *Game) Draw(dst *eb.Image) {
 	// background
 	dst.Fill(ColorTable[ColorBg])
@@ -929,6 +1123,10 @@ func (g *Game) Draw(dst *eb.Image) {
 	g.RetryPopup.Draw(dst)
 
 	g.ColorTablePicker.Draw(dst)
+
+	// TEST TEST TEST TEST TEST TEST
+	g.DrawRoundBoard(dst)
+	// TEST TEST TEST TEST TEST TEST
 }
 
 func (a *Game) Layout(outsideWidth, outsideHeight int) (int, int) {

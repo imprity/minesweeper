@@ -121,7 +121,7 @@ func DrawFilledRoundRect(
 ) {
 	path := getRoundRectPath(rect, [4]float64{radius, radius, radius, radius})
 	vs, is := path.AppendVerticesAndIndicesForFilling(nil, nil)
-	DrawVerticies(dst, vs, is, clr, true)
+	DrawVerticiesConvex(dst, vs, is, clr, true)
 }
 
 func StrokeRoundRect(
@@ -136,7 +136,7 @@ func StrokeRoundRect(
 	strokeOp := &ebv.StrokeOptions{}
 	strokeOp.Width = float32(stroke)
 	vs, is := path.AppendVerticesAndIndicesForStroke(nil, nil, strokeOp)
-	DrawVerticies(dst, vs, is, clr, antialias)
+	DrawVerticiesConvex(dst, vs, is, clr, antialias)
 }
 
 // raidus array maps like this
@@ -154,7 +154,7 @@ func DrawFilledRoundRectEx(
 ) {
 	path := getRoundRectPath(rect, radiuses)
 	vs, is := path.AppendVerticesAndIndicesForFilling(nil, nil)
-	DrawVerticies(dst, vs, is, clr, true)
+	DrawVerticiesConvex(dst, vs, is, clr, true)
 }
 
 // raidus array maps like this
@@ -176,10 +176,17 @@ func StrokeRoundRectEx(
 	strokeOp.Width = float32(stroke)
 	strokeOp.MiterLimit = 4
 	vs, is := path.AppendVerticesAndIndicesForStroke(nil, nil, strokeOp)
-	DrawVerticies(dst, vs, is, clr, antialias)
+	DrawVerticiesConvex(dst, vs, is, clr, antialias)
 }
 
-func DrawVerticies(dst *eb.Image, vs []eb.Vertex, is []uint16, clr color.Color, antialias bool) {
+func drawVerticiesImpl(
+	dst *eb.Image,
+	vs []eb.Vertex,
+	is []uint16,
+	clr color.Color,
+	antialias bool,
+	fillRule eb.FillRule,
+) {
 	r, g, b, a := clr.RGBA()
 	for i := range vs {
 		vs[i].SrcX = 1
@@ -193,5 +200,15 @@ func DrawVerticies(dst *eb.Image, vs []eb.Vertex, is []uint16, clr color.Color, 
 	op := &eb.DrawTrianglesOptions{}
 	op.ColorScaleMode = eb.ColorScaleModePremultipliedAlpha
 	op.AntiAlias = antialias
+	op.FillRule = fillRule
 	dst.DrawTriangles(vs, is, WhiteImage, op)
+}
+
+func DrawVerticies(dst *eb.Image, vs []eb.Vertex, is []uint16, clr color.Color, antialias bool) {
+	drawVerticiesImpl(dst, vs, is, clr, antialias, eb.EvenOdd)
+}
+
+// use this function if you know that polygon is convex
+func DrawVerticiesConvex(dst *eb.Image, vs []eb.Vertex, is []uint16, clr color.Color, antialias bool) {
+	drawVerticiesImpl(dst, vs, is, clr, antialias, eb.FillAll)
 }
