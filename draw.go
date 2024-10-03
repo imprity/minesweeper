@@ -64,7 +64,7 @@ func StrokeCircle(
 //	|     |
 //	|     |
 //	3 --- 2
-func getRoundRectPath(rect FRectangle, radiuses [4]float64) ebv.Path {
+func getRoundRectPath(rect FRectangle, radiuses [4]float64) *ebv.Path {
 	radiusMax := min(rect.Dx()*0.5, rect.Dy()*0.5)
 
 	//clamp the radius to the size of rect
@@ -85,7 +85,7 @@ func getRoundRectPath(rect FRectangle, radiuses [4]float64) ebv.Path {
 		d360 float32 = Pi * 2.0
 	)
 
-	var path ebv.Path
+	path := &ebv.Path{}
 
 	if radiuses[0] != 0 {
 		path.Arc(f32(inLeftTop.X), f32(inLeftTop.Y), f32(radiuses[0]), d180, d270, ebv.Clockwise)
@@ -120,8 +120,7 @@ func DrawFilledRoundRect(
 	antialias bool,
 ) {
 	path := getRoundRectPath(rect, [4]float64{radius, radius, radius, radius})
-	vs, is := path.AppendVerticesAndIndicesForFilling(nil, nil)
-	DrawVerticiesConvex(dst, vs, is, clr, true)
+	DrawFilledPath(dst, path, clr, antialias)
 }
 
 func StrokeRoundRect(
@@ -134,9 +133,9 @@ func StrokeRoundRect(
 ) {
 	path := getRoundRectPath(rect, [4]float64{radius, radius, radius, radius})
 	strokeOp := &ebv.StrokeOptions{}
+	strokeOp.MiterLimit = 4
 	strokeOp.Width = float32(stroke)
-	vs, is := path.AppendVerticesAndIndicesForStroke(nil, nil, strokeOp)
-	DrawVerticiesConvex(dst, vs, is, clr, antialias)
+	StrokePath(dst, path, strokeOp, clr, antialias)
 }
 
 // raidus array maps like this
@@ -153,8 +152,7 @@ func DrawFilledRoundRectEx(
 	antialias bool,
 ) {
 	path := getRoundRectPath(rect, radiuses)
-	vs, is := path.AppendVerticesAndIndicesForFilling(nil, nil)
-	DrawVerticiesConvex(dst, vs, is, clr, true)
+	DrawFilledPath(dst, path, clr, antialias)
 }
 
 // raidus array maps like this
@@ -175,11 +173,10 @@ func StrokeRoundRectEx(
 	strokeOp := &ebv.StrokeOptions{}
 	strokeOp.Width = float32(stroke)
 	strokeOp.MiterLimit = 4
-	vs, is := path.AppendVerticesAndIndicesForStroke(nil, nil, strokeOp)
-	DrawVerticiesConvex(dst, vs, is, clr, antialias)
+	StrokePath(dst, path, strokeOp, clr, antialias)
 }
 
-func drawVerticiesImpl(
+func DrawVerticies(
 	dst *eb.Image,
 	vs []eb.Vertex,
 	is []uint16,
@@ -204,11 +201,23 @@ func drawVerticiesImpl(
 	dst.DrawTriangles(vs, is, WhiteImage, op)
 }
 
-func DrawVerticies(dst *eb.Image, vs []eb.Vertex, is []uint16, clr color.Color, antialias bool) {
-	drawVerticiesImpl(dst, vs, is, clr, antialias, eb.EvenOdd)
+func DrawFilledPath(
+	dst *eb.Image,
+	path *ebv.Path,
+	clr color.Color,
+	antialias bool,
+) {
+	vs, is := path.AppendVerticesAndIndicesForFilling(nil, nil)
+	DrawVerticies(dst, vs, is, clr, antialias, eb.EvenOdd)
 }
 
-// use this function if you know that polygon is convex
-func DrawVerticiesConvex(dst *eb.Image, vs []eb.Vertex, is []uint16, clr color.Color, antialias bool) {
-	drawVerticiesImpl(dst, vs, is, clr, antialias, eb.FillAll)
+func StrokePath(
+	dst *eb.Image,
+	path *ebv.Path,
+	strokeOp *ebv.StrokeOptions,
+	clr color.Color,
+	antialias bool,
+) {
+	vs, is := path.AppendVerticesAndIndicesForStroke(nil, nil, strokeOp)
+	DrawVerticies(dst, vs, is, clr, antialias, eb.FillAll)
 }

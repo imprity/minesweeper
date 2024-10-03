@@ -769,11 +769,13 @@ func GetFlagTile() SubView {
 	return SpriteSubView(TileSprite, 10)
 }
 
-func (g *Game) GetTileRect(boardX, boardY int) FRectangle {
-	boardRect := g.BoardRect()
-
-	tileWidth := boardRect.Dx() / f64(g.Board.Width)
-	tileHeight := boardRect.Dy() / f64(g.Board.Height)
+func GetBoardTileRect(
+	boardRect FRectangle,
+	boardWidth, boardHeight int,
+	boardX, boardY int,
+) FRectangle {
+	tileWidth := boardRect.Dx() / f64(boardWidth)
+	tileHeight := boardRect.Dy() / f64(boardHeight)
 
 	return FRectangle{
 		Min: FPt(f64(boardX)*tileWidth, f64(boardY)*tileHeight).Add(boardRect.Min),
@@ -782,7 +784,7 @@ func (g *Game) GetTileRect(boardX, boardY int) FRectangle {
 }
 
 func (g *Game) DrawTile(dst *eb.Image, boardX, boardY int, tile SubView, clr color.Color) {
-	tileRect := g.GetTileRect(boardX, boardY)
+	tileRect := GetBoardTileRect(g.BoardRect(), g.Board.Width, g.Board.Height, boardX, boardY)
 
 	imgSize := ImageSizeFPt(tile)
 	rectSize := tileRect.Size()
@@ -838,34 +840,56 @@ func (g *Game) DrawDifficultyText(dst *eb.Image) {
 	ebt.Draw(dst, DifficultyStrs[g.Difficulty], DecoFace, op)
 }
 
-func (g *Game) DrawRoundBoard(dst *eb.Image) {
+func IsOddTile(boardWidth, boardHeight, x, y int) bool {
+	index := x + boardHeight*y
+	if boardWidth%2 == 0 {
+		if y%2 == 0 {
+			return index%2 != 0
+		} else {
+			return index%2 == 0
+		}
+	} else {
+		return index%2 != 0
+	}
+}
+
+func DrawRoundBoardTile(
+	dst *eb.Image,
+	board [][]bool,
+	boardRect FRectangle,
+	fillColor1, fillColor2 color.Color,
+	strokeColor color.Color, strokeWidth float64,
+	doFill bool,
+) {
+	if len(board) <= 0 {
+		return
+	}
+
+	if len(board[0]) <= 0 {
+		return
+	}
+
+	boardWidth := len(board)
+	boardHeight := len(board[0])
+
 	isRevealed := func(x, y int) bool {
-		if !g.Board.IsPosInBoard(x, y) {
+		if !(0 <= x && x < boardWidth) {
 			return false
 		}
-		return g.Board.Revealed[x][y]
+		if !(0 <= y && y < boardHeight) {
+			return false
+		}
+		return board[x][y]
 	}
 
 	const radius = 1
 
-	isOddTile := func(x, y int) bool {
-		index := x + g.Board.Height*y
-		if g.Board.Width%2 == 0 {
-			if y%2 == 0 {
-				return index%2 != 0
-			} else {
-				return index%2 == 0
-			}
-		} else {
-			return index%2 != 0
-		}
-	}
+	iter := NewBoardIterator(0, 0, boardWidth, boardHeight)
 
-	iter := NewBoardIterator(0, 0, g.Board.Width, g.Board.Height)
 	for iter.HasNext() {
 		x, y := iter.GetNext()
 
-		boardTileRect := g.GetTileRect(x, y)
+		boardTileRect := GetBoardTileRect(boardRect, boardWidth, boardHeight, x, y)
 		rect := boardTileRect.Add(FPt(-boardTileRect.Dx()*0.5, -boardTileRect.Dy()*0.5))
 
 		//	0 --- 1
@@ -908,7 +932,7 @@ func (g *Game) DrawRoundBoard(dst *eb.Image) {
 		}
 
 		isOddCorner := func(corner int) bool {
-			if isOddTile(x, y) {
+			if IsOddTile(boardWidth, boardHeight, x, y) {
 				return corner%2 == 0
 			} else {
 				return corner%2 != 0
@@ -917,10 +941,14 @@ func (g *Game) DrawRoundBoard(dst *eb.Image) {
 
 		cornerColor := func(corner int) color.Color {
 			if isOddCorner(corner) {
-				return ColorTileRevealed1
+				return fillColor1
 			} else {
-				return ColorTileRevealed2
+				return fillColor2
 			}
+		}
+
+		cornerOpposite := func(corner int) int {
+			return (corner + 2) % 4
 		}
 
 		cornerVerts := [4]FPoint{
@@ -938,7 +966,6 @@ func (g *Game) DrawRoundBoard(dst *eb.Image) {
 				Y: crCenter.Y + cornerDirs[childCorner].Y*cr.Dy()*0.5,
 			}
 		}
-		_ = cornerCornerVert
 
 		// +--1--+
 		// |     |
@@ -987,18 +1014,18 @@ func (g *Game) DrawRoundBoard(dst *eb.Image) {
 			return p
 		}
 
-		drawCorner := func(corner int) {
+		drawCorner := func(corner int, roundCorner int) {
 			p := &ebv.Path{}
 
-			oppositeCorner := (corner + 2) % 4
-			oppositeVert := cornerCornerVert(corner, oppositeCorner)
+			roundOpposite := cornerOpposite(roundCorner)
+			roundVert := cornerCornerVert(corner, roundCorner)
 
 			arcCenter := FPoint{
-				X: oppositeVert.X + cornerDirs[corner].X*radiusPx,
-				Y: oppositeVert.Y + cornerDirs[corner].Y*radiusPx,
+				X: roundVert.X + cornerDirs[roundOpposite].X*radiusPx,
+				Y: roundVert.Y + cornerDirs[roundOpposite].Y*radiusPx,
 			}
 
-			startAngle := 2*Pi + Pi*0.5*f64(corner)
+			startAngle := Pi + Pi*0.5*f64(roundCorner)
 			endAngle := startAngle + Pi*0.5
 
 			p.Arc(
@@ -1006,7 +1033,7 @@ func (g *Game) DrawRoundBoard(dst *eb.Image) {
 				f32(radiusPx), f32(startAngle), f32(endAngle), ebv.Clockwise,
 			)
 
-			c := oppositeCorner
+			c := roundCorner
 			c = (c + 1) % 4
 			for range 3 {
 				v := cornerCornerVert(corner, c)
@@ -1016,8 +1043,14 @@ func (g *Game) DrawRoundBoard(dst *eb.Image) {
 
 			p.Close()
 
-			vs, is := p.AppendVerticesAndIndicesForFilling(nil, nil)
-			DrawVerticies(dst, vs, is, cornerColor(corner), true)
+			if doFill {
+				DrawFilledPath(dst, p, cornerColor(corner), true)
+			} else {
+				op := &ebv.StrokeOptions{}
+				op.Width = f32(strokeWidth)
+				op.MiterLimit = 4
+				StrokePath(dst, p, op, strokeColor, true)
+			}
 		}
 
 		switch revealCount {
@@ -1026,33 +1059,13 @@ func (g *Game) DrawRoundBoard(dst *eb.Image) {
 		case 1:
 			for i, v := range revealed {
 				if v {
-					drawCorner(i)
+					drawCorner(i, cornerOpposite(i))
 				}
 			}
 		case 2:
-			{
-				/*
-					var isConcave [4]bool
-					var concaveRadius [4]float64
-
-					for i, v := range revealed {
-						if !v {
-							isConcave[i] = true
-							concaveRadius[i] = radiusPx * 1.5
-						}
-					}
-					p := getConcaveOrSharpCornersRectPath(
-						isConcave, concaveRadius,
-					)
-
-					vs, is := p.AppendVerticesAndIndicesForFilling(nil, nil)
-					DrawVerticies(dst, vs, is, ColorTileRevealed1, true)
-				*/
-				for i, v := range revealed {
-					if v {
-						//DrawFilledRect(dst, cornerRects[i], cornerColor(i), true)
-						drawCorner(i)
-					}
+			for i, v := range revealed {
+				if v {
+					drawCorner(i, cornerOpposite(i))
 				}
 			}
 		case 3:
@@ -1073,17 +1086,22 @@ func (g *Game) DrawRoundBoard(dst *eb.Image) {
 				isConcave, concaveRadius,
 			)
 
-			vs, is := p.AppendVerticesAndIndicesForFilling(nil, nil)
-			DrawVerticies(dst, vs, is, cornerColor((unRevealed+1)%4), true)
+			if doFill {
+				DrawFilledPath(dst, p, cornerColor((unRevealed+1)%4), true)
 
-			radiuses := [4]float64{}
-			radiuses[unRevealed] = radiusPx
-
-			DrawFilledRoundRectEx(dst, cornerRects[(unRevealed+2)%4], radiuses, cornerColor((unRevealed+2)%4), true)
+				drawCorner(cornerOpposite(unRevealed), unRevealed)
+			} else {
+				op := &ebv.StrokeOptions{}
+				op.Width = f32(strokeWidth)
+				op.MiterLimit = 4
+				StrokePath(dst, p, op, strokeColor, true)
+			}
 		case 4:
-			for i, v := range revealed {
-				if v {
-					DrawFilledRect(dst, cornerRects[i], cornerColor(i), true)
+			if doFill {
+				for i, v := range revealed {
+					if v {
+						DrawFilledRect(dst, cornerRects[i], cornerColor(i), true)
+					}
 				}
 			}
 		}
@@ -1094,19 +1112,6 @@ func (g *Game) Draw(dst *eb.Image) {
 	// background
 	dst.Fill(ColorTable[ColorBg])
 
-	isOddTile := func(x, y int) bool {
-		index := x + g.Board.Height*y
-		if g.Board.Width%2 == 0 {
-			if y%2 == 0 {
-				return index%2 != 0
-			} else {
-				return index%2 == 0
-			}
-		} else {
-			return index%2 != 0
-		}
-	}
-
 	// ===========================
 	// draw board
 	// ===========================
@@ -1115,11 +1120,11 @@ func (g *Game) Draw(dst *eb.Image) {
 	// draw regular tile background
 	for iter.HasNext() {
 		x, y := iter.GetNext()
-		tileRect := g.GetTileRect(x, y)
+		tileRect := GetBoardTileRect(g.BoardRect(), g.Board.Width, g.Board.Height, x, y)
 
 		if !g.Board.Revealed[x][y] {
 			bgColor := ColorTable[ColorTileNormal1]
-			if isOddTile(x, y) {
+			if IsOddTile(g.Board.Width, g.Board.Height, x, y) {
 				bgColor = ColorTable[ColorTileNormal2]
 			}
 
@@ -1141,24 +1146,29 @@ func (g *Game) Draw(dst *eb.Image) {
 	}
 
 	// draw revealed tiles
-	/*
-		iter.Reset()
-		for iter.HasNext() {
-			x, y := iter.GetNext()
-			tileRect := g.GetTileRect(x, y)
+	{
+		boardRect := g.BoardRect()
+		DrawRoundBoardTile(
+			dst,
+			g.Board.Revealed,
+			boardRect,
+			ColorTileRevealed1, ColorTileRevealed2,
+			color.NRGBA{255, 0, 0, 255}, 4,
+			false,
+		)
 
-			if g.Board.Revealed[x][y] {
-				bgColor := ColorTable[ColorTileRevealed1]
-				if isOddTile(x, y) {
-					bgColor = ColorTable[ColorTileRevealed2]
-				}
+		// move board slightly up
+		boardRect = boardRect.Add(FPt(0, -1.5))
 
-				DrawFilledRect(dst, tileRect, bgColor, true)
-				StrokeRect(dst, tileRect, 1, ColorTable[ColorTileRevealedStroke], true)
-			}
-		}
-	*/
-	g.DrawRoundBoard(dst)
+		DrawRoundBoardTile(
+			dst,
+			g.Board.Revealed,
+			boardRect,
+			ColorTileRevealed1, ColorTileRevealed2,
+			color.NRGBA{255, 0, 0, 255}, 4,
+			true,
+		)
+	}
 
 	// draw foreground elements
 	iter.Reset()
