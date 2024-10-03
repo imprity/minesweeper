@@ -7,18 +7,24 @@ import (
 	"image/color"
 )
 
+func getRectPath(rect FRectangle) *ebv.Path {
+	path := &ebv.Path{}
+	path.MoveTo(f32(rect.Min.X), f32(rect.Min.Y))
+	path.LineTo(f32(rect.Max.X), f32(rect.Min.Y))
+	path.LineTo(f32(rect.Max.X), f32(rect.Max.Y))
+	path.LineTo(f32(rect.Min.X), f32(rect.Max.Y))
+	path.Close()
+	return path
+}
+
 func DrawFilledRect(
 	dst *eb.Image,
 	rect FRectangle,
 	clr color.Color,
 	antialias bool,
 ) {
-	ebv.DrawFilledRect(
-		dst,
-		f32(rect.Min.X), f32(rect.Min.Y), f32(rect.Dx()), f32(rect.Dy()),
-		clr,
-		antialias,
-	)
+	path := getRectPath(rect)
+	DrawFilledPath(dst, path, clr, antialias)
 }
 
 func StrokeRect(
@@ -28,13 +34,11 @@ func StrokeRect(
 	clr color.Color,
 	antialias bool,
 ) {
-	ebv.StrokeRect(
-		dst,
-		f32(rect.Min.X), f32(rect.Min.Y), f32(rect.Dx()), f32(rect.Dy()),
-		f32(strokeWidth),
-		clr,
-		antialias,
-	)
+	path := getRectPath(rect)
+	strokeOp := &ebv.StrokeOptions{}
+	strokeOp.MiterLimit = 4
+	strokeOp.Width = float32(strokeWidth)
+	StrokePath(dst, path, strokeOp, clr, antialias)
 }
 
 func DrawFilledCircle(
@@ -207,8 +211,13 @@ func DrawFilledPath(
 	clr color.Color,
 	antialias bool,
 ) {
-	vs, is := path.AppendVerticesAndIndicesForFilling(nil, nil)
-	DrawVerticies(dst, vs, is, clr, antialias, eb.EvenOdd)
+	DrawFilledPathEx(
+		dst,
+		path,
+		clr,
+		antialias,
+		eb.FillAll,
+	)
 }
 
 func StrokePath(
@@ -218,6 +227,35 @@ func StrokePath(
 	clr color.Color,
 	antialias bool,
 ) {
+	StrokePathEx(
+		dst,
+		path,
+		strokeOp,
+		clr,
+		antialias,
+		eb.FillAll,
+	)
+}
+
+func DrawFilledPathEx(
+	dst *eb.Image,
+	path *ebv.Path,
+	clr color.Color,
+	antialias bool,
+	fillRule eb.FillRule,
+) {
+	vs, is := path.AppendVerticesAndIndicesForFilling(nil, nil)
+	DrawVerticies(dst, vs, is, clr, antialias, fillRule)
+}
+
+func StrokePathEx(
+	dst *eb.Image,
+	path *ebv.Path,
+	strokeOp *ebv.StrokeOptions,
+	clr color.Color,
+	antialias bool,
+	fillRule eb.FillRule,
+) {
 	vs, is := path.AppendVerticesAndIndicesForStroke(nil, nil, strokeOp)
-	DrawVerticies(dst, vs, is, clr, antialias, eb.FillAll)
+	DrawVerticies(dst, vs, is, clr, antialias, fillRule)
 }

@@ -7,8 +7,6 @@ import (
 	"math/rand/v2"
 	"time"
 
-	_ "github.com/silbinarywolf/preferdiscretegpu"
-
 	eb "github.com/hajimehoshi/ebiten/v2"
 	ebt "github.com/hajimehoshi/ebiten/v2/text/v2"
 	ebv "github.com/hajimehoshi/ebiten/v2/vector"
@@ -940,7 +938,7 @@ func DrawRoundBoardTile(
 		}
 
 		cornerColor := func(corner int) color.Color {
-			if isOddCorner(corner) {
+			if !isOddCorner(corner) {
 				return fillColor1
 			} else {
 				return fillColor2
@@ -1087,7 +1085,7 @@ func DrawRoundBoardTile(
 			)
 
 			if doFill {
-				DrawFilledPath(dst, p, cornerColor((unRevealed+1)%4), true)
+				DrawFilledPathEx(dst, p, cornerColor((unRevealed+1)%4), true, eb.NonZero)
 
 				drawCorner(cornerOpposite(unRevealed), unRevealed)
 			} else {
@@ -1153,7 +1151,7 @@ func (g *Game) Draw(dst *eb.Image) {
 			g.Board.Revealed,
 			boardRect,
 			ColorTileRevealed1, ColorTileRevealed2,
-			color.NRGBA{255, 0, 0, 255}, 4,
+			ColorTileRevealedStroke, 4,
 			false,
 		)
 
@@ -1165,7 +1163,7 @@ func (g *Game) Draw(dst *eb.Image) {
 			g.Board.Revealed,
 			boardRect,
 			ColorTileRevealed1, ColorTileRevealed2,
-			color.NRGBA{255, 0, 0, 255}, 4,
+			ColorTileRevealedStroke, 4,
 			true,
 		)
 	}
