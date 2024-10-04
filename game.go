@@ -854,19 +854,12 @@ func IsOddTile(boardWidth, boardHeight, x, y int) bool {
 func DrawRoundBoardTile(
 	dst *eb.Image,
 	board [][]bool,
+	radiuses [][]float64,
 	boardRect FRectangle,
 	fillColor1, fillColor2 color.Color,
 	strokeColor color.Color, strokeWidth float64,
 	doFill bool,
 ) {
-	if len(board) <= 0 {
-		return
-	}
-
-	if len(board[0]) <= 0 {
-		return
-	}
-
 	boardWidth := len(board)
 	boardHeight := len(board[0])
 
@@ -879,8 +872,6 @@ func DrawRoundBoardTile(
 		}
 		return board[x][y]
 	}
-
-	const radius = 1
 
 	iter := NewBoardIterator(0, 0, boardWidth, boardHeight)
 
@@ -907,8 +898,6 @@ func DrawRoundBoardTile(
 				revealCount++
 			}
 		}
-
-		radiusPx := min(rect.Dx()*0.5, rect.Dy()*0.5) * radius
 
 		rectCornerRect := func(r FRectangle, corner int) FRectangle {
 			hx := r.Dx() * 0.5
@@ -950,6 +939,29 @@ func DrawRoundBoardTile(
 			}
 		}
 
+		// in pixels
+		cornerRadius := func(corner int) float64 {
+			rx, ry := x, y
+			switch corner {
+			case 0:
+				rx -= 1
+				ry -= 1
+			case 1:
+				ry -= 1
+			case 2:
+				// pass
+			case 3:
+				ry -= 1
+			}
+
+			rx = Clamp(rx, 0, boardWidth-1)
+			ry = Clamp(ry, 0, boardHeight-1)
+
+			radius := radiuses[rx][ry]
+
+			return min(rect.Dx()*0.5, rect.Dy()*0.5) * radius
+		}
+
 		cornerOpposite := func(corner int) int {
 			return (corner + 2) % 4
 		}
@@ -984,18 +996,17 @@ func DrawRoundBoardTile(
 
 					cornerRect := rectCornerRect(rect, i)
 
-					startCorner := cornerOpposite(i)
-					startCornerVert := rectCornerVert(cornerRect, startCorner)
+					edgeCorner := cornerOpposite(i)
+					edgeCornerVert := rectCornerVert(cornerRect, edgeCorner)
 
-					p.MoveTo(f32(startCornerVert.X), f32(startCornerVert.Y))
+					arcCenter := FPt(
+						edgeCornerVert.X+cornerDirs[i].X*concaveRadius[i],
+						edgeCornerVert.Y+cornerDirs[i].Y*concaveRadius[i],
+					)
 
-					c := (startCorner + 1) % 4
-					nextVert := rectCornerVert(cornerRect, c)
-					p.LineTo(f32(nextVert.X), f32(nextVert.Y))
+					p.MoveTo(f32(edgeCornerVert.X), f32(edgeCornerVert.Y))
 
-					c = (c + 1) % 4
-					arcCenter := rectCornerVert(cornerRect, c)
-					startAngle := Pi*0.5 + Pi*0.5*f32(c)
+					startAngle := Pi*0.5 + Pi*0.5*f32(i)
 					endAngle := startAngle - Pi*0.5
 					p.Arc(
 						f32(arcCenter.X), f32(arcCenter.Y),
@@ -1003,10 +1014,6 @@ func DrawRoundBoardTile(
 						startAngle, endAngle,
 						ebv.CounterClockwise,
 					)
-
-					c = (c + 1) % 4
-					nextVert = rectCornerVert(cornerRect, c)
-					p.LineTo(f32(nextVert.X), f32(nextVert.Y))
 
 					p.Close()
 
@@ -1025,9 +1032,11 @@ func DrawRoundBoardTile(
 			cornerRect := rectCornerRect(rect, corner)
 			roundVert := rectCornerVert(cornerRect, roundCorner)
 
+			radius := cornerRadius(corner)
+
 			arcCenter := FPoint{
-				X: roundVert.X + cornerDirs[roundOpposite].X*radiusPx,
-				Y: roundVert.Y + cornerDirs[roundOpposite].Y*radiusPx,
+				X: roundVert.X + cornerDirs[roundOpposite].X*radius,
+				Y: roundVert.Y + cornerDirs[roundOpposite].Y*radius,
 			}
 
 			startAngle := Pi + Pi*0.5*f64(roundCorner)
@@ -1035,7 +1044,7 @@ func DrawRoundBoardTile(
 
 			p.Arc(
 				f32(arcCenter.X), f32(arcCenter.Y),
-				f32(radiusPx), f32(startAngle), f32(endAngle), ebv.Clockwise,
+				f32(radius), f32(startAngle), f32(endAngle), ebv.Clockwise,
 			)
 
 			c := roundCorner
@@ -1084,8 +1093,10 @@ func DrawRoundBoardTile(
 			var isConcave [4]bool
 			var concaveRadius [4]float64
 
+			radius := cornerRadius(unRevealed)
+
 			isConcave[unRevealed] = true
-			concaveRadius[unRevealed] = radiusPx
+			concaveRadius[unRevealed] = radius
 
 			paths := getConcaveOrSharpCornersRectPath(
 				isConcave, concaveRadius,
@@ -1155,10 +1166,30 @@ func (g *Game) Draw(dst *eb.Image) {
 
 	// draw revealed tiles
 	{
+		// TEST TEST TEST TEST TEST TEST TEST
+		radiuses := New2DArray[float64](g.Board.Width, g.Board.Height)
+		{
+			fw := f64(g.Board.Width - 1)
+			fh := f64(g.Board.Height - 1)
+
+			maxLength := math.Sqrt(fw*fw + fh*fh)
+
+			for x := 0; x < g.Board.Width; x++ {
+				for y := 0; y < g.Board.Height; y++ {
+					fx := f64(x)
+					fy := f64(y)
+
+					radiuses[x][y] = math.Sqrt(fx*fx+fy*fy) / maxLength
+				}
+			}
+		}
+		// TEST TEST TEST TEST TEST TEST TEST
+
 		boardRect := g.BoardRect()
 		DrawRoundBoardTile(
 			dst,
 			g.Board.Revealed,
+			radiuses,
 			boardRect,
 			ColorTileRevealed1, ColorTileRevealed2,
 			ColorTileRevealedStroke, 4,
@@ -1171,6 +1202,7 @@ func (g *Game) Draw(dst *eb.Image) {
 		DrawRoundBoardTile(
 			dst,
 			g.Board.Revealed,
+			radiuses,
 			boardRect,
 			ColorTileRevealed1, ColorTileRevealed2,
 			ColorTileRevealedStroke, 4,
