@@ -1,10 +1,11 @@
 package main
 
 import (
+	"image/color"
+	"math"
+
 	eb "github.com/hajimehoshi/ebiten/v2"
 	ebv "github.com/hajimehoshi/ebiten/v2/vector"
-	//"math"
-	"image/color"
 )
 
 func GetRectPath(rect FRectangle) *ebv.Path {
@@ -178,6 +179,63 @@ func StrokeRoundRectEx(
 	strokeOp.Width = float32(stroke)
 	strokeOp.MiterLimit = 4
 	StrokePath(dst, path, strokeOp, clr, antialias)
+}
+
+func FastArc(p *ebv.Path, x, y, radius, startAngle, endAngle float64, dir ebv.Direction, segments int) {
+	if segments == 0 {
+		compass := FPt(radius, 0)
+
+		start := compass.Rotate(startAngle).Add(FPt(x, y))
+		end := compass.Rotate(endAngle).Add(FPt(x, y))
+
+		p.LineTo(f32(start.X), f32(start.Y))
+		p.LineTo(f32(end.X), f32(end.Y))
+
+		return
+	}
+
+	// copy pasted from ebiten Arc function
+	// Adjust the angles.
+	var da float64
+	if dir == ebv.Clockwise {
+		for startAngle > endAngle {
+			endAngle += 2 * math.Pi
+		}
+		da = float64(endAngle - startAngle)
+	} else {
+		for startAngle < endAngle {
+			startAngle += 2 * math.Pi
+		}
+		da = float64(startAngle - endAngle)
+	}
+
+	if da >= 2*math.Pi {
+		da = 2 * math.Pi
+		if dir == ebv.Clockwise {
+			endAngle = startAngle + 2*math.Pi
+		} else {
+			startAngle = endAngle + 2*math.Pi
+		}
+	}
+
+	compass := FPt(radius, 0)
+	arcCenter := FPt(x, y)
+
+	start := compass.Rotate(startAngle).Add(arcCenter)
+
+	p.LineTo(f32(start.X), f32(start.Y))
+
+	segmentAngle := da / f64(segments+1)
+	angle := startAngle
+
+	for range segments {
+		angle += segmentAngle
+		v := compass.Rotate(angle).Add(arcCenter)
+		p.LineTo(f32(v.X), f32(v.Y))
+	}
+
+	end := compass.Rotate(endAngle).Add(arcCenter)
+	p.LineTo(f32(end.X), f32(end.Y))
 }
 
 func DrawVerticies(

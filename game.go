@@ -498,7 +498,7 @@ func (g *Game) StartRevealAnimation(revealsBefore, revealsAfter [][]bool, origin
 
 	maxDist := math.Sqrt(fw*fw + fh*fh)
 
-	const maxDuration = time.Millisecond * 1000
+	const maxDuration = time.Millisecond * 900
 	const minDuration = time.Millisecond * 20
 
 	for x := range g.Board.Width {
@@ -930,6 +930,7 @@ func DrawRoundBoardTile(
 	strokeColor color.Color, strokeWidth float64,
 	doFill bool,
 ) {
+	const segmentCount = 6
 	boardWidth := len(board)
 	boardHeight := len(board[0])
 
@@ -1077,13 +1078,15 @@ func DrawRoundBoardTile(
 
 					p.MoveTo(f32(edgeCornerVert.X), f32(edgeCornerVert.Y))
 
-					startAngle := Pi*0.5 + Pi*0.5*f32(i)
+					startAngle := Pi*0.5 + Pi*0.5*f64(i)
 					endAngle := startAngle - Pi*0.5
-					p.Arc(
-						f32(arcCenter.X), f32(arcCenter.Y),
-						f32(concaveRadius[i]),
+					FastArc(
+						p,
+						(arcCenter.X), (arcCenter.Y),
+						(concaveRadius[i]),
 						startAngle, endAngle,
 						ebv.CounterClockwise,
+						segmentCount,
 					)
 
 					p.Close()
@@ -1113,9 +1116,11 @@ func DrawRoundBoardTile(
 			startAngle := Pi + Pi*0.5*f64(roundCorner)
 			endAngle := startAngle + Pi*0.5
 
-			p.Arc(
-				f32(arcCenter.X), f32(arcCenter.Y),
-				f32(radius), f32(startAngle), f32(endAngle), ebv.Clockwise,
+			FastArc(
+				p,
+				(arcCenter.X), (arcCenter.Y),
+				(radius), (startAngle), (endAngle), ebv.Clockwise,
+				segmentCount,
 			)
 
 			c := roundCorner

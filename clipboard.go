@@ -11,9 +11,17 @@ var TheClipboardManager struct {
 }
 
 func InitClipboardManager() {
+	InfoLogger.Print("initializing clipboard")
+
 	cm := &TheClipboardManager
 	err := clipboard.Init()
 	cm.Initialized = err == nil
+
+	if err == nil {
+		InfoLogger.Print("clipboard initialized")
+	} else {
+		ErrorLogger.Printf("failed to initialize clipboard %v", err)
+	}
 }
 
 func ClipboardWriteText(str string) {

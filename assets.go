@@ -71,7 +71,7 @@ func LoadAssets() {
 
 	var hotReloadPath string
 
-	if HotReload {
+	if FlagHotReload {
 		var err error
 		if hotReloadPath, err = RelativePath("./"); err != nil {
 			ErrorLogger.Fatalf("failed to get assets path: %v", err)
@@ -81,7 +81,7 @@ func LoadAssets() {
 	loadData := func(filePath string) ([]byte, error) {
 		var data []byte
 		var err error
-		if HotReload {
+		if FlagHotReload {
 			data, err = os.ReadFile(filepath.Join(hotReloadPath, filePath))
 		} else {
 			data, err = fs.ReadFile(EmbeddedAssets, filePath)
