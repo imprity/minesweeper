@@ -289,13 +289,15 @@ func (ct *ColorTablePicker) Draw(dst *eb.Image) {
 type Game struct {
 	Board Board
 
-	MineCount      [DifficultySize]int
-	BoardTileCount [DifficultySize]int
+	MineCount      [DifficultySize]int // constant
+	BoardTileCount [DifficultySize]int // constant
 
 	BoardTouched bool
 
 	TileHighLights    [][]TileHighLight
-	HighlightDuraiton time.Duration
+	HighlightDuraiton time.Duration // constant
+
+	RevealAnimTimers [][]Timer
 
 	GameState GameState
 
@@ -310,12 +312,12 @@ type Game struct {
 
 	BoardSizeRatio float64 // relative to min(ScreenWidth, ScreenHeight)
 
-	TopUIMarginHorizontal float64
-	TopUIMarginTop        float64
-	TopUIMarginBottom     float64
+	TopUIMarginHorizontal float64 // constant
+	TopUIMarginTop        float64 // constant
+	TopUIMarginBottom     float64 // constant
 
-	TopUIButtonButtonRatio float64
-	TopUIButtonTextRatio   float64
+	TopUIButtonButtonRatio float64 // constant
+	TopUIButtonTextRatio   float64 // constant
 
 	DebugMode       bool
 	ColorPickerMode bool
@@ -353,19 +355,10 @@ func NewGame() *Game {
 	g.TopUIButtonButtonRatio = 0.2
 	g.TopUIButtonTextRatio = 0.5
 
-	initBoard := func() {
-		g.Board = NewBoard(
-			g.BoardTileCount[g.Difficulty],
-			g.BoardTileCount[g.Difficulty],
-		)
-
-		g.TileHighLights = New2DArray[TileHighLight](g.Board.Width, g.Board.Height)
-		g.BoardTouched = false
-	}
-	initBoard()
+	g.ResetBoard(g.BoardTileCount[g.Difficulty], g.BoardTileCount[g.Difficulty])
 
 	g.RetryPopup.RegisterButtonCallback(func() {
-		initBoard()
+		g.ResetBoard(g.BoardTileCount[g.Difficulty], g.BoardTileCount[g.Difficulty])
 		g.GameState = GameStatePlaying
 	})
 
@@ -383,7 +376,7 @@ func NewGame() *Game {
 		g.DifficultyButtonLeft.OnClick = func() {
 			g.Difficulty -= 1
 			g.Difficulty = max(g.Difficulty, 0)
-			initBoard()
+			g.ResetBoard(g.BoardTileCount[g.Difficulty], g.BoardTileCount[g.Difficulty])
 		}
 
 		g.DifficultyButtonLeft.Image = SpriteSubView(TileSprite, 11)
@@ -401,7 +394,7 @@ func NewGame() *Game {
 		g.DifficultyButtonRight.OnClick = func() {
 			g.Difficulty += 1
 			g.Difficulty = min(g.Difficulty, DifficultySize-1)
-			initBoard()
+			g.ResetBoard(g.BoardTileCount[g.Difficulty], g.BoardTileCount[g.Difficulty])
 		}
 
 		g.DifficultyButtonRight.Image = SpriteSubView(TileSprite, 12)
@@ -414,6 +407,14 @@ func NewGame() *Game {
 	}
 
 	return g
+}
+
+func (g *Game) ResetBoard(width, height int) {
+	g.Board = NewBoard(width, height)
+
+	g.TileHighLights = New2DArray[TileHighLight](width, height)
+	g.RevealAnimTimers = New2DArray[Timer](width, height)
+	g.BoardTouched = false
 }
 
 func (g *Game) BoardRect() FRectangle {
@@ -490,6 +491,32 @@ func (g *Game) SetTileHightlight(boardX, boardY int) {
 	g.TileHighLights[boardX][boardY].Brightness = 1
 }
 
+func (g *Game) StartRevealAnimation(revealsBefore, revealsAfter [][]bool, originX, originy int) {
+	fw, fh := f64(g.Board.Width), f64(g.Board.Height)
+
+	originF := FPt(f64(originX), f64(originy))
+
+	maxDist := math.Sqrt(fw*fw + fh*fh)
+
+	const maxDuration = time.Millisecond * 1000
+	const minDuration = time.Millisecond * 20
+
+	for x := range g.Board.Width {
+		for y := range g.Board.Width {
+			if !revealsBefore[x][y] && revealsAfter[x][y] {
+				pos := FPt(f64(x), f64(y))
+				dist := pos.Sub(originF).Length()
+				d := time.Duration(f64(maxDuration) * (dist / maxDist))
+				g.RevealAnimTimers[x][y].Duration = max(d, minDuration)
+				g.RevealAnimTimers[x][y].Current = 0
+			} else if revealsAfter[x][y] {
+				g.RevealAnimTimers[x][y].Duration = minDuration
+				g.RevealAnimTimers[x][y].Current = minDuration
+			}
+		}
+	}
+}
+
 func (g *Game) Update() error {
 	cursor := CursorFPt()
 
@@ -502,18 +529,21 @@ func (g *Game) Update() error {
 	// handle board interaction
 	// =================================
 	if g.GameState == GameStatePlaying && boardX >= 0 && boardY >= 0 {
-		if g.Board.Revealed[boardX][boardY] {
+		prevBoard := g.Board.Copy()
+
+		if g.Board.Revealed[boardX][boardY] { // interaction on revealed tile
 			pressedL := IsMouseButtonPressed(eb.MouseButtonLeft)
 			justPressedL := IsMouseButtonJustPressed(eb.MouseButtonLeft)
 
 			pressedR := IsMouseButtonPressed(eb.MouseButtonRight)
 			justPressedR := IsMouseButtonJustPressed(eb.MouseButtonRight)
 
-			if (justPressedL && pressedR) || (justPressedR && pressedL) {
+			if (justPressedL && pressedR) || (justPressedR && pressedL) { // handle step interaction
 				flagCount := g.Board.GetNeighborFlagCount(boardX, boardY)
 				mineCount := g.Board.GetNeighborMineCount(boardX, boardY)
 
-				if flagCount == mineCount { // check if flagged correctly
+				if flagCount == mineCount {
+					// check if flagged correctly
 					flaggedCorrectly := true
 					missedMine := false
 
@@ -534,7 +564,7 @@ func (g *Game) Update() error {
 						}
 					}
 
-					if flaggedCorrectly {
+					if flaggedCorrectly { // if flagged correctly, spread safe area
 						iter.Reset()
 						for iter.HasNext() {
 							x, y := iter.GetNext()
@@ -542,12 +572,12 @@ func (g *Game) Update() error {
 								g.Board.SpreadSafeArea(x, y)
 							}
 						}
-					} else {
+					} else { // if not, you lost!
 						if missedMine {
 							g.GameState = GameStateLost
 						}
 					}
-				} else { // if not flagged correctly just highlight the area
+				} else { // if neighbor mine count and flag count is different just highlight the area
 					iter := NewBoardIterator(boardX-1, boardY-1, boardX+1, boardY+1)
 
 					for iter.HasNext() {
@@ -559,21 +589,21 @@ func (g *Game) Update() error {
 					}
 				}
 			}
-
-		} else { // not revealed
-			if IsMouseButtonJustPressed(eb.MouseButtonLeft) {
+		} else { // interaction on not revealed tile
+			if IsMouseButtonJustPressed(eb.MouseButtonLeft) { // one tile stepping
 				if !g.Board.Flags[boardX][boardY] {
-					if !g.BoardTouched { // mine is not placed
+					if !g.BoardTouched { // first time interaction
+						g.BoardTouched = true
+
+						// remove flags that might have been placed
+						for x := range g.Board.Width {
+							for y := range g.Board.Height {
+								g.Board.Flags[x][y] = false
+							}
+						}
+
 						g.Board.PlaceMines(g.MineCount[g.Difficulty], boardX, boardY)
 						g.Board.SpreadSafeArea(boardX, boardY)
-
-						iter := NewBoardIterator(0, 0, g.Board.Width-1, g.Board.Height-1)
-						// remove any flags that might have been placed
-						for iter.HasNext() {
-							x, y := iter.GetNext()
-							g.Board.Flags[x][y] = false
-						}
-						g.BoardTouched = true
 					} else { // mine has been placed
 						if !g.Board.Mines[boardX][boardY] {
 							g.Board.SpreadSafeArea(boardX, boardY)
@@ -582,7 +612,7 @@ func (g *Game) Update() error {
 						}
 					}
 				}
-			} else if IsMouseButtonJustPressed(eb.MouseButtonRight) {
+			} else if IsMouseButtonJustPressed(eb.MouseButtonRight) { // flagging
 				g.Board.Flags[boardX][boardY] = !g.Board.Flags[boardX][boardY]
 			}
 
@@ -597,19 +627,53 @@ func (g *Game) Update() error {
 		justPressedR := IsMouseButtonJustPressed(eb.MouseButtonRight)
 
 		if justPressedL || justPressedR {
+			// remove flags from the revealed tiles
+			for x := range g.Board.Width {
+				for y := range g.Board.Height {
+					if g.Board.Revealed[x][y] {
+						g.Board.Flags[x][y] = false
+					}
+				}
+			}
+
 			// check if user has won the game
 			if g.Board.IsAllSafeTileRevealed() {
 				g.GameState = GameStateWon
 			}
+
+			// check if we need to start board reveal animation
+			for x := range g.Board.Width {
+				for y := range g.Board.Height {
+					if g.Board.Revealed[x][y] && !prevBoard.Revealed[x][y] {
+						g.StartRevealAnimation(
+							prevBoard.Revealed, g.Board.Revealed, boardX, boardY)
+						break
+					}
+				}
+			}
+
 		}
 	}
 
+	// ============================
 	// update highlights
+	// ============================
 	if !(IsMouseButtonPressed(eb.MouseButtonLeft) || IsMouseButtonPressed(eb.MouseButtonRight)) {
 		for y := 0; y < g.Board.Height; y++ {
 			for x := 0; x < g.Board.Width; x++ {
 				g.TileHighLights[x][y].Brightness -= f64(UpdateDelta()) / f64(g.HighlightDuraiton)
 				g.TileHighLights[x][y].Brightness = max(g.TileHighLights[x][y].Brightness, 0)
+			}
+		}
+	}
+
+	// ===================================
+	// update board reveal animation
+	// ===================================
+	for x := range g.Board.Width {
+		for y := range g.Board.Height {
+			if g.Board.Revealed[x][y] {
+				g.RevealAnimTimers[x][y].TickUp()
 			}
 		}
 	}
@@ -781,16 +845,22 @@ func GetBoardTileRect(
 	}
 }
 
-func (g *Game) DrawTile(dst *eb.Image, boardX, boardY int, tile SubView, clr color.Color) {
+func (g *Game) DrawTile(
+	dst *eb.Image,
+	boardX, boardY int,
+	scale float64,
+	clr color.Color,
+	tile SubView,
+) {
 	tileRect := GetBoardTileRect(g.BoardRect(), g.Board.Width, g.Board.Height, boardX, boardY)
 
 	imgSize := ImageSizeFPt(tile)
 	rectSize := tileRect.Size()
 
-	scale := min(rectSize.X, rectSize.Y) / max(imgSize.X, imgSize.Y)
+	drawScale := min(rectSize.X, rectSize.Y) / max(imgSize.X, imgSize.Y) * scale
 
 	op := &DrawSubViewOptions{}
-	op.GeoM.Concat(TransformToCenter(imgSize.X, imgSize.Y, scale, scale, 0))
+	op.GeoM.Concat(TransformToCenter(imgSize.X, imgSize.Y, drawScale, drawScale, 0))
 	rectCenter := FRectangleCenter(tileRect)
 	op.GeoM.Translate(rectCenter.X, rectCenter.Y)
 	op.ColorScale.ScaleWithColor(clr)
@@ -951,13 +1021,14 @@ func DrawRoundBoardTile(
 			case 2:
 				// pass
 			case 3:
-				ry -= 1
+				rx -= 1
 			}
 
 			rx = Clamp(rx, 0, boardWidth-1)
 			ry = Clamp(ry, 0, boardHeight-1)
 
 			radius := radiuses[rx][ry]
+			radius = Clamp(radius, 0, 1)
 
 			return min(rect.Dx()*0.5, rect.Dy()*0.5) * radius
 		}
@@ -1141,15 +1212,13 @@ func (g *Game) Draw(dst *eb.Image) {
 		x, y := iter.GetNext()
 		tileRect := GetBoardTileRect(g.BoardRect(), g.Board.Width, g.Board.Height, x, y)
 
-		if !g.Board.Revealed[x][y] {
-			bgColor := ColorTable[ColorTileNormal1]
-			if IsOddTile(g.Board.Width, g.Board.Height, x, y) {
-				bgColor = ColorTable[ColorTileNormal2]
-			}
-
-			DrawFilledRect(dst, tileRect, bgColor, true)
-			StrokeRect(dst, tileRect, 1, ColorTable[ColorTileNormalStroke], true)
+		bgColor := ColorTable[ColorTileNormal1]
+		if IsOddTile(g.Board.Width, g.Board.Height, x, y) {
+			bgColor = ColorTable[ColorTileNormal2]
 		}
+
+		DrawFilledRect(dst, tileRect, bgColor, true)
+		StrokeRect(dst, tileRect, 1, ColorTable[ColorTileNormalStroke], true)
 
 		// draw highlight
 		if g.TileHighLights[x][y].Brightness > 0 {
@@ -1166,29 +1235,32 @@ func (g *Game) Draw(dst *eb.Image) {
 
 	// draw revealed tiles
 	{
-		// TEST TEST TEST TEST TEST TEST TEST
+		revealedTiles := New2DArray[bool](g.Board.Width, g.Board.Height)
 		radiuses := New2DArray[float64](g.Board.Width, g.Board.Height)
+
 		{
-			fw := f64(g.Board.Width - 1)
-			fh := f64(g.Board.Height - 1)
-
-			maxLength := math.Sqrt(fw*fw + fh*fh)
-
 			for x := 0; x < g.Board.Width; x++ {
 				for y := 0; y < g.Board.Height; y++ {
-					fx := f64(x)
-					fy := f64(y)
-
-					radiuses[x][y] = math.Sqrt(fx*fx+fy*fy) / maxLength
+					timer := g.RevealAnimTimers[x][y]
+					if timer.Duration > 0 {
+						t := f64(timer.Current) / f64(timer.Duration)
+						t = Clamp(t, 0, 1) // just in case
+						t = t * t
+						const limit = 0.4
+						if t > limit {
+							revealedTiles[x][y] = true
+							radiuses[x][y] = 1 - ((t - limit) / (1 - limit))
+							radiuses[x][y] = max(radiuses[x][y], 0.1)
+						}
+					}
 				}
 			}
 		}
-		// TEST TEST TEST TEST TEST TEST TEST
 
 		boardRect := g.BoardRect()
 		DrawRoundBoardTile(
 			dst,
-			g.Board.Revealed,
+			revealedTiles,
 			radiuses,
 			boardRect,
 			ColorTileRevealed1, ColorTileRevealed2,
@@ -1201,7 +1273,7 @@ func (g *Game) Draw(dst *eb.Image) {
 
 		DrawRoundBoardTile(
 			dst,
-			g.Board.Revealed,
+			revealedTiles,
 			radiuses,
 			boardRect,
 			ColorTileRevealed1, ColorTileRevealed2,
@@ -1217,23 +1289,27 @@ func (g *Game) Draw(dst *eb.Image) {
 
 		// draw flags
 		if g.Board.Flags[x][y] {
-			g.DrawTile(dst, x, y, GetFlagTile(), ColorTable[ColorFlag])
+			g.DrawTile(dst, x, y, 1, ColorTable[ColorFlag], GetFlagTile())
 		}
 
 		// draw mines
 		if g.GameState == GameStateLost && g.Board.Mines[x][y] && !g.Board.Flags[x][y] {
-			g.DrawTile(dst, x, y, GetMineTile(), ColorTable[ColorMine])
+			g.DrawTile(dst, x, y, 1, ColorTable[ColorMine], GetMineTile())
 		}
 
 		// draw number
 		if g.Board.Revealed[x][y] {
 			if count := g.Board.GetNeighborMineCount(x, y); count > 0 {
-				g.DrawTile(dst, x, y, GetNumberTile(count), ColorTableGetNumber(count))
+				scale := f64(g.RevealAnimTimers[x][y].Current) / f64(g.RevealAnimTimers[x][y].Duration)
+				if scale > 0.4 {
+					scale = (scale - 0.4) / 0.6
+					g.DrawTile(dst, x, y, scale, ColorTableGetNumber(count), GetNumberTile(count))
+				}
 			}
 		}
 
 		if g.DebugMode && g.Board.Mines[x][y] {
-			g.DrawTile(dst, x, y, GetMineTile(), color.NRGBA{255, 0, 0, 255})
+			g.DrawTile(dst, x, y, 1, color.NRGBA{255, 0, 0, 255}, GetMineTile())
 		}
 	}
 
