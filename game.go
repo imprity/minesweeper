@@ -910,16 +910,21 @@ func DrawRoundBoardTile(
 
 		radiusPx := min(rect.Dx()*0.5, rect.Dy()*0.5) * radius
 
-		halfDx := rect.Dx() * 0.5
-		halfDy := rect.Dy() * 0.5
+		rectCornerRect := func(r FRectangle, corner int) FRectangle {
+			hx := r.Dx() * 0.5
+			hy := r.Dy() * 0.5
 
-		rectCenter := FRectangleCenter(rect)
-
-		cornerRects := [4]FRectangle{
-			FRectXYWH(rect.Min.X, rect.Min.Y, halfDx, halfDy),
-			FRectXYWH(rect.Min.X+halfDx, rect.Min.Y, halfDx, halfDy),
-			FRectXYWH(rect.Min.X+halfDx, rect.Min.Y+halfDx, halfDx, halfDy),
-			FRectXYWH(rect.Min.X, rect.Min.Y+halfDx, halfDx, halfDy),
+			switch corner {
+			case 0:
+				return FRectXYWH(r.Min.X, r.Min.Y, hx, hy)
+			case 1:
+				return FRectXYWH(r.Min.X+hx, r.Min.Y, hx, hy)
+			case 2:
+				return FRectXYWH(r.Min.X+hx, r.Min.Y+hx, hx, hy)
+			case 3:
+				return FRectXYWH(r.Min.X, r.Min.Y+hx, hx, hy)
+			}
+			return FRectangle{}
 		}
 
 		cornerDirs := [4]FPoint{
@@ -949,74 +954,76 @@ func DrawRoundBoardTile(
 			return (corner + 2) % 4
 		}
 
-		cornerVerts := [4]FPoint{
-			rect.Min,
-			{rect.Max.X, rect.Min.Y},
-			rect.Max,
-			{rect.Min.X, rect.Max.Y},
-		}
-
-		cornerCornerVert := func(parentCorner, childCorner int) FPoint {
-			cr := cornerRects[parentCorner]
-			crCenter := FRectangleCenter(cr)
-			return FPoint{
-				X: crCenter.X + cornerDirs[childCorner].X*cr.Dx()*0.5,
-				Y: crCenter.Y + cornerDirs[childCorner].Y*cr.Dy()*0.5,
+		rectCornerVert := func(r FRectangle, corner int) FPoint {
+			switch corner {
+			case 0:
+				return r.Min
+			case 1:
+				return FPoint{r.Max.X, r.Min.Y}
+			case 2:
+				return r.Max
+			case 3:
+				return FPoint{r.Min.X, r.Max.Y}
 			}
-		}
-
-		// +--1--+
-		// |     |
-		// 0     2
-		// |     |
-		// +--3--+
-		centerVerts := [4]FPoint{
-			{rect.Min.X, rect.Min.Y + halfDy},
-			{rect.Min.X + halfDx, rect.Min.Y},
-			{rect.Max.X, rect.Min.Y + halfDy},
-			{rect.Min.X + halfDx, rect.Max.Y},
+			return FPoint{}
 		}
 
 		getConcaveOrSharpCornersRectPath := func(
 			isConcave [4]bool,
 			concaveRadius [4]float64,
-		) *ebv.Path {
-			p := &ebv.Path{}
-
-			p.MoveTo(f32(centerVerts[0].X), f32(centerVerts[0].Y))
+		) [4]*ebv.Path {
+			var paths [4]*ebv.Path
 
 			for i := range 4 {
-				next := (i + 1) % 4
-				if isConcave[i] {
-					arcCenter := FPoint{
-						X: rectCenter.X + cornerDirs[i].X*concaveRadius[i],
-						Y: rectCenter.Y + cornerDirs[i].Y*concaveRadius[i],
-					}
 
-					startAngle := Pi*0.5 + Pi*0.5*f32(i)
+				if !isConcave[i] {
+					cornerRect := rectCornerRect(rect, i)
+					paths[i] = GetRectPath(cornerRect)
+				} else {
+					p := &ebv.Path{}
+
+					cornerRect := rectCornerRect(rect, i)
+
+					startCorner := cornerOpposite(i)
+					startCornerVert := rectCornerVert(cornerRect, startCorner)
+
+					p.MoveTo(f32(startCornerVert.X), f32(startCornerVert.Y))
+
+					c := (startCorner + 1) % 4
+					nextVert := rectCornerVert(cornerRect, c)
+					p.LineTo(f32(nextVert.X), f32(nextVert.Y))
+
+					c = (c + 1) % 4
+					arcCenter := rectCornerVert(cornerRect, c)
+					startAngle := Pi*0.5 + Pi*0.5*f32(c)
 					endAngle := startAngle - Pi*0.5
 					p.Arc(
 						f32(arcCenter.X), f32(arcCenter.Y),
-						f32(concaveRadius[i]), startAngle, endAngle, ebv.CounterClockwise,
+						f32(concaveRadius[i]),
+						startAngle, endAngle,
+						ebv.CounterClockwise,
 					)
 
-					p.LineTo(f32(centerVerts[next].X), f32(centerVerts[next].Y))
-				} else {
-					p.LineTo(f32(cornerVerts[i].X), f32(cornerVerts[i].Y))
-					p.LineTo(f32(centerVerts[next].X), f32(centerVerts[next].Y))
+					c = (c + 1) % 4
+					nextVert = rectCornerVert(cornerRect, c)
+					p.LineTo(f32(nextVert.X), f32(nextVert.Y))
+
+					p.Close()
+
+					paths[i] = p
 				}
 			}
 
-			p.Close()
-
-			return p
+			return paths
 		}
 
 		drawCorner := func(corner int, roundCorner int) {
 			p := &ebv.Path{}
 
 			roundOpposite := cornerOpposite(roundCorner)
-			roundVert := cornerCornerVert(corner, roundCorner)
+
+			cornerRect := rectCornerRect(rect, corner)
+			roundVert := rectCornerVert(cornerRect, roundCorner)
 
 			arcCenter := FPoint{
 				X: roundVert.X + cornerDirs[roundOpposite].X*radiusPx,
@@ -1034,7 +1041,7 @@ func DrawRoundBoardTile(
 			c := roundCorner
 			c = (c + 1) % 4
 			for range 3 {
-				v := cornerCornerVert(corner, c)
+				v := rectCornerVert(cornerRect, c)
 				p.LineTo(f32(v.X), f32(v.Y))
 				c = (c + 1) % 4
 			}
@@ -1080,25 +1087,28 @@ func DrawRoundBoardTile(
 			isConcave[unRevealed] = true
 			concaveRadius[unRevealed] = radiusPx
 
-			p := getConcaveOrSharpCornersRectPath(
+			paths := getConcaveOrSharpCornersRectPath(
 				isConcave, concaveRadius,
 			)
 
 			if doFill {
-				DrawFilledPathEx(dst, p, cornerColor((unRevealed+1)%4), true, eb.NonZero)
-
+				for _, p := range paths {
+					DrawFilledPath(dst, p, cornerColor((unRevealed+1)%4), true)
+				}
 				drawCorner(cornerOpposite(unRevealed), unRevealed)
 			} else {
-				op := &ebv.StrokeOptions{}
-				op.Width = f32(strokeWidth)
-				op.MiterLimit = 4
-				StrokePath(dst, p, op, strokeColor, true)
+				for _, p := range paths {
+					op := &ebv.StrokeOptions{}
+					op.Width = f32(strokeWidth)
+					op.MiterLimit = 4
+					StrokePath(dst, p, op, strokeColor, true)
+				}
 			}
 		case 4:
 			if doFill {
 				for i, v := range revealed {
 					if v {
-						DrawFilledRect(dst, cornerRects[i], cornerColor(i), true)
+						DrawFilledRect(dst, rectCornerRect(rect, i), cornerColor(i), true)
 					}
 				}
 			}

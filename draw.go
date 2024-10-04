@@ -7,7 +7,7 @@ import (
 	"image/color"
 )
 
-func getRectPath(rect FRectangle) *ebv.Path {
+func GetRectPath(rect FRectangle) *ebv.Path {
 	path := &ebv.Path{}
 	path.MoveTo(f32(rect.Min.X), f32(rect.Min.Y))
 	path.LineTo(f32(rect.Max.X), f32(rect.Min.Y))
@@ -23,7 +23,7 @@ func DrawFilledRect(
 	clr color.Color,
 	antialias bool,
 ) {
-	path := getRectPath(rect)
+	path := GetRectPath(rect)
 	DrawFilledPath(dst, path, clr, antialias)
 }
 
@@ -34,7 +34,7 @@ func StrokeRect(
 	clr color.Color,
 	antialias bool,
 ) {
-	path := getRectPath(rect)
+	path := GetRectPath(rect)
 	strokeOp := &ebv.StrokeOptions{}
 	strokeOp.MiterLimit = 4
 	strokeOp.Width = float32(strokeWidth)
@@ -68,7 +68,7 @@ func StrokeCircle(
 //	|     |
 //	|     |
 //	3 --- 2
-func getRoundRectPath(rect FRectangle, radiuses [4]float64) *ebv.Path {
+func GetRoundRectPath(rect FRectangle, radiuses [4]float64) *ebv.Path {
 	radiusMax := min(rect.Dx()*0.5, rect.Dy()*0.5)
 
 	//clamp the radius to the size of rect
@@ -123,7 +123,7 @@ func DrawFilledRoundRect(
 	clr color.Color,
 	antialias bool,
 ) {
-	path := getRoundRectPath(rect, [4]float64{radius, radius, radius, radius})
+	path := GetRoundRectPath(rect, [4]float64{radius, radius, radius, radius})
 	DrawFilledPath(dst, path, clr, antialias)
 }
 
@@ -135,7 +135,7 @@ func StrokeRoundRect(
 	clr color.Color,
 	antialias bool,
 ) {
-	path := getRoundRectPath(rect, [4]float64{radius, radius, radius, radius})
+	path := GetRoundRectPath(rect, [4]float64{radius, radius, radius, radius})
 	strokeOp := &ebv.StrokeOptions{}
 	strokeOp.MiterLimit = 4
 	strokeOp.Width = float32(stroke)
@@ -155,7 +155,7 @@ func DrawFilledRoundRectEx(
 	clr color.Color,
 	antialias bool,
 ) {
-	path := getRoundRectPath(rect, radiuses)
+	path := GetRoundRectPath(rect, radiuses)
 	DrawFilledPath(dst, path, clr, antialias)
 }
 
@@ -173,7 +173,7 @@ func StrokeRoundRectEx(
 	clr color.Color,
 	antialias bool,
 ) {
-	path := getRoundRectPath(rect, radiuses)
+	path := GetRoundRectPath(rect, radiuses)
 	strokeOp := &ebv.StrokeOptions{}
 	strokeOp.Width = float32(stroke)
 	strokeOp.MiterLimit = 4
