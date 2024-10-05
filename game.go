@@ -742,9 +742,7 @@ func (g *Game) Update() error {
 }
 
 func (g *Game) SetDebugBoardForDecoration() {
-	//MINE_COUNT doesn't really matter here
-	g.Board = NewBoard(15, 15)
-	g.TileHighLights = New2DArray[TileHighLight](g.Board.Width, g.Board.Height)
+	g.ResetBoard(15, 15)
 
 	g.BoardTouched = true
 
@@ -1080,7 +1078,7 @@ func DrawRoundBoardTile(
 
 					startAngle := Pi*0.5 + Pi*0.5*f64(i)
 					endAngle := startAngle - Pi*0.5
-					FastArc(
+					ArcFast(
 						p,
 						(arcCenter.X), (arcCenter.Y),
 						(concaveRadius[i]),
@@ -1116,7 +1114,7 @@ func DrawRoundBoardTile(
 			startAngle := Pi + Pi*0.5*f64(roundCorner)
 			endAngle := startAngle + Pi*0.5
 
-			FastArc(
+			ArcFast(
 				p,
 				(arcCenter.X), (arcCenter.Y),
 				(radius), (startAngle), (endAngle), ebv.Clockwise,

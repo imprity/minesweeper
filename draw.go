@@ -63,13 +63,15 @@ func StrokeCircle(
 		dst, f32(x), f32(y), f32(r), f32(strokeWidth), clr, antialias)
 }
 
-// raidus array maps like this
+// raidus and segments array maps like this
 //
 //	0 --- 1
 //	|     |
 //	|     |
 //	3 --- 2
-func GetRoundRectPath(rect FRectangle, radiuses [4]float64) *ebv.Path {
+func getRoundRectPathImpl(
+	rect FRectangle, radiuses [4]float64, segments [4]int, useSegments bool,
+) *ebv.Path {
 	radiusMax := min(rect.Dx()*0.5, rect.Dy()*0.5)
 
 	//clamp the radius to the size of rect
@@ -83,38 +85,122 @@ func GetRoundRectPath(rect FRectangle, radiuses [4]float64) *ebv.Path {
 	inLeftBottom := FPt(rect.Min.X+radiuses[3], rect.Max.Y-radiuses[3])
 
 	const (
-		d0   float32 = Pi * 0.0
-		d90  float32 = Pi * 0.5
-		d180 float32 = Pi * 1.0
-		d270 float32 = Pi * 1.5
-		d360 float32 = Pi * 2.0
+		d0   = Pi * 0.0
+		d90  = Pi * 0.5
+		d180 = Pi * 1.0
+		d270 = Pi * 1.5
+		d360 = Pi * 2.0
 	)
 
 	path := &ebv.Path{}
 
 	if radiuses[0] != 0 {
-		path.Arc(f32(inLeftTop.X), f32(inLeftTop.Y), f32(radiuses[0]), d180, d270, ebv.Clockwise)
+		if useSegments {
+			ArcFast(
+				path,
+				(inLeftTop.X), (inLeftTop.Y),
+				(radiuses[0]),
+				d180, d270,
+				ebv.Clockwise,
+				segments[0],
+			)
+		} else {
+			path.Arc(
+				f32(inLeftTop.X), f32(inLeftTop.Y),
+				f32(radiuses[0]),
+				d180, d270,
+				ebv.Clockwise,
+			)
+		}
 	} else {
-		path.MoveTo(f32(inLeftTop.X), f32(inLeftTop.Y))
+		path.LineTo(f32(inLeftTop.X), f32(inLeftTop.Y))
 	}
 	path.LineTo(f32(inRightTop.X), f32(inRightTop.Y-radiuses[1]))
 
 	if radiuses[1] != 0 {
-		path.Arc(f32(inRightTop.X), f32(inRightTop.Y), f32(radiuses[1]), d270, d0, ebv.Clockwise)
+		if useSegments {
+			ArcFast(
+				path,
+				(inRightTop.X), (inRightTop.Y),
+				(radiuses[1]),
+				d270, d0,
+				ebv.Clockwise,
+				segments[1],
+			)
+		} else {
+			path.Arc(
+				f32(inRightTop.X), f32(inRightTop.Y),
+				f32(radiuses[1]),
+				d270, d0,
+				ebv.Clockwise,
+			)
+		}
 	}
 	path.LineTo(f32(inRightBottom.X+radiuses[2]), f32(inRightBottom.Y))
 
 	if radiuses[2] != 0 {
-		path.Arc(f32(inRightBottom.X), f32(inRightBottom.Y), f32(radiuses[2]), d0, d90, ebv.Clockwise)
+		if useSegments {
+			ArcFast(
+				path,
+				(inRightBottom.X), (inRightBottom.Y),
+				(radiuses[2]),
+				d0, d90,
+				ebv.Clockwise,
+				segments[2],
+			)
+		} else {
+			path.Arc(
+				f32(inRightBottom.X), f32(inRightBottom.Y),
+				f32(radiuses[2]),
+				d0, d90,
+				ebv.Clockwise,
+			)
+		}
 	}
 	path.LineTo(f32(inLeftBottom.X), f32(inLeftBottom.Y+radiuses[3]))
 
 	if radiuses[3] != 0 {
-		path.Arc(f32(inLeftBottom.X), f32(inLeftBottom.Y), f32(radiuses[3]), d90, d180, ebv.Clockwise)
+		if useSegments {
+			ArcFast(
+				path,
+				(inLeftBottom.X), (inLeftBottom.Y),
+				(radiuses[3]),
+				d90, d180,
+				ebv.Clockwise,
+				segments[3],
+			)
+		} else {
+			path.Arc(
+				f32(inLeftBottom.X), f32(inLeftBottom.Y),
+				f32(radiuses[3]),
+				d90, d180,
+				ebv.Clockwise,
+			)
+		}
 	}
 	path.Close()
 
 	return path
+}
+
+// raidus array maps like this
+//
+//	0 --- 1
+//	|     |
+//	|     |
+//	3 --- 2
+func GetRoundRectPath(rect FRectangle, radiuses [4]float64) *ebv.Path {
+	return getRoundRectPathImpl(rect, radiuses, [4]int{}, false)
+}
+
+// raidus array maps like this
+//
+//	0 --- 1
+//	|     |
+//	|     |
+//	3 --- 2
+func GetRoundRectPathFast(rect FRectangle, radiuses [4]float64, segments [4]int) *ebv.Path {
+	return getRoundRectPathImpl(rect, radiuses, segments, true)
 }
 
 func DrawFilledRoundRect(
@@ -137,6 +223,42 @@ func StrokeRoundRect(
 	antialias bool,
 ) {
 	path := GetRoundRectPath(rect, [4]float64{radius, radius, radius, radius})
+	strokeOp := &ebv.StrokeOptions{}
+	strokeOp.MiterLimit = 4
+	strokeOp.Width = float32(stroke)
+	StrokePath(dst, path, strokeOp, clr, antialias)
+}
+
+func DrawFilledRoundRectFast(
+	dst *eb.Image,
+	rect FRectangle,
+	radius float64,
+	segments int,
+	clr color.Color,
+	antialias bool,
+) {
+	path := GetRoundRectPathFast(
+		rect,
+		[4]float64{radius, radius, radius, radius},
+		[4]int{segments, segments, segments, segments},
+	)
+	DrawFilledPath(dst, path, clr, antialias)
+}
+
+func StrokeRoundRectFast(
+	dst *eb.Image,
+	rect FRectangle,
+	radius float64,
+	segments int,
+	stroke float64,
+	clr color.Color,
+	antialias bool,
+) {
+	path := GetRoundRectPathFast(
+		rect,
+		[4]float64{radius, radius, radius, radius},
+		[4]int{segments, segments, segments, segments},
+	)
 	strokeOp := &ebv.StrokeOptions{}
 	strokeOp.MiterLimit = 4
 	strokeOp.Width = float32(stroke)
@@ -181,7 +303,47 @@ func StrokeRoundRectEx(
 	StrokePath(dst, path, strokeOp, clr, antialias)
 }
 
-func FastArc(p *ebv.Path, x, y, radius, startAngle, endAngle float64, dir ebv.Direction, segments int) {
+// raidus array maps like this
+//
+//	0 --- 1
+//	|     |
+//	|     |
+//	3 --- 2
+func DrawFilledRoundRectFastEx(
+	dst *eb.Image,
+	rect FRectangle,
+	radiuses [4]float64,
+	segments [4]int,
+	clr color.Color,
+	antialias bool,
+) {
+	path := GetRoundRectPathFast(rect, radiuses, segments)
+	DrawFilledPath(dst, path, clr, antialias)
+}
+
+// raidus array maps like this
+//
+//	0 --- 1
+//	|     |
+//	|     |
+//	3 --- 2
+func StrokeRoundRectFastEx(
+	dst *eb.Image,
+	rect FRectangle,
+	radiuses [4]float64,
+	segments [4]int,
+	stroke float64,
+	clr color.Color,
+	antialias bool,
+) {
+	path := GetRoundRectPathFast(rect, radiuses, segments)
+	strokeOp := &ebv.StrokeOptions{}
+	strokeOp.Width = float32(stroke)
+	strokeOp.MiterLimit = 4
+	StrokePath(dst, path, strokeOp, clr, antialias)
+}
+
+func ArcFast(p *ebv.Path, x, y, radius, startAngle, endAngle float64, dir ebv.Direction, segments int) {
 	if segments == 0 {
 		compass := FPt(radius, 0)
 
