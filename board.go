@@ -31,7 +31,7 @@ func NewBoard(width int, height int) Board {
 	return board
 }
 
-func (board *Board) PlaceMines(count, exceptX, exceptY int) {
+func (board *Board) PlaceMines2(count, exceptX, exceptY int) {
 	maxCount := board.Width*board.Height - 1
 	count = min(count, maxCount)
 
@@ -46,6 +46,44 @@ func (board *Board) PlaceMines(count, exceptX, exceptY int) {
 		}
 	}
 	rand.Shuffle(maxCount, func(i, j int) {
+		minePlaces[i], minePlaces[j] = minePlaces[j], minePlaces[i]
+	})
+
+	for i := 0; i < count; i++ {
+		board.Mines[minePlaces[i][0]][minePlaces[i][1]] = true
+	}
+}
+
+func (board *Board) PlaceMines(count, exceptX, exceptY int) {
+	tilesTotal := board.Width * board.Height
+
+	maxCount := tilesTotal - 1
+
+	count = min(count, maxCount)
+
+	minePlaces := make([][2]int, 0, count)
+
+	for x := range board.Width {
+		for y := range board.Height {
+			if Abs(x-exceptX) <= 1 && Abs(y-exceptY) <= 1 {
+				continue
+			}
+
+			minePlaces = append(minePlaces, [2]int{x, y})
+		}
+	}
+
+	if len(minePlaces) < count {
+		for x := exceptX - 1; x <= exceptX+1; x++ {
+			for y := exceptY - 1; y <= exceptY+1; y++ {
+				if !(x == exceptX && y == exceptY) && board.IsPosInBoard(x, y) {
+					minePlaces = append(minePlaces, [2]int{x, y})
+				}
+			}
+		}
+	}
+
+	rand.Shuffle(len(minePlaces), func(i, j int) {
 		minePlaces[i], minePlaces[j] = minePlaces[j], minePlaces[i]
 	})
 

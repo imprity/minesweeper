@@ -389,6 +389,14 @@ func Clamp[N constraints.Integer | constraints.Float](n, minN, maxN N) N {
 	return n
 }
 
+func Abs[N constraints.Signed | constraints.Float](n N) N {
+	if n < 0 {
+		return n * -1
+	}
+
+	return n
+}
+
 /*
 Copyright (c) 2009 The Go Authors. All rights reserved.
 
