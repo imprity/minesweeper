@@ -531,9 +531,7 @@ func NewGame() *Game {
 
 	g.BoardSizeRatio = 0.8
 
-	g.RetryPopup = NewRetryPopup()
-
-	g.ColorTablePicker = NewColorTablePicker()
+	g.ResetBoard(g.BoardTileCount[g.Difficulty], g.BoardTileCount[g.Difficulty])
 
 	g.DifficultySelectUI = NewDifficultySelectUI(g.BoardRect())
 	g.DifficultySelectUI.OnDifficultyChange = func(d Difficulty) {
@@ -541,12 +539,13 @@ func NewGame() *Game {
 		g.ResetBoard(g.BoardTileCount[d], g.BoardTileCount[d])
 	}
 
-	g.ResetBoard(g.BoardTileCount[g.Difficulty], g.BoardTileCount[g.Difficulty])
-
+	g.RetryPopup = NewRetryPopup()
 	g.RetryPopup.RegisterButtonCallback(func() {
 		g.ResetBoard(g.BoardTileCount[g.Difficulty], g.BoardTileCount[g.Difficulty])
 		g.GameState = GameStatePlaying
 	})
+
+	g.ColorTablePicker = NewColorTablePicker()
 
 	return g
 }
@@ -621,27 +620,37 @@ func (g *Game) StartRevealAnimation(revealsBefore, revealsAfter [][]bool, origin
 }
 
 func (g *Game) Update() error {
+	justPressedL := IsMouseButtonJustPressed(eb.MouseButtonLeft)
+	justPressedR := IsMouseButtonJustPressed(eb.MouseButtonRight)
+	pressedL := IsMouseButtonPressed(eb.MouseButtonLeft)
+	pressedR := IsMouseButtonPressed(eb.MouseButtonRight)
+
+	justPressedM := IsMouseButtonJustPressed(eb.MouseButtonMiddle)
+	pressedM := IsMouseButtonPressed(eb.MouseButtonMiddle)
+
 	cursor := CursorFPt()
 
 	boardX, boardY := g.MousePosToBoardPos(cursor)
 
+	// =======================================
 	prevState := g.GameState
 	_ = prevState // might be handy later
+	// =======================================
 
 	// =================================
 	// handle board interaction
 	// =================================
+
+	// =======================================
+	interacted := false
+	// =======================================
+
 	if g.GameState == GameStatePlaying && boardX >= 0 && boardY >= 0 {
+
 		prevBoard := g.Board.Copy()
 
 		if g.Board.Revealed[boardX][boardY] { // interaction on revealed tile
-			pressedL := IsMouseButtonPressed(eb.MouseButtonLeft)
-			justPressedL := IsMouseButtonJustPressed(eb.MouseButtonLeft)
-
-			pressedR := IsMouseButtonPressed(eb.MouseButtonRight)
-			justPressedR := IsMouseButtonJustPressed(eb.MouseButtonRight)
-
-			if (justPressedL && pressedR) || (justPressedR && pressedL) { // handle step interaction
+			if (justPressedL && pressedR) || (justPressedR && pressedL) || (justPressedM) { // handle step interaction
 				flagCount := g.Board.GetNeighborFlagCount(boardX, boardY)
 				mineCount := g.Board.GetNeighborMineCount(boardX, boardY)
 
@@ -673,11 +682,13 @@ func (g *Game) Update() error {
 							x, y := iter.GetNext()
 							if g.Board.IsPosInBoard(x, y) {
 								g.Board.SpreadSafeArea(x, y)
+								interacted = true
 							}
 						}
 					} else { // if not, you lost!
 						if missedMine {
 							g.GameState = GameStateLost
+							interacted = true
 						}
 					}
 				} else { // if neighbor mine count and flag count is different just highlight the area
@@ -688,12 +699,13 @@ func (g *Game) Update() error {
 
 						if g.Board.IsPosInBoard(x, y) && !g.Board.Revealed[x][y] && !g.Board.Flags[x][y] {
 							g.SetTileHightlight(x, y)
+							interacted = true
 						}
 					}
 				}
 			}
 		} else { // interaction on not revealed tile
-			if IsMouseButtonJustPressed(eb.MouseButtonLeft) { // one tile stepping
+			if justPressedL { // one tile stepping
 				if !g.Board.Flags[boardX][boardY] {
 					if !g.BoardTouched { // first time interaction
 						g.BoardTouched = true
@@ -707,29 +719,30 @@ func (g *Game) Update() error {
 
 						g.Board.PlaceMines(g.MineCount[g.Difficulty], boardX, boardY)
 						g.Board.SpreadSafeArea(boardX, boardY)
+						interacted = true
 					} else { // mine has been placed
 						if !g.Board.Mines[boardX][boardY] {
 							g.Board.SpreadSafeArea(boardX, boardY)
 						} else {
 							g.GameState = GameStateLost
 						}
+						interacted = true
 					}
 				}
-			} else if IsMouseButtonJustPressed(eb.MouseButtonRight) { // flagging
+			} else if justPressedR { // flagging
 				g.Board.Flags[boardX][boardY] = !g.Board.Flags[boardX][boardY]
+				interacted = true
 			}
 
 			// TEST TEST TEST TEST TEST TEST
-			if IsMouseButtonJustPressed(eb.MouseButtonMiddle) {
+			if justPressedM {
 				g.Board.Revealed[boardX][boardY] = true
+				interacted = true
 			}
 			// TEST TEST TEST TEST TEST TEST
 		}
 
-		justPressedL := IsMouseButtonJustPressed(eb.MouseButtonLeft)
-		justPressedR := IsMouseButtonJustPressed(eb.MouseButtonRight)
-
-		if justPressedL || justPressedR {
+		if interacted {
 			// remove flags from the revealed tiles
 			for x := range g.Board.Width {
 				for y := range g.Board.Height {
@@ -750,18 +763,19 @@ func (g *Game) Update() error {
 					if g.Board.Revealed[x][y] && !prevBoard.Revealed[x][y] {
 						g.StartRevealAnimation(
 							prevBoard.Revealed, g.Board.Revealed, boardX, boardY)
+
 						break
 					}
 				}
 			}
-
 		}
 	}
 
 	// ============================
 	// update highlights
 	// ============================
-	if !(IsMouseButtonPressed(eb.MouseButtonLeft) || IsMouseButtonPressed(eb.MouseButtonRight)) {
+	// TODO : there must be a cleaner way to check this
+	if !pressedL && !pressedR && !pressedM {
 		for y := 0; y < g.Board.Height; y++ {
 			for x := 0; x < g.Board.Width; x++ {
 				g.TileHighLights[x][y].Brightness -= f64(UpdateDelta()) / f64(g.HighlightDuraiton)
