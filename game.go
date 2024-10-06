@@ -216,11 +216,11 @@ func (ct *ColorTablePicker) Update() {
 	const repeatRate = 50 * time.Millisecond
 	changed := false
 
-	if HandleKeyRepeat(firstRate, repeatRate, eb.KeyW) {
+	if HandleKeyRepeat(firstRate, repeatRate, ColorPickerUp) {
 		ct.TableIndex--
 		changed = true
 	}
-	if HandleKeyRepeat(firstRate, repeatRate, eb.KeyS) {
+	if HandleKeyRepeat(firstRate, repeatRate, ColorPickerDown) {
 		ct.TableIndex++
 		changed = true
 	}
@@ -812,17 +812,17 @@ func (g *Game) Update() error {
 	// ==========================
 	// debug mode
 	// ==========================
-	if IsKeyJustPressed(eb.KeyF1) {
+	if IsKeyJustPressed(ShowMinesKey) {
 		g.DebugMode = !g.DebugMode
 	}
-	if IsKeyJustPressed(eb.KeyF10) {
+	if IsKeyJustPressed(SetToDecoBoard) {
 		g.SetDebugBoardForDecoration()
 	}
 
 	// ==========================
 	// color table picker
 	// ==========================
-	if IsKeyJustPressed(eb.KeyF2) {
+	if IsKeyJustPressed(ShowColorPicker) {
 		g.ColorTablePicker.DoShow = !g.ColorTablePicker.DoShow
 	}
 	g.ColorTablePicker.Update()

@@ -53,11 +53,11 @@ func (a *App) Update() error {
 	// ==========================
 	// asset loading and saving
 	// ==========================
-	if IsKeyJustPressed(eb.KeyF5) {
+	if IsKeyJustPressed(ReloadAssetsKey) {
 		LoadAssets()
 	}
 
-	if IsKeyJustPressed(eb.KeyF6) {
+	if IsKeyJustPressed(SaveColorTableKey) {
 		SaveColorTable()
 	}
 
