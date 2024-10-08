@@ -30,7 +30,8 @@ func init() {
 }
 
 type App struct {
-	Game *Game
+	ShowDebugConsole bool
+	Game             *Game
 }
 
 func NewApp() *App {
@@ -40,15 +41,26 @@ func NewApp() *App {
 }
 
 func (a *App) Update() error {
+	ClearDebugMsgs()
+
 	// ==========================
 	// update global timer
 	// ==========================
 	UpdateGlobalTimer()
 
+	fpsStr := fmt.Sprintf("%.2f", eb.ActualFPS())
+	tpsStr := fmt.Sprintf("%.2f", eb.ActualTPS())
+
 	// ==========================
-	// update fps
+	// update windows title
 	// ==========================
-	eb.SetWindowTitle(fmt.Sprintf("FPS : %.2f", eb.ActualFPS()))
+	eb.SetWindowTitle("Minesweeper FPS: " + fpsStr + " TPS: " + tpsStr)
+
+	// ==========================
+	// DebugPrint
+	// ==========================
+	DebugPrint("FPS", fpsStr)
+	DebugPrint("TPS", tpsStr)
 
 	// ==========================
 	// asset loading and saving
@@ -61,6 +73,13 @@ func (a *App) Update() error {
 		SaveColorTable()
 	}
 
+	// ==========================
+	// debug showing
+	// ==========================
+	if IsKeyJustPressed(ShowDebugConsoleKey) {
+		a.ShowDebugConsole = !a.ShowDebugConsole
+	}
+
 	if err := a.Game.Update(); err != nil {
 		return err
 	}
@@ -70,6 +89,10 @@ func (a *App) Update() error {
 
 func (a *App) Draw(dst *eb.Image) {
 	a.Game.Draw(dst)
+
+	if a.ShowDebugConsole {
+		DrawDebugMsgs(dst)
+	}
 }
 
 func (a *App) Layout(outsideWidth, outsideHeight int) (int, int) {

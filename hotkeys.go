@@ -8,11 +8,13 @@ const (
 	ReloadAssetsKey   eb.Key = eb.KeyF5
 	SaveColorTableKey eb.Key = eb.KeyF10
 
-	ShowMinesKey = eb.KeyF1
+	ShowDebugConsoleKey = eb.KeyF1
 
-	SetToDecoBoard = eb.KeyF7
+	ShowMinesKey = eb.KeyF2
 
-	ShowColorPicker = eb.KeyF2
-	ColorPickerUp   = eb.KeyW
-	ColorPickerDown = eb.KeyS
+	SetToDecoBoardKey = eb.KeyF7
+
+	ShowColorPickerKey = eb.KeyF3
+	ColorPickerUpKey   = eb.KeyW
+	ColorPickerDownKey = eb.KeyS
 )
