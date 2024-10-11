@@ -497,6 +497,10 @@ type Game struct {
 	TileHighLightX     int
 	TileHighLightY     int
 
+	NumberClickTimer Timer
+	NumberClickX     int
+	NumberClickY     int
+
 	RevealAnimTimers   [][]Timer
 	RevealTippingPoint float64 // constant
 
@@ -527,6 +531,7 @@ func NewGame() *Game {
 	}
 
 	g.TileHighLightTimer.Duration = time.Millisecond * 100
+	g.NumberClickTimer.Duration = time.Millisecond * 60
 
 	g.BoardSizeRatio = 0.8
 
@@ -590,12 +595,6 @@ func (g *Game) MousePosToBoardPos(mousePos FPoint) (int, int) {
 	return boardX, boardY
 }
 
-func (g *Game) SetTileHightlight(boardX, boardY int) {
-	g.TileHighLightTimer.Current = g.TileHighLightTimer.Duration
-	g.TileHighLightX = boardX
-	g.TileHighLightY = boardY
-}
-
 func (g *Game) StartRevealAnimation(revealsBefore, revealsAfter [][]bool, originX, originy int) {
 	fw, fh := f64(g.Board.Width), f64(g.Board.Height)
 
@@ -651,6 +650,13 @@ func (g *Game) Update() error {
 
 		if g.Board.Revealed[boardX][boardY] { // interaction on revealed tile
 			if (justPressedL && pressedR) || (justPressedR && pressedL) || (justPressedM) { // handle step interaction
+				interacted = true
+
+				// set number click
+				g.NumberClickTimer.Current = g.NumberClickTimer.Duration
+				g.NumberClickX = boardX
+				g.NumberClickY = boardY
+
 				flagCount := g.Board.GetNeighborFlagCount(boardX, boardY)
 				mineCount := g.Board.GetNeighborMineCount(boardX, boardY)
 
@@ -682,18 +688,18 @@ func (g *Game) Update() error {
 							x, y := iter.GetNext()
 							if g.Board.IsPosInBoard(x, y) {
 								g.Board.SpreadSafeArea(x, y)
-								interacted = true
 							}
 						}
 					} else { // if not, you lost!
 						if missedMine {
 							g.GameState = GameStateLost
-							interacted = true
 						}
 					}
 				} else { // if neighbor mine count and flag count is different just highlight the area
-					g.SetTileHightlight(boardX, boardY)
-					interacted = true
+					// set tile highlight
+					g.TileHighLightTimer.Current = g.TileHighLightTimer.Duration
+					g.TileHighLightX = boardX
+					g.TileHighLightY = boardY
 				}
 			}
 		} else { // interaction on not revealed tile
@@ -770,6 +776,7 @@ func (g *Game) Update() error {
 	// TODO : there must be a cleaner way to check this
 	if !pressedL && !pressedR && !pressedM {
 		g.TileHighLightTimer.TickDown()
+		g.NumberClickTimer.TickDown()
 	}
 
 	// ===================================
@@ -1278,6 +1285,7 @@ func (g *Game) Draw(dst *eb.Image) {
 
 	// draw revealed tiles
 	{
+		// TODO: make this cached
 		revealedTiles := New2DArray[bool](g.Board.Width, g.Board.Height)
 		radiuses := New2DArray[float64](g.Board.Width, g.Board.Height)
 
@@ -1292,6 +1300,8 @@ func (g *Game) Draw(dst *eb.Image) {
 						limit := g.RevealTippingPoint
 						if t > limit {
 							revealedTiles[x][y] = true
+
+							// caculate radius
 							radiuses[x][y] = 1 - ((t - limit) / (1 - limit))
 							radiuses[x][y] = max(radiuses[x][y], 0.1)
 						}
@@ -1346,6 +1356,13 @@ func (g *Game) Draw(dst *eb.Image) {
 				scale := f64(g.RevealAnimTimers[x][y].Current) / f64(g.RevealAnimTimers[x][y].Duration)
 				if scale > g.RevealTippingPoint {
 					scale = (scale - g.RevealTippingPoint) / 0.6
+					// give scale offset with tile highlight
+					var scaleOffset float64
+					if x == g.NumberClickX && y == g.NumberClickY {
+						scaleOffset = f64(g.NumberClickTimer.Current) / f64(g.NumberClickTimer.Duration) * -0.06
+					}
+					scale += scaleOffset
+					scale = Clamp(scale, 0, 1)
 					g.DrawTile(dst, x, y, scale, ColorTableGetNumber(count), GetNumberTile(count))
 				}
 			}
