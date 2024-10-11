@@ -36,8 +36,11 @@ const (
 	ColorNumber7
 	ColorNumber8
 
-	ColorMine
 	ColorFlag
+
+	ColorMineBg1
+	ColorMineBg2
+	ColorMine
 
 	ColorTileHighLight
 
@@ -79,8 +82,11 @@ func init() {
 	setColor(ColorNumber7, color.NRGBA{255, 255, 255, 255})
 	setColor(ColorNumber8, color.NRGBA{100, 100, 100, 255})
 
-	setColor(ColorMine, color.NRGBA{255, 255, 255, 255})
 	setColor(ColorFlag, color.NRGBA{255, 200, 200, 255})
+
+	setColor(ColorMineBg1, color.NRGBA{49, 7, 7, 255})
+	setColor(ColorMineBg2, color.NRGBA{229, 61, 61, 255})
+	setColor(ColorMine, color.NRGBA{255, 255, 255, 255})
 
 	setColor(ColorTileHighLight, color.NRGBA{255, 255, 255, 255})
 

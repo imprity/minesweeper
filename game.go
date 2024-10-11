@@ -969,10 +969,10 @@ func (g *Game) Draw(dst *eb.Image) {
 				innerRadius := radius * min(innerRect.Dx(), innerRect.Dy()) * 0.5
 				outerRadius := radius * min(outerRect.Dx(), outerRect.Dy()) * 0.5
 
-				DrawFilledRoundRectFast(dst, outerRect, outerRadius, 5, color.NRGBA{49, 7, 7, 255}, true)
-				DrawFilledRoundRectFast(dst, innerRect, innerRadius, 5, color.NRGBA{229, 61, 61, 255}, true)
+				DrawFilledRoundRectFast(dst, outerRect, outerRadius, 5, ColorMineBg1, true)
+				DrawFilledRoundRectFast(dst, innerRect, innerRadius, 5, ColorMineBg2, true)
 
-				g.DrawTile(dst, x, y, t*t*t*0.8, 0, (outerMargin+innerMargin)*0.5, color.NRGBA{255, 255, 255, 255}, GetMineTile())
+				g.DrawTile(dst, x, y, t*t*t*0.8, 0, (outerMargin+innerMargin)*0.5, ColorMine, GetMineTile())
 			}
 		}
 	}
