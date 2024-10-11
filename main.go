@@ -6,7 +6,7 @@ import (
 	"log"
 	"os"
 
-	//_ "github.com/silbinarywolf/preferdiscretegpu"
+	_ "github.com/silbinarywolf/preferdiscretegpu"
 	"net/http"
 	_ "net/http/pprof"
 

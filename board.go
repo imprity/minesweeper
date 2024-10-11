@@ -31,29 +31,6 @@ func NewBoard(width int, height int) Board {
 	return board
 }
 
-func (board *Board) PlaceMines2(count, exceptX, exceptY int) {
-	maxCount := board.Width*board.Height - 1
-	count = min(count, maxCount)
-
-	minePlaces := make([][2]int, maxCount)
-	iterCounter := 0
-	iter := NewBoardIterator(0, 0, board.Width-1, board.Height-1)
-	for iter.HasNext() {
-		x, y := iter.GetNext()
-		if !(x == exceptX && y == exceptY) {
-			minePlaces[iterCounter] = [2]int{x, y}
-			iterCounter += 1
-		}
-	}
-	rand.Shuffle(maxCount, func(i, j int) {
-		minePlaces[i], minePlaces[j] = minePlaces[j], minePlaces[i]
-	})
-
-	for i := 0; i < count; i++ {
-		board.Mines[minePlaces[i][0]][minePlaces[i][1]] = true
-	}
-}
-
 func (board *Board) PlaceMines(count, exceptX, exceptY int) {
 	tilesTotal := board.Width * board.Height
 
@@ -106,6 +83,22 @@ func (board *Board) Copy() Board {
 	}
 
 	return copy
+}
+
+func (board *Board) SaveTo(targetBoard Board) {
+	if !(board.Width == targetBoard.Width && board.Height == targetBoard.Height) {
+		ErrorLogger.Fatalf("targetBoard dimmensions is not equal to board")
+	}
+
+	iterator := NewBoardIterator(0, 0, board.Width-1, board.Height-1)
+
+	for iterator.HasNext() {
+		x, y := iterator.GetNext()
+
+		targetBoard.Mines[x][y] = board.Mines[x][y]
+		targetBoard.Revealed[x][y] = board.Revealed[x][y]
+		targetBoard.Flags[x][y] = board.Flags[x][y]
+	}
 }
 
 func (board *Board) IsPosInBoard(posX int, posY int) bool {

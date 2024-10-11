@@ -485,7 +485,8 @@ func (ds *DifficultySelectUI) Draw(dst *eb.Image, boardRect FRectangle) {
 }
 
 type Game struct {
-	Board Board
+	Board     Board
+	PrevBoard Board
 
 	MineCount      [DifficultySize]int // constant
 	BoardTileCount [DifficultySize]int // constant
@@ -552,6 +553,7 @@ func NewGame() *Game {
 
 func (g *Game) ResetBoard(width, height int) {
 	g.Board = NewBoard(width, height)
+	g.PrevBoard = NewBoard(width, height)
 
 	g.RevealAnimTimers = New2DArray[Timer](width, height)
 	g.BoardTouched = false
@@ -645,7 +647,7 @@ func (g *Game) Update() error {
 
 	if g.GameState == GameStatePlaying && boardX >= 0 && boardY >= 0 {
 
-		prevBoard := g.Board.Copy()
+		g.Board.SaveTo(g.PrevBoard)
 
 		if g.Board.Revealed[boardX][boardY] { // interaction on revealed tile
 			if (justPressedL && pressedR) || (justPressedR && pressedL) || (justPressedM) { // handle step interaction
@@ -751,9 +753,9 @@ func (g *Game) Update() error {
 		CHECK_LOOP:
 			for x := range g.Board.Width {
 				for y := range g.Board.Height {
-					if g.Board.Revealed[x][y] && !prevBoard.Revealed[x][y] {
+					if g.Board.Revealed[x][y] && !g.PrevBoard.Revealed[x][y] {
 						g.StartRevealAnimation(
-							prevBoard.Revealed, g.Board.Revealed, boardX, boardY)
+							g.PrevBoard.Revealed, g.Board.Revealed, boardX, boardY)
 
 						break CHECK_LOOP
 					}
