@@ -633,8 +633,8 @@ func (g *Game) Update() error {
 
 	// =======================================
 	prevState := g.GameState
-	_ = prevState // might be handy later
 	// =======================================
+	_ = prevState // might be handy later
 
 	// =================================
 	// handle board interaction
@@ -793,7 +793,7 @@ func (g *Game) Update() error {
 	// ===================================
 	// update RetryPopup
 	// ===================================
-	g.RetryPopup.DoShow = g.GameState == GameStateLost || g.GameState == GameStateWon
+	g.RetryPopup.DoShow = prevState == GameStateLost || prevState == GameStateWon
 	g.RetryPopup.DidWin = g.GameState == GameStateWon
 
 	g.RetryPopup.Update()
