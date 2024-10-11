@@ -830,12 +830,11 @@ func (g *Game) Draw(dst *eb.Image) {
 	// background
 	dst.Fill(ColorTable[ColorBg])
 
-	// ===========================
-	// draw board
-	// ===========================
 	iter := NewBoardIterator(0, 0, g.Board.Width-1, g.Board.Height-1)
 
-	// draw regular tile background
+	// ==============================
+	// draw tile background
+	// ==============================
 	for iter.HasNext() {
 		x, y := iter.GetNext()
 		tileRect := GetBoardTileRect(g.BoardRect(), g.Board.Width, g.Board.Height, x, y)
@@ -863,7 +862,46 @@ func (g *Game) Draw(dst *eb.Image) {
 		}
 	}
 
+	// ==============================
+	// draw defeat animation
+	// ==============================
+	if g.GameState == GameStateLost {
+		iter.Reset()
+		for iter.HasNext() {
+			x, y := iter.GetNext()
+			tileRect := GetBoardTileRect(g.BoardRect(), g.Board.Width, g.Board.Height, x, y)
+
+			// draw defeat animation
+			if g.DefeatMineRevealTimers[x][y].Duration > 0 && g.DefeatMineRevealTimers[x][y].Current >= 0 {
+				timer := g.DefeatMineRevealTimers[x][y]
+				t := f64(timer.Current) / f64(timer.Duration)
+				t = Clamp(t, 0, 1)
+
+				const outerMargin = 1
+				const innerMargin = 2
+
+				outerRect := tileRect.Inset(outerMargin)
+				outerRect = outerRect.Inset(min(outerRect.Dx(), outerRect.Dy()) * 0.5 * (1 - t))
+				innerRect := outerRect.Inset(innerMargin)
+
+				innerRect = innerRect.Add(FPt(0, innerMargin))
+
+				radius := Lerp(1, 0.1, t*t*t)
+
+				innerRadius := radius * min(innerRect.Dx(), innerRect.Dy()) * 0.5
+				outerRadius := radius * min(outerRect.Dx(), outerRect.Dy()) * 0.5
+
+				DrawFilledRoundRectFast(dst, outerRect, outerRadius, 5, ColorMineBg1, true)
+				DrawFilledRoundRectFast(dst, innerRect, innerRadius, 5, ColorMineBg2, true)
+
+				DrawSubViewInRect(dst, innerRect, 1, 0, 0, ColorMine, GetMineTile())
+			}
+		}
+	}
+
+	// ==============================
 	// draw revealed tiles
+	// ==============================
 	{
 		// TODO: make this cached
 		revealedTiles := New2DArray[bool](g.Board.Width, g.Board.Height)
@@ -915,11 +953,12 @@ func (g *Game) Draw(dst *eb.Image) {
 		)
 	}
 
+	// ==============================
 	// draw foreground elements
+	// ==============================
 	iter.Reset()
 	for iter.HasNext() {
 		x, y := iter.GetNext()
-		tileRect := GetBoardTileRect(g.BoardRect(), g.Board.Width, g.Board.Height, x, y)
 
 		// draw flags
 		if g.Board.Flags[x][y] {
@@ -946,34 +985,6 @@ func (g *Game) Draw(dst *eb.Image) {
 
 		if g.DebugMode && g.Board.Mines[x][y] {
 			g.DrawTile(dst, x, y, 1, 0, 0, color.NRGBA{255, 0, 0, 255}, GetMineTile())
-		}
-
-		// draw defeat animation
-		if g.GameState == GameStateLost {
-			if g.DefeatMineRevealTimers[x][y].Duration > 0 && g.DefeatMineRevealTimers[x][y].Current >= 0 {
-				timer := g.DefeatMineRevealTimers[x][y]
-				t := f64(timer.Current) / f64(timer.Duration)
-				t = Clamp(t, 0, 1)
-
-				const outerMargin = 1
-				const innerMargin = 2
-
-				outerRect := tileRect.Inset(outerMargin)
-				outerRect = outerRect.Inset(min(outerRect.Dx(), outerRect.Dy()) * 0.5 * (1 - t))
-				innerRect := outerRect.Inset(innerMargin)
-
-				innerRect = innerRect.Add(FPt(0, innerMargin))
-
-				radius := Lerp(1, 0.1, t*t*t)
-
-				innerRadius := radius * min(innerRect.Dx(), innerRect.Dy()) * 0.5
-				outerRadius := radius * min(outerRect.Dx(), outerRect.Dy()) * 0.5
-
-				DrawFilledRoundRectFast(dst, outerRect, outerRadius, 5, ColorMineBg1, true)
-				DrawFilledRoundRectFast(dst, innerRect, innerRadius, 5, ColorMineBg2, true)
-
-				g.DrawTile(dst, x, y, t*t*t*0.8, 0, (outerMargin+innerMargin)*0.5, ColorMine, GetMineTile())
-			}
 		}
 	}
 
@@ -1229,6 +1240,30 @@ func GetBoardTileRect(
 	}
 }
 
+func DrawSubViewInRect(
+	dst *eb.Image,
+	rect FRectangle,
+	scale float64,
+	offsetX, offsetY float64,
+	clr color.Color,
+	view SubView,
+) {
+	imgSize := ImageSizeFPt(view)
+	rectSize := rect.Size()
+
+	drawScale := min(rectSize.X, rectSize.Y) / max(imgSize.X, imgSize.Y) * scale
+
+	op := &DrawSubViewOptions{}
+	op.GeoM.Concat(TransformToCenter(imgSize.X, imgSize.Y, drawScale, drawScale, 0))
+	rectCenter := FRectangleCenter(rect)
+	op.GeoM.Translate(rectCenter.X, rectCenter.Y)
+	op.GeoM.Translate(offsetX, offsetY)
+	op.ColorScale.ScaleWithColor(clr)
+	op.Filter = eb.FilterLinear
+
+	DrawSubView(dst, view, op)
+}
+
 func (g *Game) DrawTile(
 	dst *eb.Image,
 	boardX, boardY int,
@@ -1238,21 +1273,7 @@ func (g *Game) DrawTile(
 	tile SubView,
 ) {
 	tileRect := GetBoardTileRect(g.BoardRect(), g.Board.Width, g.Board.Height, boardX, boardY)
-
-	imgSize := ImageSizeFPt(tile)
-	rectSize := tileRect.Size()
-
-	drawScale := min(rectSize.X, rectSize.Y) / max(imgSize.X, imgSize.Y) * scale
-
-	op := &DrawSubViewOptions{}
-	op.GeoM.Concat(TransformToCenter(imgSize.X, imgSize.Y, drawScale, drawScale, 0))
-	rectCenter := FRectangleCenter(tileRect)
-	op.GeoM.Translate(rectCenter.X, rectCenter.Y)
-	op.GeoM.Translate(offsetX, offsetY)
-	op.ColorScale.ScaleWithColor(clr)
-	op.Filter = eb.FilterLinear
-
-	DrawSubView(dst, tile, op)
+	DrawSubViewInRect(dst, tileRect, scale, offsetY, offsetY, clr, tile)
 }
 
 func IsOddTile(boardWidth, boardHeight, x, y int) bool {
