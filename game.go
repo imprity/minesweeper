@@ -813,6 +813,8 @@ func (g *Game) Update() error {
 	}
 	if IsKeyJustPressed(SetToDecoBoardKey) {
 		g.SetDebugBoardForDecoration()
+		g.StartRevealAnimation(
+			g.PrevBoard.Revealed, g.Board.Revealed, 0, 0)
 	}
 
 	// ==========================
