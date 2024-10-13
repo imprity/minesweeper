@@ -994,6 +994,26 @@ func (g *Game) Draw(dst *eb.Image) {
 
 	g.DifficultySelectUI.Draw(dst, g.BoardRect())
 
+	// TEST TEST TEST TEST TEST TEST TEST
+	{
+		boardRect := g.BoardRect()
+
+		var rects [4]FRectangle
+
+		rw := boardRect.Dx() * 0.5
+		rh := boardRect.Dy() * 0.5
+
+		rects[0] = FRectXYWH(boardRect.Min.X, boardRect.Min.Y, rw, rh)
+		rects[1] = FRectXYWH(boardRect.Min.X+rw, boardRect.Min.Y, rw, rh)
+		rects[2] = FRectXYWH(boardRect.Min.X, boardRect.Min.Y+rh, rw, rh)
+		rects[3] = FRectXYWH(boardRect.Min.X+rw, boardRect.Min.Y+rh, rw, rh)
+
+		for _, rect := range rects {
+			DrawWaterRect(dst, rect, rects[0].Min)
+		}
+	}
+	// TEST TEST TEST TEST TEST TEST TEST
+
 	g.ColorTablePicker.Draw(dst)
 }
 
@@ -1571,6 +1591,38 @@ func DrawRoundBoardTile(
 			}
 		}
 	}
+}
+
+func DrawWaterRect(dst *eb.Image, rect FRectangle, offset FPoint) {
+	time := f64(GlobalTimerNow()) / f64(time.Second)
+
+	op := &eb.DrawRectShaderOptions{}
+
+	op.Images[0] = WaterShaderImage1
+	op.Images[1] = WaterShaderImage2
+
+	c1 := ColorNormalized(ColorWater1, true)
+	c2 := ColorNormalized(ColorWater2, true)
+	c3 := ColorNormalized(ColorWater3, true)
+	c4 := ColorNormalized(ColorWater4, true)
+
+	op.Uniforms = make(map[string]any)
+	op.Uniforms["Time"] = time
+	op.Uniforms["Offset"] = [2]float64{offset.X, offset.Y}
+	op.Uniforms["Colors"] = [16]float64{
+		c1[0], c1[1], c1[2], c1[3],
+		c2[0], c2[1], c2[2], c2[3],
+		c3[0], c3[1], c3[2], c3[3],
+		c4[0], c4[1], c4[2], c4[3],
+	}
+
+	imgRect := WaterShaderImage1.Bounds()
+	imgFRect := RectToFRect(imgRect)
+
+	op.GeoM.Scale(rect.Dx()/imgFRect.Dx(), rect.Dy()/imgFRect.Dy())
+	op.GeoM.Translate(rect.Min.X, rect.Min.Y)
+
+	dst.DrawRectShader(imgRect.Dx(), imgRect.Dy(), WaterShader, op)
 }
 
 func (a *Game) Layout(outsideWidth, outsideHeight int) (int, int) {

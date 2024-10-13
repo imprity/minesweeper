@@ -44,6 +44,11 @@ const (
 
 	ColorTileHighLight
 
+	ColorWater1
+	ColorWater2
+	ColorWater3
+	ColorWater4
+
 	ColorTableSize
 )
 
@@ -89,6 +94,11 @@ func init() {
 	setColor(ColorMine, color.NRGBA{255, 255, 255, 255})
 
 	setColor(ColorTileHighLight, color.NRGBA{255, 255, 255, 255})
+
+	setColor(ColorWater1, color.NRGBA{0x64, 0x39, 0xFF, 0xFF})
+	setColor(ColorWater2, color.NRGBA{0x4F, 0x75, 0xFF, 0xFF})
+	setColor(ColorWater3, color.NRGBA{0x00, 0xCC, 0xDD, 0xFF})
+	setColor(ColorWater4, color.NRGBA{0x7C, 0xF5, 0xFF, 0xFF})
 
 	for i := ColorTableIndex(0); i < ColorTableSize; i++ {
 		if !colorSet[i] {

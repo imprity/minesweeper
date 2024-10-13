@@ -27,11 +27,23 @@ var (
 	DecoFace  *ebt.GoTextFace
 )
 
+var (
+	WaterShader *eb.Shader
+
+	// these two must have same dimmensions
+	WaterShaderImage1 *eb.Image
+	WaterShaderImage2 *eb.Image
+)
+
 var WhiteImage *eb.Image
 var MissingImage *eb.Image
 
+var MissingShader *eb.Shader
+
 func init() {
+	// ===================
 	// create WhiteImage
+	// ===================
 	whiteImg := image.NewNRGBA(RectWH(3, 3))
 	for x := range 3 {
 		for y := range 3 {
@@ -40,6 +52,10 @@ func init() {
 	}
 	wholeWhiteImage := eb.NewImageFromImage(whiteImg)
 	WhiteImage = wholeWhiteImage.SubImage(image.Rect(1, 1, 2, 2)).(*eb.Image)
+
+	// ===================
+	// create MissingImage
+	// ===================
 
 	// create checker board
 	checkerBoard := image.NewNRGBA(RectWH(6, 6))
@@ -64,6 +80,24 @@ func init() {
 		}
 	}
 	MissingImage = eb.NewImageFromImage(checkerBoard)
+
+	// ===================
+	// create MissingShader
+	// ===================
+	const missingShaderCode string = `
+		//kage:unit pixels
+
+		package main
+
+		func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
+			return color
+		}`
+
+	if shader, err := eb.NewShader([]byte(missingShaderCode)); err == nil {
+		MissingShader = shader
+	} else {
+		ErrorLogger.Fatalf("failed to create missing shader: %v", err)
+	}
 }
 
 func LoadAssets() {
@@ -100,6 +134,20 @@ func LoadAssets() {
 		return data
 	}
 
+	loadImage := func(filepath string) (*eb.Image, error) {
+		imageFile, err := loadData(filepath)
+		if err != nil {
+			return nil, err
+		}
+
+		image, _, err := image.Decode(bytes.NewReader(imageFile))
+		if err != nil {
+			return nil, err
+		}
+
+		return eb.NewImageFromImage(image), nil
+	}
+
 	// load tile sprite
 	{
 		tileSpriteJson := mustLoadData("assets/spritesheet-100x100-5x5.json")
@@ -108,13 +156,12 @@ func LoadAssets() {
 			ErrorLogger.Fatalf("failed to load sprite: %v", err)
 		}
 
-		tileSpriteImageData := mustLoadData("assets/spritesheet-100x100-5x5.png")
-		image, _, err := image.Decode(bytes.NewReader(tileSpriteImageData))
+		image, err := loadImage("assets/spritesheet-100x100-5x5.png")
 		if err != nil {
 			ErrorLogger.Fatalf("failed to load sprite: %v", err)
 		}
 
-		tileSprite.Image = eb.NewImageFromImage(image)
+		tileSprite.Image = image
 		TileSprite = tileSprite
 	}
 
@@ -140,6 +187,36 @@ func LoadAssets() {
 		ClearFace = &ebt.GoTextFace{
 			Source: faceSource,
 			Size:   64,
+		}
+	}
+
+	// load water shader
+	{
+		shaderFile := mustLoadData("assets/water_shader.go")
+		shader, err := eb.NewShader(shaderFile)
+		if err != nil {
+			ErrorLogger.Printf("failed to load WaterShader: %v", err)
+			WaterShader = MissingShader
+		} else {
+			WaterShader = shader
+		}
+
+		const waterShaderImage1Path = "assets/noise6.png"
+		const waterShaderImage2Path = "assets/noise8.png"
+
+		if WaterShaderImage1, err = loadImage(waterShaderImage1Path); err != nil {
+			ErrorLogger.Fatalf("failed to load image %v: %v", waterShaderImage1Path, err)
+		}
+
+		if WaterShaderImage2, err = loadImage(waterShaderImage2Path); err != nil {
+			ErrorLogger.Fatalf("failed to load image %v: %v", waterShaderImage2Path, err)
+		}
+
+		img1Rect := WaterShaderImage1.Bounds()
+		img2Rect := WaterShaderImage2.Bounds()
+
+		if img1Rect.Dx() != img1Rect.Dx() || img2Rect.Dy() != img2Rect.Dy() {
+			ErrorLogger.Fatalf("WaterShaderImage1 and WaterShaderImage2 has different sizes")
 		}
 	}
 
