@@ -97,6 +97,29 @@ func ColorToNRGBA(clr color.Color) color.NRGBA {
 	return color.NRGBAModel.Convert(clr).(color.NRGBA)
 }
 
+func LerpColorRGB(c1, c2 color.Color, t float64) color.NRGBA {
+	c1f := ColorNormalized(c1, false)
+	c2f := ColorNormalized(c2, false)
+
+	r := Lerp(c1f[0], c2f[0], t)
+	g := Lerp(c1f[1], c2f[1], t)
+	b := Lerp(c1f[2], c2f[2], t)
+
+	return color.NRGBA{uint8(r * 255), uint8(g * 255), uint8(b * 255), 255}
+}
+
+func LerpColorRGBA(c1, c2 color.Color, t float64) color.NRGBA {
+	c1f := ColorNormalized(c1, false)
+	c2f := ColorNormalized(c2, false)
+
+	r := Lerp(c1f[0], c2f[0], t)
+	g := Lerp(c1f[1], c2f[1], t)
+	b := Lerp(c1f[2], c2f[2], t)
+	a := Lerp(c1f[3], c2f[3], t)
+
+	return color.NRGBA{uint8(r * 255), uint8(g * 255), uint8(b * 255), uint8(a * 255)}
+}
+
 func ColorToString(clr color.Color) string {
 	c := ColorToNRGBA(clr)
 	return fmt.Sprintf("#%02X%02X%02X%02X", c.R, c.G, c.B, c.A)

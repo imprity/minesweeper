@@ -28,20 +28,21 @@ func _() {
 	_ = x[ColorNumber7-17]
 	_ = x[ColorNumber8-18]
 	_ = x[ColorFlag-19]
-	_ = x[ColorMineBg1-20]
-	_ = x[ColorMineBg2-21]
-	_ = x[ColorMine-22]
-	_ = x[ColorTileHighLight-23]
-	_ = x[ColorWater1-24]
-	_ = x[ColorWater2-25]
-	_ = x[ColorWater3-26]
-	_ = x[ColorWater4-27]
-	_ = x[ColorTableSize-28]
+	_ = x[ColorElementWon-20]
+	_ = x[ColorMineBg1-21]
+	_ = x[ColorMineBg2-22]
+	_ = x[ColorMine-23]
+	_ = x[ColorTileHighLight-24]
+	_ = x[ColorWater1-25]
+	_ = x[ColorWater2-26]
+	_ = x[ColorWater3-27]
+	_ = x[ColorWater4-28]
+	_ = x[ColorTableSize-29]
 }
 
-const _ColorTableIndex_name = "ColorBgColorTopUITitleColorTopUIButtonColorTopUIButtonOnHoverColorTopUIButtonOnDownColorTileNormal1ColorTileNormal2ColorTileNormalStrokeColorTileRevealed1ColorTileRevealed2ColorTileRevealedStrokeColorNumber1ColorNumber2ColorNumber3ColorNumber4ColorNumber5ColorNumber6ColorNumber7ColorNumber8ColorFlagColorMineBg1ColorMineBg2ColorMineColorTileHighLightColorWater1ColorWater2ColorWater3ColorWater4ColorTableSize"
+const _ColorTableIndex_name = "ColorBgColorTopUITitleColorTopUIButtonColorTopUIButtonOnHoverColorTopUIButtonOnDownColorTileNormal1ColorTileNormal2ColorTileNormalStrokeColorTileRevealed1ColorTileRevealed2ColorTileRevealedStrokeColorNumber1ColorNumber2ColorNumber3ColorNumber4ColorNumber5ColorNumber6ColorNumber7ColorNumber8ColorFlagColorElementWonColorMineBg1ColorMineBg2ColorMineColorTileHighLightColorWater1ColorWater2ColorWater3ColorWater4ColorTableSize"
 
-var _ColorTableIndex_index = [...]uint16{0, 7, 22, 38, 61, 83, 99, 115, 136, 154, 172, 195, 207, 219, 231, 243, 255, 267, 279, 291, 300, 312, 324, 333, 351, 362, 373, 384, 395, 409}
+var _ColorTableIndex_index = [...]uint16{0, 7, 22, 38, 61, 83, 99, 115, 136, 154, 172, 195, 207, 219, 231, 243, 255, 267, 279, 291, 300, 315, 327, 339, 348, 366, 377, 388, 399, 410, 424}
 
 func (i ColorTableIndex) String() string {
 	if i < 0 || i >= ColorTableIndex(len(_ColorTableIndex_index)-1) {

@@ -38,6 +38,8 @@ const (
 
 	ColorFlag
 
+	ColorElementWon
+
 	ColorMineBg1
 	ColorMineBg2
 	ColorMine
@@ -88,6 +90,8 @@ func init() {
 	setColor(ColorNumber8, color.NRGBA{100, 100, 100, 255})
 
 	setColor(ColorFlag, color.NRGBA{255, 200, 200, 255})
+
+	setColor(ColorElementWon, color.NRGBA{0, 0, 0, 255})
 
 	setColor(ColorMineBg1, color.NRGBA{49, 7, 7, 255})
 	setColor(ColorMineBg2, color.NRGBA{229, 61, 61, 255})
