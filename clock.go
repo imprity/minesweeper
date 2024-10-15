@@ -39,6 +39,14 @@ func (t *Timer) TickDown() {
 	}
 }
 
+func (t *Timer) Normalize() float64 {
+	return Clamp(f64(t.Current)/f64(t.Duration), 0, 1)
+}
+
+func (t *Timer) NormalizeUnclamped() float64 {
+	return f64(t.Current) / f64(t.Duration)
+}
+
 // Timer for profiling.
 // Usage :
 //

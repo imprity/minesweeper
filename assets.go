@@ -201,8 +201,8 @@ func LoadAssets() {
 			WaterShader = shader
 		}
 
-		const waterShaderImage1Path = "assets/noise6.png"
-		const waterShaderImage2Path = "assets/noise8.png"
+		const waterShaderImage1Path = "assets/noise1.png"
+		const waterShaderImage2Path = "assets/noise2.png"
 
 		if WaterShaderImage1, err = loadImage(waterShaderImage1Path); err != nil {
 			ErrorLogger.Fatalf("failed to load image %v: %v", waterShaderImage1Path, err)

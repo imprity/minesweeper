@@ -56,10 +56,26 @@ func ColorToHSV(clr color.Color) [3]float64 {
 	saturation = Clamp(saturation, 0, 1)
 	brightness = Clamp(brightness, 0, 1)
 
+	for hue < 0 {
+		hue += math.Pi * 2
+	}
+
+	for hue > math.Pi*2 {
+		hue -= math.Pi * 2
+	}
+
 	return [3]float64{hue, saturation, brightness}
 }
 
 func ColorFromHSV(hue, saturation, value float64) color.NRGBA {
+	for hue < 0 {
+		hue += math.Pi * 2
+	}
+
+	for hue > math.Pi*2 {
+		hue -= math.Pi * 2
+	}
+
 	c := saturation * value
 	h := hue / (60 * math.Pi / 180)
 	x := c * (1 - math.Abs(math.Mod(h, 2)-1))

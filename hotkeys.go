@@ -13,6 +13,7 @@ const (
 	ShowMinesKey = eb.KeyF2
 
 	SetToDecoBoardKey = eb.KeyF7
+	InstantWinKey     = eb.KeyF8
 
 	ShowColorPickerKey = eb.KeyF3
 	ColorPickerUpKey   = eb.KeyW

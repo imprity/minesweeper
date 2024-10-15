@@ -345,7 +345,7 @@ func NewDifficultySelectUI(boardRect FRectangle) *DifficultySelectUI {
 		ds.DifficultyButtonLeft.ImageColorOnHover = ColorTopUIButtonOnHover
 		ds.DifficultyButtonLeft.ImageColorOnDown = ColorTopUIButtonOnDown
 
-		// DifficultyButtonRituht
+		// DifficultyButtonRight
 		ds.DifficultyButtonRight = NewImageButton()
 
 		ds.DifficultyButtonRight.Rect = rightRect
@@ -509,7 +509,8 @@ type Game struct {
 	DefeatAnimTimer        Timer
 	DefeatMineRevealTimers [][]Timer
 
-	WinAnimTimer Timer
+	WinAnimTimer      Timer
+	WinTilesAnimTimer [][]Timer
 
 	GameState GameState
 
@@ -521,10 +522,12 @@ type Game struct {
 
 	BoardSizeRatio float64 // relative to min(ScreenWidth, ScreenHeight)
 
-	DebugMode       bool
+	RevealMines     bool
 	ColorPickerMode bool
 
 	ColorTablePicker *ColorTablePicker
+
+	MaskImage *eb.Image
 }
 
 func NewGame() *Game {
@@ -537,11 +540,13 @@ func NewGame() *Game {
 		10, 15, 20,
 	}
 
+	g.MaskImage = eb.NewImage(int(ScreenWidth), int(ScreenHeight))
+
 	g.TileHighLightTimer.Duration = time.Millisecond * 100
 	g.NumberClickTimer.Duration = time.Millisecond * 30
 
-	g.WinAnimTimer.Duration = time.Millisecond * 5000
-	g.WinAnimTimer.Current = 0
+	//g.WinAnimTimer.Duration = time.Millisecond * 1000
+	//g.WinAnimTimer.Current = 0
 
 	g.BoardSizeRatio = 0.8
 
@@ -575,6 +580,8 @@ func (g *Game) ResetBoard(width, height int) {
 	g.RevealAnimTimers = New2DArray[Timer](width, height)
 
 	g.DefeatMineRevealTimers = New2DArray[Timer](width, height)
+
+	g.WinTilesAnimTimer = New2DArray[Timer](width, height)
 
 	g.WinAnimTimer.Current = 0
 }
@@ -734,6 +741,8 @@ func (g *Game) Update() error {
 			if prevState != g.GameState {
 				if g.GameState == GameStateLost {
 					g.StartDefeatAnimation(boardX, boardY)
+				} else if g.GameState == GameStateWon {
+					g.StartWinAnimation(boardX, boardY)
 				}
 			}
 		}
@@ -795,10 +804,18 @@ func (g *Game) Update() error {
 	}
 
 	// ============================
-	// update WinAnimTimer
+	// update win animation
 	// ============================
 	if prevState == GameStateWon {
 		g.WinAnimTimer.TickUp()
+
+		for x := range g.Board.Width {
+			for y := range g.Board.Height {
+				if g.WinTilesAnimTimer[x][y].Duration > 0 {
+					g.WinTilesAnimTimer[x][y].TickUp()
+				}
+			}
+		}
 	}
 
 	// ===================================
@@ -824,10 +841,15 @@ func (g *Game) Update() error {
 	// debug mode
 	// ==========================
 	if IsKeyJustPressed(ShowMinesKey) {
-		g.DebugMode = !g.DebugMode
+		g.RevealMines = !g.RevealMines
 	}
 	if IsKeyJustPressed(SetToDecoBoardKey) {
 		g.SetDebugBoardForDecoration()
+		g.StartRevealAnimation(
+			g.PrevBoard.Revealed, g.Board.Revealed, 0, 0)
+	}
+	if IsKeyJustPressed(InstantWinKey) {
+		g.SetBoardForInstantWin()
 		g.StartRevealAnimation(
 			g.PrevBoard.Revealed, g.Board.Revealed, 0, 0)
 	}
@@ -844,6 +866,9 @@ func (g *Game) Update() error {
 }
 
 func (g *Game) Draw(dst *eb.Image) {
+	// clear mask image
+	g.MaskImage.Clear()
+
 	// background
 	dst.Fill(ColorTable[ColorBg])
 
@@ -868,8 +893,8 @@ func (g *Game) Draw(dst *eb.Image) {
 
 		// lerp color if player has won
 		if g.GameState == GameStateWon {
-			t := f64(g.WinAnimTimer.Current) / f64(g.WinAnimTimer.Duration)
-			t = Clamp(t, 0, 1)
+			//t := f64(g.WinAnimTimer.Current) / f64(g.WinAnimTimer.Duration)
+			t := EaseOutCirc(g.WinAnimTimer.Normalize())
 
 			bgColor = LerpColorRGBA(bgColor, ColorBg, t)
 			strokeColor = LerpColorRGBA(strokeColor, ColorBg, t)
@@ -881,7 +906,7 @@ func (g *Game) Draw(dst *eb.Image) {
 		// draw highlight
 		if g.TileHighLightTimer.Current > 0 {
 			if Abs(x-g.TileHighLightX) <= 1 && Abs(y-g.TileHighLightY) <= 1 && !g.Board.Flags[x][y] && !g.Board.Revealed[x][y] {
-				t := f64(g.TileHighLightTimer.Current) / f64(g.TileHighLightTimer.Duration)
+				t := g.TileHighLightTimer.Normalize()
 				c := ColorTable[ColorTileHighLight]
 				DrawFilledRect(
 					dst,
@@ -937,22 +962,34 @@ func (g *Game) Draw(dst *eb.Image) {
 		// TODO: make this cached
 		revealedTiles := New2DArray[bool](g.Board.Width, g.Board.Height)
 		radiuses := New2DArray[float64](g.Board.Width, g.Board.Height)
+		scales := New2DArray[float64](g.Board.Width, g.Board.Height)
 
-		{
-			for x := 0; x < g.Board.Width; x++ {
-				for y := 0; y < g.Board.Height; y++ {
-					timer := g.RevealAnimTimers[x][y]
-					if timer.Duration > 0 {
-						t := f64(timer.Current) / f64(timer.Duration)
-						t = Clamp(t, 0, 1) // just in case
-						t = t * t
-						limit := g.RevealTippingPoint
-						if t > limit {
-							revealedTiles[x][y] = true
+		// calculate radiuses and scales
+		for x := 0; x < g.Board.Width; x++ {
+			for y := 0; y < g.Board.Height; y++ {
+				timer := g.RevealAnimTimers[x][y]
+				if timer.Duration > 0 {
+					t := f64(timer.Current) / f64(timer.Duration)
+					t = Clamp(t, 0, 1) // just in case
+					t = t * t
+					limit := g.RevealTippingPoint
+					if t > limit {
+						revealedTiles[x][y] = true
 
-							// caculate radius
-							radiuses[x][y] = 1 - ((t - limit) / (1 - limit))
-							radiuses[x][y] = max(radiuses[x][y], 0.1)
+						// caculate radiuses
+						t2 := ((t - limit) / (1 - limit))
+						radiuses[x][y] = max(1-t2, 0.2)
+
+						// calculate scales
+						scales[x][y] = Lerp(1.2, 1.0, t2)
+
+						// ====================
+						// do win animation
+						// ====================
+						if g.GameState == GameStateWon {
+							winT := EaseOutElastic(g.WinTilesAnimTimer[x][y].Normalize())
+							radiuses[x][y] = max(Clamp(1-winT, 0, 1), 0.2)
+							scales[x][y] = winT
 						}
 					}
 				}
@@ -975,29 +1012,32 @@ func (g *Game) Draw(dst *eb.Image) {
 			}
 		*/
 
+		// draw it on mask image
 		boardRect := g.BoardRect()
 		DrawRoundBoardTile(
-			dst,
+			g.MaskImage,
 			revealedTiles,
-			radiuses,
 			boardRect,
-			c1, c2,
-			stroke, 4,
-			false,
+			radiuses,
+			scales,
+			-2,
+			stroke, stroke,
 		)
 
 		// move board slightly up
 		boardRect = boardRect.Add(FPt(0, -1.5))
 
 		DrawRoundBoardTile(
-			dst,
+			g.MaskImage,
 			revealedTiles,
-			radiuses,
 			boardRect,
+			radiuses,
+			scales,
+			0,
 			c1, c2,
-			stroke, 4,
-			true,
 		)
+
+		dst.DrawImage(g.MaskImage, nil)
 	}
 
 	if g.GameState == GameStateWon {
@@ -1012,8 +1052,7 @@ func (g *Game) Draw(dst *eb.Image) {
 			ColorWater4,
 		}
 
-		t := f64(g.WinAnimTimer.Current) / f64(g.WinAnimTimer.Duration)
-		t = Clamp(t, 0, 1)
+		t := EaseOutQuint(g.WinAnimTimer.Normalize())
 
 		for i, c := range colors {
 			nrgba := ColorToNRGBA(c)
@@ -1025,12 +1064,15 @@ func (g *Game) Draw(dst *eb.Image) {
 		DebugPrint("water t", fmt.Sprintf("%.2f", waterT))
 
 		DrawWaterRect(
-			dst,
+			g.MaskImage,
 			rect,
 			GlobalTimerNow()+time.Duration(waterT*f64(time.Second)*10),
 			colors,
 			FPt(0, 0),
+			eb.BlendSourceIn,
 		)
+
+		dst.DrawImage(g.MaskImage, nil)
 	}
 
 	// ==============================
@@ -1038,9 +1080,31 @@ func (g *Game) Draw(dst *eb.Image) {
 	// ==============================
 	iter.Reset()
 	for iter.HasNext() {
-		colorT := f64(g.WinAnimTimer.Current) / f64(g.WinAnimTimer.Duration)
-
 		x, y := iter.GetNext()
+
+		colorT := EaseOutQuint(g.WinTilesAnimTimer[x][y].Normalize())
+		colorT = Clamp(colorT, 0, 1)
+
+		scale := float64(1)
+		// ==================
+		// calculate scale
+		// ==================
+		// reveal scale
+		{
+			t := g.RevealAnimTimers[x][y].Normalize()
+			t = Clamp(t, 0, 1)
+			t = t * t
+			limit := g.RevealTippingPoint
+			if t > limit {
+				scale = (t - limit) / (1 - limit)
+			} else {
+				scale = 0
+			}
+		}
+		// win scale
+		if g.GameState == GameStateWon {
+			scale = EaseOutQuint(g.WinTilesAnimTimer[x][y].Normalize())
+		}
 
 		// draw flags
 		if g.Board.Flags[x][y] {
@@ -1054,27 +1118,22 @@ func (g *Game) Draw(dst *eb.Image) {
 		// draw number
 		if g.Board.Revealed[x][y] {
 			if count := g.Board.GetNeighborMineCount(x, y); count > 0 {
-				scale := f64(g.RevealAnimTimers[x][y].Current) / f64(g.RevealAnimTimers[x][y].Duration)
-				if scale > g.RevealTippingPoint {
-					scale = (scale - g.RevealTippingPoint) / 0.6
-					// give scale offset with tile highlight
-					var scaleOffset float64
-					if x == g.NumberClickX && y == g.NumberClickY {
-						scaleOffset = f64(g.NumberClickTimer.Current) / f64(g.NumberClickTimer.Duration) * -0.06
-					}
-					scale += scaleOffset
-					scale = Clamp(scale, 0, 1)
-
-					var c color.Color = ColorTableGetNumber(count)
-					if g.GameState == GameStateWon {
-						c = LerpColorRGBA(c, ColorElementWon, colorT)
-					}
-					g.DrawTile(dst, x, y, scale, 0, 0, c, GetNumberTile(count))
+				// give scale offset with tile highlight
+				var scaleOffset float64
+				if x == g.NumberClickX && y == g.NumberClickY {
+					scaleOffset = f64(g.NumberClickTimer.Current) / f64(g.NumberClickTimer.Duration) * -0.06
 				}
+				nScale := scale + scaleOffset
+
+				var c color.Color = ColorTableGetNumber(count)
+				if g.GameState == GameStateWon {
+					c = LerpColorRGBA(c, ColorElementWon, colorT)
+				}
+				g.DrawTile(dst, x, y, nScale, 0, 0, c, GetNumberTile(count))
 			}
 		}
 
-		if g.DebugMode && g.Board.Mines[x][y] {
+		if g.RevealMines && g.Board.Mines[x][y] {
 			g.DrawTile(dst, x, y, 1, 0, 0, color.NRGBA{255, 0, 0, 255}, GetMineTile())
 		}
 	}
@@ -1082,18 +1141,20 @@ func (g *Game) Draw(dst *eb.Image) {
 	// ==============================
 	// draw grid if won
 	// ==============================
-	if g.GameState == GameStateWon {
-		iter.Reset()
-		for iter.HasNext() {
-			x, y := iter.GetNext()
-			tileRect := GetBoardTileRect(g.BoardRect(), g.Board.Width, g.Board.Height, x, y)
+	/*
+		if g.GameState == GameStateWon {
+			iter.Reset()
+			for iter.HasNext() {
+				x, y := iter.GetNext()
+				tileRect := GetBoardTileRect(g.BoardRect(), g.Board.Width, g.Board.Height, x, y)
 
-			colorT := f64(g.WinAnimTimer.Current) / f64(g.WinAnimTimer.Duration)
-			c := LerpColorRGBA(color.NRGBA{0, 0, 0, 0}, ColorElementWon, colorT)
+				colorT := EaseOurCirc(g.WinAnimTimer.Normalize())
+				c := LerpColorRGBA(color.NRGBA{0, 0, 0, 0}, ColorElementWon, colorT)
 
-			StrokeRect(dst, tileRect, 2, c, true)
+				StrokeRect(dst, tileRect, 2, c, true)
+			}
 		}
-	}
+	*/
 
 	g.RetryPopup.Draw(dst)
 
@@ -1156,39 +1217,6 @@ func (g *Game) StartRevealAnimation(revealsBefore, revealsAfter [][]bool, origin
 	}
 }
 
-func (g *Game) StartDefeatAnimation2(originX, originy int) {
-	originF := FPt(f64(originX), f64(originy))
-
-	var defeatDuration time.Duration
-
-	for x := range g.Board.Width {
-		for y := range g.Board.Height {
-			if g.Board.Mines[x][y] && !g.Board.Flags[x][y] {
-				var timer Timer
-
-				timer.Duration = time.Millisecond * 150
-
-				if !(Abs(x-originX) <= 1 && Abs(y-originy) <= 1) {
-					dist := FPt(f64(x), f64(y)).Sub(originF).Length()
-					timer.Current = -time.Duration(dist * f64(time.Millisecond) * 100)
-				} else {
-					timer.Current = 0
-				}
-
-				g.DefeatMineRevealTimers[x][y] = timer
-
-				// calculate defeatDuration
-				defeatDuration = max(defeatDuration, timer.Duration-timer.Current)
-			}
-		}
-	}
-
-	defeatDuration += time.Millisecond * 10
-
-	g.DefeatAnimTimer.Duration = defeatDuration
-	g.DefeatAnimTimer.Current = 0
-}
-
 func (g *Game) StartDefeatAnimation(originX, originY int) {
 	var minePoses []image.Point
 
@@ -1243,6 +1271,42 @@ func (g *Game) StartDefeatAnimation(originX, originY int) {
 
 	g.DefeatAnimTimer.Duration = defeatDuration
 	g.DefeatAnimTimer.Current = 0
+}
+
+func (g *Game) StartWinAnimation(originX, originY int) {
+	fw, fh := f64(g.Board.Width), f64(g.Board.Height)
+
+	originF := FPt(f64(originX), f64(originY))
+
+	maxDist := math.Sqrt(fw*fw + fh*fh)
+
+	const maxDuration = time.Millisecond * 3000
+	const minDuration = time.Millisecond * 100
+	const distStartOffset = time.Millisecond * 3
+
+	var winDuration time.Duration
+
+	for x := range g.Board.Width {
+		for y := range g.Board.Height {
+			if g.Board.Revealed[x][y] {
+				pos := FPt(f64(x), f64(y))
+				dist := pos.Sub(originF).Length()
+				d := time.Duration(f64(maxDuration) * (dist / maxDist))
+
+				var timer Timer
+
+				timer.Duration = max(d, minDuration)
+				timer.Current = -time.Duration(dist * f64(distStartOffset))
+
+				winDuration = max(winDuration, timer.Duration-timer.Current)
+
+				g.WinTilesAnimTimer[x][y] = timer
+			}
+		}
+	}
+
+	g.WinAnimTimer.Duration = winDuration + time.Millisecond*400
+	g.WinAnimTimer.Current = 0
 }
 
 func (g *Game) SetDebugBoardForDecoration() {
@@ -1312,6 +1376,37 @@ func (g *Game) SetDebugBoardForDecoration() {
 				}
 
 				g.Board.SpreadSafeArea(x, y)
+			}
+		}
+	}
+}
+
+func (g *Game) SetBoardForInstantWin() {
+	if !g.BoardTouched {
+		g.Board.PlaceMines(g.MineCount[g.Difficulty], g.Board.Width-1, g.Board.Height-1)
+	}
+	g.BoardTouched = true
+
+	// count how many tiles we have to reveal
+	tilesToReveal := 0
+	for x := range g.Board.Width {
+		for y := range g.Board.Height {
+			if !g.Board.Mines[x][y] && !g.Board.Revealed[x][y] {
+				tilesToReveal++
+			}
+		}
+	}
+
+	// reveal that many tiles EXCEPT ONE
+REVEAL_LOOP:
+	for x := range g.Board.Width {
+		for y := range g.Board.Height {
+			if tilesToReveal <= 1 {
+				break REVEAL_LOOP
+			}
+			if !g.Board.Mines[x][y] && !g.Board.Revealed[x][y] {
+				g.Board.Revealed[x][y] = true
+				tilesToReveal--
 			}
 		}
 	}
@@ -1396,7 +1491,7 @@ func IsOddTile(boardWidth, boardHeight, x, y int) bool {
 	}
 }
 
-func DrawRoundBoardTile(
+func DrawRoundBoardTileOld(
 	dst *eb.Image,
 	board [][]bool,
 	radiuses [][]float64,
@@ -1678,7 +1773,93 @@ func DrawRoundBoardTile(
 	}
 }
 
-func DrawWaterRect(dst *eb.Image, rect FRectangle, timeOffset time.Duration, colors [4]color.Color, offset FPoint) {
+func DrawRoundBoardTile(
+	dst *eb.Image,
+	board [][]bool,
+	boardRect FRectangle,
+	radiuses [][]float64,
+	scales [][]float64,
+	inset float64,
+	fillColor1, fillColor2 color.Color,
+) {
+	const segments = 5
+	boardWidth := len(board)
+	boardHeight := len(board[0])
+
+	for x := range boardWidth {
+		for y := range boardWidth {
+			if !board[x][y] {
+				continue
+			}
+			tileRect := GetBoardTileRect(boardRect, boardWidth, boardHeight, x, y)
+			center := FRectangleCenter(tileRect)
+			tileRect = CenterFRectangle(
+				FRectWH(tileRect.Dx()*scales[x][y], tileRect.Dy()*scales[x][y]),
+				center.X, center.Y,
+			)
+			tileRect = tileRect.Inset(inset)
+			radiusPx := min(tileRect.Dx(), tileRect.Dy()) * 0.5 * radiuses[x][y]
+
+			tileRadiuses := [4]float64{
+				radiusPx,
+				radiusPx,
+				radiusPx,
+				radiusPx,
+			}
+
+			if inset <= 0 && scales[x][y] == 1 {
+				for i := range 4 {
+					rx := x
+					ry := y
+					//   0
+					//   |
+					// 3- -1
+					//   |
+					//   2
+
+					switch i {
+					case 0:
+						ry -= 1
+					case 1:
+						rx += 1
+					case 2:
+						ry += 1
+					case 3:
+						rx -= 1
+					}
+
+					if 0 <= rx && rx < boardWidth && 0 <= ry && ry < boardHeight {
+						if board[rx][ry] {
+							tileRadiuses[i] = 0
+							tileRadiuses[(i+1)%4] = 0
+						}
+					}
+				}
+			}
+
+			clr := fillColor1
+			if IsOddTile(boardWidth, boardHeight, x, y) {
+				clr = fillColor2
+			}
+			DrawFilledRoundRectFastEx(
+				dst,
+				tileRect,
+				tileRadiuses,
+				[4]int{segments, segments, segments, segments},
+				clr,
+				true)
+		}
+	}
+}
+
+func DrawWaterRect(
+	dst *eb.Image,
+	rect FRectangle,
+	timeOffset time.Duration,
+	colors [4]color.Color,
+	offset FPoint,
+	blend eb.Blend,
+) {
 	op := &eb.DrawRectShaderOptions{}
 
 	op.Images[0] = WaterShaderImage1
@@ -1705,9 +1886,14 @@ func DrawWaterRect(dst *eb.Image, rect FRectangle, timeOffset time.Duration, col
 	op.GeoM.Scale(rect.Dx()/imgFRect.Dx(), rect.Dy()/imgFRect.Dy())
 	op.GeoM.Translate(rect.Min.X, rect.Min.Y)
 
+	op.Blend = blend
+
 	dst.DrawRectShader(imgRect.Dx(), imgRect.Dy(), WaterShader, op)
 }
 
-func (a *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
+func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
+	if g.MaskImage.Bounds().Dx() != outsideWidth || g.MaskImage.Bounds().Dy() != outsideHeight {
+		g.MaskImage = eb.NewImage(outsideWidth, outsideHeight)
+	}
 	return outsideWidth, outsideHeight
 }

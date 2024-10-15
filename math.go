@@ -378,10 +378,6 @@ func FRectMoveTo(rect FRectangle, x, y float64) FRectangle {
 	}
 }
 
-func Lerp[F constraints.Float](a, b, t F) F {
-	return a + (b-a)*t
-}
-
 func Clamp[N constraints.Integer | constraints.Float](n, minN, maxN N) N {
 	n = min(n, maxN)
 	n = max(n, minN)
@@ -395,6 +391,40 @@ func Abs[N constraints.Signed | constraints.Float](n N) N {
 	}
 
 	return n
+}
+
+func Lerp[F constraints.Float](a, b, t F) F {
+	return a + (b-a)*t
+}
+
+// ========================
+// easing functions
+// ========================
+
+// copy pasted from https://easings.net/#
+
+func EaseOutCirc(t float64) float64 {
+	return 1 - math.Pow(1-t, 2)
+}
+
+func EaseOutCubic(t float64) float64 {
+	return 1 - math.Pow(1-t, 3)
+}
+
+func EaseOutQuint(t float64) float64 {
+	return 1 - math.Pow(1-t, 5)
+}
+
+func EaseOutElastic(t float64) float64 {
+	const c4 = (2 * math.Pi) / 3
+
+	if t == 0 {
+		return 0
+	}
+	if t == 1 {
+		return 1
+	}
+	return math.Pow(2, -10*t)*math.Sin((t*10-0.75)*c4) + 1
 }
 
 /*

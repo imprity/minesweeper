@@ -32,20 +32,20 @@ func rotateV(v vec2, theta float) vec2 {
 func imageSrc0At01(at vec2) vec4 {
 	origin0 := imageSrc0Origin()
 	imgSize := imageSrc0Size()
-	return imageSrc0At(mod(imgSize*at, imgSize) + origin0)
+	return imageSrc0UnsafeAt(mod(imgSize*at, imgSize) + origin0)
 }
 
 func imageSrc1At01(at vec2) vec4 {
 	origin0 := imageSrc0Origin()
 	imgSize := imageSrc1Size()
-	return imageSrc1At(mod(imgSize*at, imgSize) + origin0)
+	return imageSrc1UnsafeAt(mod(imgSize*at, imgSize) + origin0)
 }
 
 func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
 	time := Time * 5
 	_ = time
 
-	pos := (dstPos.xy + Offset) / imageDstSize().y
+	pos := (dstPos.xy + Offset - imageDstOrigin()) / imageDstSize().y
 
 	scale1 := 2.0
 	pos1 := pos * vec2(scale1, scale1*3)
