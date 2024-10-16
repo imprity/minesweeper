@@ -27,16 +27,14 @@ type Timer struct {
 
 func (t *Timer) TickUp() {
 	t.Current += UpdateDelta()
-	if t.Current > t.Duration {
-		t.Current = t.Duration
-	}
 }
 
 func (t *Timer) TickDown() {
 	t.Current -= UpdateDelta()
-	if t.Current < 0 {
-		t.Current = 0
-	}
+}
+
+func (t *Timer) ClampCurrent() {
+	t.Current = Clamp(t.Current, 0, t.Duration)
 }
 
 func (t *Timer) Normalize() float64 {

@@ -415,6 +415,18 @@ func EaseOutQuint(t float64) float64 {
 	return 1 - math.Pow(1-t, 5)
 }
 
+func EaseInCirc(t float64) float64 {
+	return math.Pow(t, 2)
+}
+
+func EaseInCubic(t float64) float64 {
+	return math.Pow(t, 3)
+}
+
+func EaseInQuint(t float64) float64 {
+	return math.Pow(t, 5)
+}
+
 func EaseOutElastic(t float64) float64 {
 	const c4 = (2 * math.Pi) / 3
 

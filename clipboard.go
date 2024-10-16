@@ -1,3 +1,9 @@
+// golang.design/x/clipboard thinks
+// crashing is the best solution despite it having a
+// Init funciton that returns an error...
+
+//go:build !js && !(!windows && !cgo)
+
 package main
 
 import (
