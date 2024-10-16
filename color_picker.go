@@ -311,8 +311,11 @@ func (cp *ColorPicker) Draw(dst *eb.Image) {
 		cursorX := svRect.Min.X + svRect.Dx()*cp.Saturation
 		cursorY := svRect.Min.Y + svRect.Dy()*(1-cp.Value)
 
+		fillColor := ColorToNRGBA(cp.Color())
+		fillColor.A = 255
+
 		DrawFilledCircle(
-			dst, cursorX, cursorY, cursorSize, cp.Color(), true)
+			dst, cursorX, cursorY, cursorSize, fillColor, true)
 		StrokeCircle(
 			dst, cursorX, cursorY, cursorSize, 3, color.NRGBA{255, 255, 255, 255}, true)
 	}

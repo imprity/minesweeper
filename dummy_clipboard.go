@@ -6,9 +6,6 @@
 
 package main
 
-import (
-)
-
 var TheClipboardManager struct {
 	Initialized bool
 }

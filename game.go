@@ -1000,7 +1000,7 @@ func (g *Game) Draw(dst *eb.Image) {
 			x, y := iter.GetNext()
 			timer := g.RevealAnimTimers[x][y]
 			if timer.Duration > 0 {
-				t := f64(timer.Current) / f64(timer.Duration)
+				t := timer.Normalize()
 				t = Clamp(t, 0, 1) // just in case
 				t = t * t
 				limit := g.RevealTippingPoint
