@@ -22,6 +22,8 @@ var EmbeddedAssets embed.FS
 
 var TileSprite Sprite
 
+var RetryButtonImage *eb.Image
+
 var (
 	ClearFace *ebt.GoTextFace
 	DecoFace  *ebt.GoTextFace
@@ -163,6 +165,15 @@ func LoadAssets() {
 
 		tileSprite.Image = image
 		TileSprite = tileSprite
+	}
+
+	// load RetryButtonImage
+	{
+		image, err := loadImage("assets/retry-button.png")
+		if err != nil {
+			ErrorLogger.Fatalf("failed to load retry button image: %v", err)
+		}
+		RetryButtonImage = image
 	}
 
 	// load fonts

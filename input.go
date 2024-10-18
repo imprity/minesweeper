@@ -15,6 +15,10 @@ func IsMouseButtonJustPressed(button eb.MouseButton) bool {
 	return ebi.IsMouseButtonJustPressed(button)
 }
 
+func IsMouseButtonJustReleased(button eb.MouseButton) bool {
+	return ebi.IsMouseButtonJustReleased(button)
+}
+
 var mouseButtonRepeatMap = make(map[eb.MouseButton]time.Duration)
 
 func HandleMouseButtonRepeat(

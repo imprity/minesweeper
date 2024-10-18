@@ -26,12 +26,22 @@ type BaseButton struct {
 	RepeateOnHold         bool
 	FirstRate, RepeatRate time.Duration
 
+	// If ActOnRelease is true,
+	// insted of OnClick being called on press
+	// it's called when button is released.
+	//
+	// Does nothing if RepeateOnHold is true
+	ActOnRelease        bool
+	ReadyToActOnRelease bool
+
 	State ButtonState
 }
 
 func (b *BaseButton) Update() {
+	// TODO : This whole shit is a god damn mess!!!
 	if b.Disabled {
 		b.State = ButtonStateNormal
+		b.ReadyToActOnRelease = false
 		return
 	}
 
@@ -49,20 +59,37 @@ func (b *BaseButton) Update() {
 			}
 		} else {
 			if IsMouseButtonJustPressed(eb.MouseButtonLeft) {
-				if b.OnClick != nil {
-					b.OnClick()
+				if b.ActOnRelease {
+					b.ReadyToActOnRelease = true
+				} else {
+					if b.OnClick != nil {
+						b.OnClick()
+					}
 				}
 			}
 		}
 
+		if b.ActOnRelease && b.ReadyToActOnRelease && IsMouseButtonJustReleased(eb.MouseButtonLeft) {
+			if b.OnClick != nil {
+				b.OnClick()
+			}
+			b.ReadyToActOnRelease = false
+		}
+
 		// handle state
 		if IsMouseButtonPressed(eb.MouseButtonLeft) {
+			b.ReadyToActOnRelease = true
 			b.State = ButtonStateDown
 		} else {
 			b.State = ButtonStateHover
 		}
 	} else {
 		b.State = ButtonStateNormal
+		b.ReadyToActOnRelease = false
+	}
+
+	if !b.ActOnRelease {
+		b.ReadyToActOnRelease = false
 	}
 }
 

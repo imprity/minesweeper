@@ -378,6 +378,12 @@ func FRectMoveTo(rect FRectangle, x, y float64) FRectangle {
 	}
 }
 
+func FRectScaleCentered(rect FRectangle, scale float64) FRectangle {
+	newRect := FRectWH(rect.Dx()*scale, rect.Dy()*scale)
+	center := FRectangleCenter(rect)
+	return CenterFRectangle(newRect, center.X, center.Y)
+}
+
 func Clamp[N constraints.Integer | constraints.Float](n, minN, maxN N) N {
 	n = min(n, maxN)
 	n = max(n, minN)

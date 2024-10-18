@@ -179,6 +179,91 @@ func (rp *RetryPopup) Draw(dst *eb.Image) {
 	}
 }
 
+type RetryButton struct {
+	BaseButton
+
+	ButtonHoverOffset float64
+}
+
+func NewRetryButton() *RetryButton {
+	rb := new(RetryButton)
+
+	return rb
+}
+
+func (rb *RetryButton) Update() {
+	rb.BaseButton.Update()
+
+	if rb.State == ButtonStateHover {
+		rb.ButtonHoverOffset = Lerp(rb.ButtonHoverOffset, 1, 0.3)
+	} else if rb.State == ButtonStateDown {
+		rb.ButtonHoverOffset = 0
+	} else {
+		rb.ButtonHoverOffset = Lerp(rb.ButtonHoverOffset, 0, 0.3)
+	}
+
+	if rb.Disabled {
+		rb.ButtonHoverOffset = 0
+	}
+}
+
+func (rb *RetryButton) Draw(dst *eb.Image) {
+	bottomRect := FRectWH(rb.Rect.Dx(), rb.Rect.Dy()*0.95)
+	topRect := bottomRect
+
+	topRect = FRectMoveTo(topRect, rb.Rect.Min.X, rb.Rect.Min.Y)
+	bottomRect = FRectMoveTo(bottomRect, rb.Rect.Min.X, rb.Rect.Max.Y-bottomRect.Dy())
+
+	if rb.State == ButtonStateDown {
+		topRect = FRectMoveTo(topRect, bottomRect.Min.X, bottomRect.Min.Y)
+	} else if rb.State == ButtonStateHover {
+		topRect = topRect.Add(FPt(0, -topRect.Dy()*0.025*rb.ButtonHoverOffset))
+	}
+
+	const segments = 6
+	const radius = 0.4
+
+	radiusPx := min(bottomRect.Dx(), bottomRect.Dy()) * 0.5 * radius
+
+	DrawFilledRoundRectFast(
+		dst,
+		bottomRect,
+		radiusPx,
+		segments,
+		color.NRGBA{0, 0, 0, 255},
+		true,
+	)
+
+	DrawFilledRoundRectFast(
+		dst,
+		topRect,
+		radiusPx,
+		segments,
+		color.NRGBA{105, 223, 145, 255},
+		true,
+	)
+
+	imgRect := RectToFRect(RetryButtonImage.Bounds())
+	scale := min(topRect.Dx(), topRect.Dy()) / max(imgRect.Dx(), imgRect.Dy())
+	scale *= 0.6
+
+	center := FRectangleCenter(topRect)
+
+	op := &eb.DrawImageOptions{}
+	op.GeoM.Concat(TransformToCenter(imgRect.Dx(), imgRect.Dy(), scale, scale, 0))
+	op.GeoM.Translate(center.X, center.Y-topRect.Dy()*0.02)
+	op.ColorScale.ScaleWithColor(color.NRGBA{0, 0, 0, 255})
+	op.Filter = eb.FilterLinear
+
+	dst.DrawImage(RetryButtonImage, op)
+
+	op.GeoM.Translate(0, topRect.Dy()*0.02*2)
+	op.ColorScale.Reset()
+	op.ColorScale.ScaleWithColor(color.NRGBA{255, 255, 255, 255})
+
+	dst.DrawImage(RetryButtonImage, op)
+}
+
 type ColorTablePicker struct {
 	DoShow bool
 
@@ -511,11 +596,15 @@ type Game struct {
 	WinAnimTimer      Timer
 	WinTilesAnimTimer [][]Timer
 
+	RetryButton *RetryButton
+
+	RetryButtonAnimTimer Timer
+	ShowRetryButton      bool
+	RetryButtonShowPoint float64
+
 	GameState GameState
 
 	Difficulty Difficulty
-
-	RetryPopup *RetryPopup
 
 	DifficultySelectUI *DifficultySelectUI
 
@@ -548,6 +637,18 @@ func NewGame() *Game {
 
 	g.RevealTippingPoint = 0.4
 
+	g.RetryButtonAnimTimer.Duration = time.Millisecond * 600
+
+	g.RetryButtonShowPoint = 0.4
+
+	g.RetryButton = NewRetryButton()
+	g.RetryButton.ActOnRelease = true
+
+	g.RetryButton.OnClick = func() {
+		g.ResetBoard(g.BoardTileCount[g.Difficulty], g.BoardTileCount[g.Difficulty])
+		g.GameState = GameStatePlaying
+	}
+
 	g.ResetBoard(g.BoardTileCount[g.Difficulty], g.BoardTileCount[g.Difficulty])
 
 	g.DifficultySelectUI = NewDifficultySelectUI(g.BoardRect())
@@ -556,11 +657,13 @@ func NewGame() *Game {
 		g.ResetBoard(g.BoardTileCount[d], g.BoardTileCount[d])
 	}
 
-	g.RetryPopup = NewRetryPopup()
-	g.RetryPopup.RegisterButtonCallback(func() {
-		g.ResetBoard(g.BoardTileCount[g.Difficulty], g.BoardTileCount[g.Difficulty])
-		g.GameState = GameStatePlaying
-	})
+	/*
+		g.RetryPopup = NewRetryPopup()
+		g.RetryPopup.RegisterButtonCallback(func() {
+			g.ResetBoard(g.BoardTileCount[g.Difficulty], g.BoardTileCount[g.Difficulty])
+			g.GameState = GameStatePlaying
+		})
+	*/
 
 	g.ColorTablePicker = NewColorTablePicker()
 
@@ -580,6 +683,8 @@ func (g *Game) ResetBoard(width, height int) {
 	g.WinTilesAnimTimer = New2DArray[Timer](width, height)
 
 	g.WinAnimTimer.Current = 0
+
+	g.RetryButtonAnimTimer.Current = 0
 }
 
 func (g *Game) Update() error {
@@ -841,17 +946,28 @@ func (g *Game) Update() error {
 	}
 
 	// ===================================
-	// update RetryPopup
+	// update RetryButton
 	// ===================================
-	g.RetryPopup.DoShow = false
-	if g.GameState == GameStateLost {
-		g.RetryPopup.DoShow = g.DefeatAnimTimer.Current >= g.DefeatAnimTimer.Duration
-	} else if g.GameState == GameStateWon {
-		g.RetryPopup.DoShow = g.WinAnimTimer.Current >= g.WinAnimTimer.Duration
-	}
-	g.RetryPopup.DidWin = g.GameState == GameStateWon
+	{
 
-	g.RetryPopup.Update()
+		if g.GameState == GameStateWon && g.WinAnimTimer.Current >= g.WinAnimTimer.Duration {
+			g.ShowRetryButton = true
+			g.RetryButtonAnimTimer.TickUp()
+		} else if g.GameState == GameStateLost && g.DefeatAnimTimer.Current >= g.DefeatAnimTimer.Duration {
+			g.ShowRetryButton = true
+			g.RetryButtonAnimTimer.TickUp()
+		}
+
+		rect := g.RetryButtonRect()
+		t := (g.RetryButtonAnimTimer.Normalize() - g.RetryButtonShowPoint) / (1 - g.RetryButtonShowPoint)
+		t = Clamp(t, 0, 1)
+		scale := EaseOutElastic(t)
+		rect = FRectScaleCentered(rect, scale)
+		g.RetryButton.Rect = rect
+
+		g.RetryButton.Disabled = !(g.ShowRetryButton && scale > 0.5)
+		g.RetryButton.Update()
+	}
 
 	// ===================================
 	// update DifficultySelectUI
@@ -894,6 +1010,25 @@ func (g *Game) Draw(dst *eb.Image) {
 	// background
 	dst.Fill(ColorTable[ColorBg])
 
+	retryButtonRect := g.RetryButtonRect()
+	retryButtonRect = retryButtonRect.Inset(-5)
+
+	getRetryButtonOffset := func(tileRect FRectangle) float64 {
+		if !g.ShowRetryButton {
+			return 1
+		}
+
+		if tileRect.Overlaps(retryButtonRect) {
+			t := g.RetryButtonAnimTimer.Normalize()
+			t = t / g.RetryButtonShowPoint
+			t = Clamp(t, 0, 1)
+			t = EaseInQuint(t)
+			return 1 - t
+		} else {
+			return 1
+		}
+	}
+
 	iter := NewBoardIterator(0, 0, g.Board.Width-1, g.Board.Height-1)
 
 	// ==============================
@@ -922,8 +1057,12 @@ func (g *Game) Draw(dst *eb.Image) {
 			strokeColor = LerpColorRGBA(strokeColor, ColorBg, t)
 		}
 
+		// apply retry button scale offset
+		scale := getRetryButtonOffset(tileRect)
+		tileRect = FRectScaleCentered(tileRect, scale)
+
 		DrawFilledRect(dst, tileRect, bgColor, true)
-		StrokeRect(dst, tileRect, 1, strokeColor, true)
+		StrokeRect(dst, tileRect, 0, strokeColor, true)
 	}
 
 	// =================
@@ -956,6 +1095,10 @@ func (g *Game) Draw(dst *eb.Image) {
 		for iter.HasNext() {
 			x, y := iter.GetNext()
 			tileRect := GetBoardTileRect(g.BoardRect(), g.Board.Width, g.Board.Height, x, y)
+
+			// apply retry button scale offset
+			retryScale := getRetryButtonOffset(tileRect)
+			tileRect = FRectScaleCentered(tileRect, retryScale)
 
 			// draw defeat animation
 			if g.DefeatMineRevealTimers[x][y].Duration > 0 && g.DefeatMineRevealTimers[x][y].Current >= 0 {
@@ -1030,6 +1173,21 @@ func (g *Game) Draw(dst *eb.Image) {
 			}
 		}
 
+		// =================================
+		// apply retry button scale offset
+		// =================================
+		iter.Reset()
+		for iter.HasNext() {
+			x, y := iter.GetNext()
+			tileRect := GetBoardTileRect(g.BoardRect(), g.Board.Width, g.Board.Height, x, y)
+			scale := getRetryButtonOffset(tileRect)
+			if scale == 0 {
+				revealedTiles[x][y] = false
+			} else {
+				scales[x][y] *= scale
+			}
+		}
+
 		var c1 color.Color = ColorTileRevealed1
 		var c2 color.Color = ColorTileRevealed2
 		var stroke color.Color = ColorTileRevealedStroke
@@ -1100,37 +1258,42 @@ func (g *Game) Draw(dst *eb.Image) {
 	iter.Reset()
 	for iter.HasNext() {
 		x, y := iter.GetNext()
+		tileRect := GetBoardTileRect(g.BoardRect(), g.Board.Width, g.Board.Height, x, y)
 
 		colorT := EaseOutQuint(g.WinTilesAnimTimer[x][y].Normalize())
 		colorT = Clamp(colorT, 0, 1)
 
-		scale := float64(1)
 		// ==================
-		// calculate scale
+		// calculate scales
 		// ==================
+
 		// reveal scale
+		var revealScale float64 = 1
 		{
 			t := g.RevealAnimTimers[x][y].Normalize()
 			t = Clamp(t, 0, 1)
 			t = t * t
 			limit := g.RevealTippingPoint
 			if t > limit {
-				scale = (t - limit) / (1 - limit)
+				revealScale = (t - limit) / (1 - limit)
 			} else {
-				scale = 0
+				revealScale = 0
 			}
 		}
+
 		// win scale
+		var winScale float64 = 1
 		if g.GameState == GameStateWon {
 			scaleT := g.WinTilesAnimTimer[x][y].NormalizeUnclamped() * 0.5
 			scaleT = Clamp(scaleT, 0, 1)
-			scale = EaseOutElastic(scaleT)
+			winScale = EaseOutElastic(scaleT)
 
 			// force scale to be 1 at the end of win animation
-			scale = max(scale, EaseInQuint(g.WinAnimTimer.Normalize()))
+			winScale = max(winScale, EaseInQuint(g.WinAnimTimer.Normalize()))
 		}
 
-		scale = Clamp(scale, 0, 1)
+		// retry button scale
+		retryScale := getRetryButtonOffset(tileRect)
 
 		// draw flags
 		if g.Board.Flags[x][y] {
@@ -1138,7 +1301,7 @@ func (g *Game) Draw(dst *eb.Image) {
 			if g.GameState == GameStateWon {
 				c = LerpColorRGBA(c, ColorElementWon, colorT)
 			}
-			g.DrawTile(dst, x, y, 1, 0, 0, c, GetFlagTile())
+			g.DrawTile(dst, x, y, winScale*retryScale, 0, 0, c, GetFlagTile())
 		}
 
 		// draw number
@@ -1149,7 +1312,7 @@ func (g *Game) Draw(dst *eb.Image) {
 				if x == g.NumberClickX && y == g.NumberClickY {
 					scaleOffset = g.NumberClickTimer.Normalize() * -0.06
 				}
-				nScale := scale + scaleOffset
+				nScale := Clamp(revealScale*winScale*retryScale, 0, 1) + scaleOffset
 
 				var c color.Color = ColorTableGetNumber(count)
 				if g.GameState == GameStateWon {
@@ -1165,7 +1328,9 @@ func (g *Game) Draw(dst *eb.Image) {
 		}
 	}
 
-	g.RetryPopup.Draw(dst)
+	if g.ShowRetryButton {
+		g.RetryButton.Draw(dst)
+	}
 
 	g.DifficultySelectUI.Draw(dst, g.BoardRect())
 
@@ -1201,6 +1366,14 @@ func (g *Game) MousePosToBoardPos(mousePos FPoint) (int, int) {
 	boardY = min(boardY, g.Board.Height-1)
 
 	return boardX, boardY
+}
+
+func (g *Game) RetryButtonRect() FRectangle {
+	boardRect := g.BoardRect()
+	whMin := min(boardRect.Dx(), boardRect.Dy())
+	rect := FRectWH(whMin*0.25, whMin*0.25)
+	center := FRectangleCenter(boardRect)
+	return CenterFRectangle(rect, center.X, center.Y)
 }
 
 func (g *Game) StartRevealAnimation(revealsBefore, revealsAfter [][]bool, originX, originy int) {
