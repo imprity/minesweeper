@@ -596,11 +596,14 @@ type Game struct {
 	WinAnimTimer      Timer
 	WinTilesAnimTimer [][]Timer
 
-	RetryButton *RetryButton
-
+	RetryButton          *RetryButton
 	RetryButtonAnimTimer Timer
 	ShowRetryButton      bool
-	RetryButtonShowPoint float64
+	RetryButtonShowPoint float64 // constant
+
+	ResetAnimTimer        Timer
+	ResetAnimTippingPoint float64 // constant
+	ResetAnimTimerStarted bool
 
 	GameState GameState
 
@@ -608,7 +611,7 @@ type Game struct {
 
 	DifficultySelectUI *DifficultySelectUI
 
-	BoardSizeRatio float64 // relative to min(ScreenWidth, ScreenHeight)
+	BoardSizeRatio float64 // constant, relative to min(ScreenWidth, ScreenHeight)
 
 	RevealMines     bool
 	ColorPickerMode bool
@@ -645,9 +648,11 @@ func NewGame() *Game {
 	g.RetryButton.ActOnRelease = true
 
 	g.RetryButton.OnClick = func() {
-		g.ResetBoard(g.BoardTileCount[g.Difficulty], g.BoardTileCount[g.Difficulty])
-		g.GameState = GameStatePlaying
+		g.ResetAnimTimerStarted = true
 	}
+
+	g.ResetAnimTimer.Duration = time.Millisecond * 400
+	g.ResetAnimTippingPoint = 0.3
 
 	g.ResetBoard(g.BoardTileCount[g.Difficulty], g.BoardTileCount[g.Difficulty])
 
@@ -656,14 +661,6 @@ func NewGame() *Game {
 		g.Difficulty = d
 		g.ResetBoard(g.BoardTileCount[d], g.BoardTileCount[d])
 	}
-
-	/*
-		g.RetryPopup = NewRetryPopup()
-		g.RetryPopup.RegisterButtonCallback(func() {
-			g.ResetBoard(g.BoardTileCount[g.Difficulty], g.BoardTileCount[g.Difficulty])
-			g.GameState = GameStatePlaying
-		})
-	*/
 
 	g.ColorTablePicker = NewColorTablePicker()
 
@@ -685,6 +682,10 @@ func (g *Game) ResetBoard(width, height int) {
 	g.WinAnimTimer.Current = 0
 
 	g.RetryButtonAnimTimer.Current = 0
+
+	g.ResetAnimTimer.Current = 0
+
+	g.ResetAnimTimerStarted = false
 }
 
 func (g *Game) Update() error {
@@ -910,7 +911,7 @@ func (g *Game) Update() error {
 		}
 	}
 
-	// skipping defeat animaiton
+	// skipping defeat animation
 	if prevState == GameStateLost {
 		if g.DefeatAnimTimer.Current < g.DefeatAnimTimer.Duration && justPressedAny {
 			// TODO :
@@ -962,11 +963,27 @@ func (g *Game) Update() error {
 		t := (g.RetryButtonAnimTimer.Normalize() - g.RetryButtonShowPoint) / (1 - g.RetryButtonShowPoint)
 		t = Clamp(t, 0, 1)
 		scale := EaseOutElastic(t)
+
+		if g.ResetAnimTimerStarted {
+			scale *= Clamp(1-g.ResetAnimTimer.Normalize()/g.ResetAnimTippingPoint, 0, 1)
+		}
+
 		rect = FRectScaleCentered(rect, scale)
 		g.RetryButton.Rect = rect
 
-		g.RetryButton.Disabled = !(g.ShowRetryButton && scale > 0.5)
+		g.RetryButton.Disabled = !(g.ShowRetryButton && scale > 0.5) && !g.ResetAnimTimerStarted
 		g.RetryButton.Update()
+	}
+
+	// ===================================
+	// update restart animation
+	// ===================================
+	if g.ResetAnimTimerStarted {
+		g.ResetAnimTimer.TickUp()
+	}
+	if g.ResetAnimTimer.Current >= g.ResetAnimTimer.Duration {
+		g.ResetBoard(g.BoardTileCount[g.Difficulty], g.BoardTileCount[g.Difficulty])
+		g.GameState = GameStatePlaying
 	}
 
 	// ===================================
@@ -1013,20 +1030,21 @@ func (g *Game) Draw(dst *eb.Image) {
 	retryButtonRect := g.RetryButtonRect()
 	retryButtonRect = retryButtonRect.Inset(-5)
 
-	getRetryButtonOffset := func(tileRect FRectangle) float64 {
-		if !g.ShowRetryButton {
-			return 1
+	getRetryButtonOffset := func(tileRect FRectangle) (float64, bool) {
+		overlaps := tileRect.Overlaps(retryButtonRect)
+		if !overlaps {
+			return 1, false
 		}
 
-		if tileRect.Overlaps(retryButtonRect) {
-			t := g.RetryButtonAnimTimer.Normalize()
-			t = t / g.RetryButtonShowPoint
-			t = Clamp(t, 0, 1)
-			t = EaseInQuint(t)
-			return 1 - t
-		} else {
-			return 1
+		if !g.ShowRetryButton {
+			return 1, overlaps
 		}
+
+		t := g.RetryButtonAnimTimer.Normalize()
+		t = t / g.RetryButtonShowPoint
+		t = Clamp(t, 0, 1)
+		t = EaseInQuint(t)
+		return 1 - t, true
 	}
 
 	iter := NewBoardIterator(0, 0, g.Board.Width-1, g.Board.Height-1)
@@ -1051,14 +1069,42 @@ func (g *Game) Draw(dst *eb.Image) {
 
 		// lerp color if player has won
 		if g.GameState == GameStateWon {
-			t := EaseOutCirc(g.WinAnimTimer.Normalize())
+			if g.ResetAnimTimer.Normalize() < g.ResetAnimTippingPoint {
+				t := EaseOutCirc(g.WinAnimTimer.Normalize())
 
-			bgColor = LerpColorRGBA(bgColor, ColorBg, t)
-			strokeColor = LerpColorRGBA(strokeColor, ColorBg, t)
+				bgColor = LerpColorRGBA(bgColor, ColorBg, t)
+				strokeColor = LerpColorRGBA(strokeColor, ColorBg, t)
+			}
 		}
 
+		var scale float64 = 1
+
 		// apply retry button scale offset
-		scale := getRetryButtonOffset(tileRect)
+		retryScale, inRetry := getRetryButtonOffset(tileRect)
+
+		var resetScale float64 = 1
+
+		if g.ResetAnimTimerStarted {
+			limit := g.ResetAnimTippingPoint
+			t := g.ResetAnimTimer.Normalize()
+
+			if t < limit {
+				resetScale = 1 - Clamp(t/limit, 0, 1)
+			} else {
+				resetScale = Clamp((t-limit)/(1-limit), 0, 1)
+			}
+		}
+
+		if inRetry {
+			if g.ResetAnimTimer.Normalize() < g.ResetAnimTippingPoint {
+				scale = retryScale
+			} else {
+				scale = resetScale
+			}
+		} else {
+			scale = resetScale
+		}
+
 		tileRect = FRectScaleCentered(tileRect, scale)
 
 		DrawFilledRect(dst, tileRect, bgColor, true)
@@ -1096,9 +1142,16 @@ func (g *Game) Draw(dst *eb.Image) {
 			x, y := iter.GetNext()
 			tileRect := GetBoardTileRect(g.BoardRect(), g.Board.Width, g.Board.Height, x, y)
 
-			// apply retry button scale offset
-			retryScale := getRetryButtonOffset(tileRect)
-			tileRect = FRectScaleCentered(tileRect, retryScale)
+			var scale float64 = 1
+
+			retryScale, _ := getRetryButtonOffset(tileRect)
+			scale *= retryScale
+
+			if g.ResetAnimTimerStarted {
+				scale *= 1 - Clamp(g.ResetAnimTimer.Normalize()/g.ResetAnimTippingPoint, 0, 1)
+			}
+
+			tileRect = FRectScaleCentered(tileRect, scale)
 
 			// draw defeat animation
 			if g.DefeatMineRevealTimers[x][y].Duration > 0 && g.DefeatMineRevealTimers[x][y].Current >= 0 {
@@ -1180,11 +1233,27 @@ func (g *Game) Draw(dst *eb.Image) {
 		for iter.HasNext() {
 			x, y := iter.GetNext()
 			tileRect := GetBoardTileRect(g.BoardRect(), g.Board.Width, g.Board.Height, x, y)
-			scale := getRetryButtonOffset(tileRect)
+			scale, _ := getRetryButtonOffset(tileRect)
 			if scale == 0 {
 				revealedTiles[x][y] = false
 			} else {
 				scales[x][y] *= scale
+			}
+		}
+
+		// =================================
+		// apply ResetAnimTimer
+		// =================================
+		if g.ResetAnimTimerStarted {
+			iter.Reset()
+			for iter.HasNext() {
+				x, y := iter.GetNext()
+				scale := 1 - Clamp(g.ResetAnimTimer.Normalize()/g.ResetAnimTippingPoint, 0, 1)
+				if scale == 0 {
+					revealedTiles[x][y] = false
+				} else {
+					scales[x][y] *= scale
+				}
 			}
 		}
 
@@ -1293,7 +1362,12 @@ func (g *Game) Draw(dst *eb.Image) {
 		}
 
 		// retry button scale
-		retryScale := getRetryButtonOffset(tileRect)
+		retryScale, _ := getRetryButtonOffset(tileRect)
+
+		var resetScale float64 = 1
+		if g.ResetAnimTimerStarted {
+			resetScale = 1 - Clamp(g.ResetAnimTimer.Normalize()/g.ResetAnimTippingPoint, 0, 1)
+		}
 
 		// draw flags
 		if g.Board.Flags[x][y] {
@@ -1301,7 +1375,7 @@ func (g *Game) Draw(dst *eb.Image) {
 			if g.GameState == GameStateWon {
 				c = LerpColorRGBA(c, ColorElementWon, colorT)
 			}
-			g.DrawTile(dst, x, y, winScale*retryScale, 0, 0, c, GetFlagTile())
+			g.DrawTile(dst, x, y, winScale*retryScale*resetScale, 0, 0, c, GetFlagTile())
 		}
 
 		// draw number
@@ -1312,7 +1386,7 @@ func (g *Game) Draw(dst *eb.Image) {
 				if x == g.NumberClickX && y == g.NumberClickY {
 					scaleOffset = g.NumberClickTimer.Normalize() * -0.06
 				}
-				nScale := Clamp(revealScale*winScale*retryScale, 0, 1) + scaleOffset
+				nScale := Clamp(revealScale*winScale*retryScale*resetScale, 0, 1) + scaleOffset
 
 				var c color.Color = ColorTableGetNumber(count)
 				if g.GameState == GameStateWon {
