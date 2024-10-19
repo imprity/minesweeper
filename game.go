@@ -147,7 +147,7 @@ func (ct *ColorTablePicker) Update() {
 	}
 
 	if !ct.wasShowing && ct.DoShow {
-		ct.ColorPicker.SetColor(ColorTable[ct.TableIndex])
+		ct.ColorPicker.SetColor(TheColorTable[ct.TableIndex])
 	}
 	ct.wasShowing = ct.DoShow
 
@@ -170,10 +170,10 @@ func (ct *ColorTablePicker) Update() {
 	ct.TableIndex = Clamp(ct.TableIndex, 0, ColorTableSize-1)
 
 	if changed {
-		ct.ColorPicker.SetColor(ColorTable[ct.TableIndex])
+		ct.ColorPicker.SetColor(TheColorTable[ct.TableIndex])
 	}
 
-	ColorTable[ct.TableIndex] = ct.ColorPicker.Color()
+	TheColorTable[ct.TableIndex] = ct.ColorPicker.Color()
 }
 
 func (ct *ColorTablePicker) Draw(dst *eb.Image) {
@@ -418,7 +418,7 @@ func (ds *DifficultySelectUI) DrawDifficultyText(dst *eb.Image, boardRect FRecta
 
 	op.Filter = eb.FilterLinear
 
-	op.ColorScale.ScaleWithColor(ColorTable[ColorTopUITitle])
+	op.ColorScale.ScaleWithColor(TheColorTable[ColorTopUITitle])
 
 	ebt.Draw(dst, DifficultyStrs[ds.Difficulty], DecoFace, op)
 }
@@ -1032,7 +1032,7 @@ func (g *Game) Draw(dst *eb.Image) {
 	g.MaskImage.Clear()
 
 	// background
-	dst.Fill(ColorTable[ColorBg])
+	dst.Fill(TheColorTable[ColorBg])
 
 	retryButtonRect := g.RetryButtonRect()
 	retryButtonRect = retryButtonRect.Inset(-5)
@@ -1449,7 +1449,7 @@ func (g *Game) DrawBoard(dst *eb.Image) {
 			// draw highlight
 			if style.BgTileHightlight > 0 {
 				t := style.BgTileHightlight
-				c := ColorTable[ColorTileHighLight]
+				c := TheColorTable[ColorTileHighLight]
 				DrawFilledRect(
 					dst,
 					bgTileRect,

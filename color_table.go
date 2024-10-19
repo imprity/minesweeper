@@ -8,7 +8,7 @@ import (
 type ColorTableIndex int
 
 func (c ColorTableIndex) RGBA() (r, g, b, a uint32) {
-	return ColorTable[c].RGBA()
+	return TheColorTable[c].RGBA()
 }
 
 const (
@@ -54,7 +54,7 @@ const (
 	ColorTableSize
 )
 
-var ColorTable [ColorTableSize]color.NRGBA
+var TheColorTable [ColorTableSize]color.NRGBA
 var DefaultcolorTable [ColorTableSize]color.NRGBA
 
 func init() {
@@ -110,7 +110,7 @@ func init() {
 		}
 	}
 
-	ColorTable = DefaultcolorTable
+	TheColorTable = DefaultcolorTable
 }
 
 func ColorTableGetNumber(i int) ColorTableIndex {

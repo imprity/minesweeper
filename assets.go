@@ -241,7 +241,7 @@ func LoadAssets() {
 		if err != nil {
 			return err
 		}
-		ColorTable = table
+		TheColorTable = table
 		return nil
 	}
 	if err := loadColorTable(); err != nil {
@@ -253,7 +253,7 @@ func SaveColorTable() {
 	InfoLogger.Print("saving color table")
 
 	saveImp := func() error {
-		jsonBytes, err := ColorTableToJson(ColorTable)
+		jsonBytes, err := ColorTableToJson(TheColorTable)
 		if err != nil {
 			return err
 		}
