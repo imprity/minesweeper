@@ -448,6 +448,8 @@ type TileStyle struct {
 	BgFillColor      color.Color
 	BgTileHightlight float64
 
+	BgBombAnim float64
+
 	DrawTile bool // does not affect fg
 
 	TileScale   float64
@@ -529,8 +531,7 @@ type Game struct {
 	NumberClickX     int
 	NumberClickY     int
 
-	DefeatAnimTimer        Timer
-	DefeatMineRevealTimers [][]Timer
+	DefeatAnimTimer Timer
 
 	WinAnimTimer      Timer
 	WinTilesAnimTimer [][]Timer
@@ -609,8 +610,6 @@ func (g *Game) ResetBoard(width, height int) {
 
 	g.Board = NewBoard(width, height)
 	g.PrevBoard = NewBoard(width, height)
-
-	g.DefeatMineRevealTimers = New2DArray[Timer](width, height)
 
 	g.WinTilesAnimTimer = New2DArray[Timer](width, height)
 
@@ -923,14 +922,6 @@ func (g *Game) Update() error {
 	// ===================================
 	if g.GameState == GameStateLost {
 		g.DefeatAnimTimer.TickUp()
-
-		for x := range g.Board.Width {
-			for y := range g.Board.Height {
-				if g.DefeatMineRevealTimers[x][y].Duration > 0 {
-					g.DefeatMineRevealTimers[x][y].TickUp()
-				}
-			}
-		}
 	}
 
 	// skipping defeat animation
@@ -942,13 +933,7 @@ func (g *Game) Update() error {
 			// find some better way to handle it
 			g.DefeatAnimTimer.Current = g.DefeatAnimTimer.Duration - time.Millisecond*5
 
-			for x := range g.Board.Width {
-				for y := range g.Board.Height {
-					if g.DefeatMineRevealTimers[x][y].Duration > 0 {
-						g.DefeatMineRevealTimers[x][y].Current = g.DefeatMineRevealTimers[x][y].Duration
-					}
-				}
-			}
+			g.SkipAllTileAnimations()
 		}
 
 	}
@@ -1472,6 +1457,30 @@ func (g *Game) DrawBoard(dst *eb.Image) {
 					true,
 				)
 			}
+
+			// draw bomb animation
+			if style.BgBombAnim > 0 {
+				t := Clamp(style.BgBombAnim, 0, 1)
+
+				const outerMargin = 1
+				const innerMargin = 2
+
+				outerRect := bgTileRect.Inset(outerMargin)
+				outerRect = outerRect.Inset(min(outerRect.Dx(), outerRect.Dy()) * 0.5 * (1 - t))
+				innerRect := outerRect.Inset(innerMargin)
+
+				innerRect = innerRect.Add(FPt(0, innerMargin))
+
+				radius := Lerp(1, 0.1, t*t*t)
+
+				innerRadius := radius * min(innerRect.Dx(), innerRect.Dy()) * 0.5
+				outerRadius := radius * min(outerRect.Dx(), outerRect.Dy()) * 0.5
+
+				DrawFilledRoundRectFast(dst, outerRect, outerRadius, 5, ColorMineBg1, true)
+				DrawFilledRoundRectFast(dst, innerRect, innerRadius, 5, ColorMineBg2, true)
+
+				DrawSubViewInRect(dst, innerRect, 1, 0, 0, ColorMine, GetMineTile())
+			}
 		}
 
 		// draw foreground tile
@@ -1586,31 +1595,6 @@ func (g *Game) RetryButtonRect() FRectangle {
 	return CenterFRectangle(rect, center.X, center.Y)
 }
 
-/*
-func (g *Game) StartRevealAnimationBak(revealsBefore, revealsAfter [][]bool, originX, originy int) {
-	fw, fh := f64(g.Board.Width), f64(g.Board.Height)
-
-	originF := FPt(f64(originX), f64(originy))
-
-	maxDist := math.Sqrt(fw*fw + fh*fh)
-
-	const maxDuration = time.Millisecond * 900
-	const minDuration = time.Millisecond * 20
-
-	for x := range g.Board.Width {
-		for y := range g.Board.Height {
-			if !revealsBefore[x][y] && revealsAfter[x][y] {
-				pos := FPt(f64(x), f64(y))
-				dist := pos.Sub(originF).Length()
-				d := time.Duration(f64(maxDuration) * (dist / maxDist))
-				g.RevealAnimTimers[x][y].Duration = max(d, minDuration)
-				g.RevealAnimTimers[x][y].Current = 0
-			}
-		}
-	}
-}
-*/
-
 func (g *Game) StartRevealAnimation(revealsBefore, revealsAfter [][]bool, originX, originy int) {
 	g.SkipAllTileAnimations()
 
@@ -1693,6 +1677,8 @@ func (g *Game) StartRevealAnimation(revealsBefore, revealsAfter [][]bool, origin
 }
 
 func (g *Game) StartDefeatAnimation(originX, originY int) {
+	g.SkipAllTileAnimations()
+
 	var minePoses []image.Point
 
 	for x := range g.Board.Width {
@@ -1736,10 +1722,28 @@ func (g *Game) StartDefeatAnimation(originX, originY int) {
 		}
 		timer.Current = offset
 
-		g.DefeatMineRevealTimers[p.X][p.Y] = timer
-
 		// calculate defeatDuration
 		defeatDuration = max(defeatDuration, timer.Duration-timer.Current)
+
+		// add new animation
+		var anim CallbackTileAnimation
+
+		anim.OnUpdate = func(x, y int, style TileStyle) TileStyle {
+			timer.TickUp()
+			style.BgBombAnim = timer.Normalize()
+			return style
+		}
+
+		anim.OnSkip = func(x, y int, style TileStyle) TileStyle {
+			timer.Current = timer.Duration
+			return anim.OnUpdate(x, y, style)
+		}
+
+		anim.OnDone = func(x, y int, style TileStyle) bool {
+			return timer.Current >= timer.Duration
+		}
+
+		g.TileAnimations[p.X][p.Y].Enqueue(anim)
 	}
 
 	defeatDuration += time.Millisecond * 10
