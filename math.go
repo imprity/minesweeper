@@ -403,6 +403,14 @@ func Lerp[F constraints.Float](a, b, t F) F {
 	return a + (b-a)*t
 }
 
+func CloseTo(a, b float64) bool {
+	d := a - b
+	if -0.0001 <= d && d <= 0.001 { // very arbitrary epsilon
+		return true
+	}
+	return false
+}
+
 // ========================
 // easing functions
 // ========================

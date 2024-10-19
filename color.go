@@ -76,6 +76,9 @@ func ColorFromHSV(hue, saturation, value float64) color.NRGBA {
 		hue -= math.Pi * 2
 	}
 
+	saturation = Clamp(saturation, 0, 1)
+	value = Clamp(value, 0, 1)
+
 	c := saturation * value
 	h := hue / (60 * math.Pi / 180)
 	x := c * (1 - math.Abs(math.Mod(h, 2)-1))
