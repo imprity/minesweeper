@@ -83,13 +83,11 @@ func (rb *RetryButton) Draw(dst *eb.Image) {
 	const segments = 6
 	const radius = 0.4
 
-	radiusPx := min(bottomRect.Dx(), bottomRect.Dy()) * 0.5 * radius
-
 	DrawFilledRoundRectFast(
 		dst,
 		bottomRect,
-		radiusPx,
-		true,
+		radius,
+		false,
 		segments,
 		color.NRGBA{0, 0, 0, 255},
 	)
@@ -97,8 +95,8 @@ func (rb *RetryButton) Draw(dst *eb.Image) {
 	DrawFilledRoundRectFast(
 		dst,
 		topRect,
-		radiusPx,
-		true,
+		radius,
+		false,
 		segments,
 		color.NRGBA{105, 223, 145, 255},
 	)
