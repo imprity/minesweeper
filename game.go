@@ -91,7 +91,6 @@ func (rb *RetryButton) Draw(dst *eb.Image) {
 		radiusPx,
 		segments,
 		color.NRGBA{0, 0, 0, 255},
-		true,
 	)
 
 	DrawFilledRoundRectFast(
@@ -100,7 +99,6 @@ func (rb *RetryButton) Draw(dst *eb.Image) {
 		radiusPx,
 		segments,
 		color.NRGBA{105, 223, 145, 255},
-		true,
 	)
 
 	imgRect := RectToFRect(RetryButtonImage.Bounds())
@@ -109,19 +107,18 @@ func (rb *RetryButton) Draw(dst *eb.Image) {
 
 	center := FRectangleCenter(topRect)
 
-	op := &eb.DrawImageOptions{}
+	op := &DrawImageOptions{}
 	op.GeoM.Concat(TransformToCenter(imgRect.Dx(), imgRect.Dy(), scale, scale, 0))
 	op.GeoM.Translate(center.X, center.Y-topRect.Dy()*0.02)
 	op.ColorScale.ScaleWithColor(color.NRGBA{0, 0, 0, 255})
-	op.Filter = eb.FilterLinear
 
-	dst.DrawImage(RetryButtonImage, op)
+	DrawImage(dst, RetryButtonImage, op)
 
 	op.GeoM.Translate(0, topRect.Dy()*0.02*2)
 	op.ColorScale.Reset()
 	op.ColorScale.ScaleWithColor(color.NRGBA{255, 255, 255, 255})
 
-	dst.DrawImage(RetryButtonImage, op)
+	DrawImage(dst, RetryButtonImage, op)
 }
 
 type ColorTablePicker struct {
@@ -203,7 +200,7 @@ func (ct *ColorTablePicker) Draw(dst *eb.Image) {
 
 		// draw bg
 		DrawFilledRect(
-			dst, FRectWH(bgWidth, bgHeight), color.NRGBA{0, 0, 0, 150}, true,
+			dst, FRectWH(bgWidth, bgHeight), color.NRGBA{0, 0, 0, 150},
 		)
 
 		// draw list texts
@@ -211,7 +208,7 @@ func (ct *ColorTablePicker) Draw(dst *eb.Image) {
 
 		for i := ColorTableIndex(0); i < ColorTableSize; i++ {
 			text := i.String()
-			op := &ebt.DrawOptions{}
+			op := &DrawTextOptions{}
 
 			op.GeoM.Scale(textScale, textScale)
 			op.GeoM.Translate(0, offsetY)
@@ -220,9 +217,8 @@ func (ct *ColorTablePicker) Draw(dst *eb.Image) {
 			} else {
 				op.ColorScale.ScaleWithColor(color.NRGBA{255, 255, 255, 255})
 			}
-			op.Filter = eb.FilterLinear
 
-			ebt.Draw(dst, text, ClearFace, op)
+			DrawText(dst, text, ClearFace, op)
 
 			offsetY += lineSpacing * textScale
 		}
@@ -412,15 +408,13 @@ func (ds *DifficultySelectUI) DrawDifficultyText(dst *eb.Image, boardRect FRecta
 
 	rectCenter := FRectangleCenter(rect)
 
-	op := &ebt.DrawOptions{}
+	op := &DrawTextOptions{}
 	op.GeoM.Concat(TransformToCenter(textW, textH, scale, scale, 0))
 	op.GeoM.Translate(rectCenter.X, rectCenter.Y)
 
-	op.Filter = eb.FilterLinear
-
 	op.ColorScale.ScaleWithColor(TheColorTable[ColorTopUITitle])
 
-	ebt.Draw(dst, DifficultyStrs[ds.Difficulty], DecoFace, op)
+	DrawText(dst, DifficultyStrs[ds.Difficulty], DecoFace, op)
 }
 
 func (ds *DifficultySelectUI) Draw(dst *eb.Image, boardRect FRectangle) {
@@ -1444,7 +1438,7 @@ func (g *Game) DrawBoard(dst *eb.Image) {
 			bgTileRect = bgTileRect.Add(FPt(style.BgOffsetX, style.BgOffsetY))
 			bgTileRect = FRectScaleCentered(bgTileRect, style.BgScale)
 
-			DrawFilledRect(dst, bgTileRect, style.BgFillColor, true)
+			DrawFilledRect(dst, bgTileRect, style.BgFillColor)
 
 			// draw highlight
 			if style.BgTileHightlight > 0 {
@@ -1454,7 +1448,6 @@ func (g *Game) DrawBoard(dst *eb.Image) {
 					dst,
 					bgTileRect,
 					color.NRGBA{c.R, c.G, c.B, uint8(f64(c.A) * t)},
-					true,
 				)
 			}
 
@@ -1476,8 +1469,8 @@ func (g *Game) DrawBoard(dst *eb.Image) {
 				innerRadius := radius * min(innerRect.Dx(), innerRect.Dy()) * 0.5
 				outerRadius := radius * min(outerRect.Dx(), outerRect.Dy()) * 0.5
 
-				DrawFilledRoundRectFast(dst, outerRect, outerRadius, 5, ColorMineBg1, true)
-				DrawFilledRoundRectFast(dst, innerRect, innerRadius, 5, ColorMineBg2, true)
+				DrawFilledRoundRectFast(dst, outerRect, outerRadius, 5, ColorMineBg1)
+				DrawFilledRoundRectFast(dst, innerRect, innerRadius, 5, ColorMineBg2)
 
 				DrawSubViewInRect(dst, innerRect, 1, 0, 0, ColorMine, GetMineTile())
 			}
@@ -1520,8 +1513,8 @@ func (g *Game) DrawBoard(dst *eb.Image) {
 				fillColor := style.TileFillColor
 				strokeColor := style.TileStrokeColor
 
-				DrawFilledRoundRectFast(dst, strokeRect, radiusPx, segments, strokeColor, true)
-				DrawFilledRoundRectFast(dst, fillRect, radiusPx, segments, fillColor, true)
+				DrawFilledRoundRectFast(dst, strokeRect, radiusPx, segments, strokeColor)
+				DrawFilledRoundRectFast(dst, fillRect, radiusPx, segments, fillColor)
 			}
 
 			if style.DrawFg && style.FgType != TileFgTypeNone {
@@ -1959,7 +1952,6 @@ func DrawSubViewInRect(
 	op.GeoM.Translate(rectCenter.X, rectCenter.Y)
 	op.GeoM.Translate(offsetX, offsetY)
 	op.ColorScale.ScaleWithColor(clr)
-	op.Filter = eb.FilterLinear
 
 	DrawSubView(dst, view, op)
 }
@@ -2202,12 +2194,12 @@ func DrawRoundBoardTileOld(
 			p.Close()
 
 			if doFill {
-				DrawFilledPath(dst, p, cornerColor(corner), true)
+				DrawFilledPath(dst, p, cornerColor(corner))
 			} else {
 				op := &ebv.StrokeOptions{}
 				op.Width = f32(strokeWidth)
 				op.MiterLimit = 4
-				StrokePath(dst, p, op, strokeColor, true)
+				StrokePath(dst, p, op, strokeColor)
 			}
 		}
 
@@ -2248,7 +2240,7 @@ func DrawRoundBoardTileOld(
 
 			if doFill {
 				for _, p := range paths {
-					DrawFilledPath(dst, p, cornerColor((unRevealed+1)%4), true)
+					DrawFilledPath(dst, p, cornerColor((unRevealed+1)%4))
 				}
 				drawCorner(cornerOpposite(unRevealed), unRevealed)
 			} else {
@@ -2256,14 +2248,14 @@ func DrawRoundBoardTileOld(
 					op := &ebv.StrokeOptions{}
 					op.Width = f32(strokeWidth)
 					op.MiterLimit = 4
-					StrokePath(dst, p, op, strokeColor, true)
+					StrokePath(dst, p, op, strokeColor)
 				}
 			}
 		case 4:
 			if doFill {
 				for i, v := range revealed {
 					if v {
-						DrawFilledRect(dst, rectCornerRect(rect, i), cornerColor(i), true)
+						DrawFilledRect(dst, rectCornerRect(rect, i), cornerColor(i))
 					}
 				}
 			}
@@ -2345,7 +2337,7 @@ func DrawRoundBoardTile(
 				tileRadiuses,
 				[4]int{segments, segments, segments, segments},
 				clr,
-				true)
+			)
 		}
 	}
 }
@@ -2356,9 +2348,8 @@ func DrawWaterRect(
 	timeOffset time.Duration,
 	colors [4]color.Color,
 	offset FPoint,
-	blend eb.Blend,
 ) {
-	op := &eb.DrawRectShaderOptions{}
+	op := &DrawRectShaderOptions{}
 
 	op.Images[0] = WaterShaderImage1
 	op.Images[1] = WaterShaderImage2
@@ -2384,9 +2375,7 @@ func DrawWaterRect(
 	op.GeoM.Scale(rect.Dx()/imgFRect.Dx(), rect.Dy()/imgFRect.Dy())
 	op.GeoM.Translate(rect.Min.X, rect.Min.Y)
 
-	op.Blend = blend
-
-	dst.DrawRectShader(imgRect.Dx(), imgRect.Dy(), WaterShader, op)
+	DrawRectShader(dst, imgRect.Dx(), imgRect.Dy(), WaterShader, op)
 }
 
 func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {

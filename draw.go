@@ -22,10 +22,9 @@ func DrawFilledRect(
 	dst *eb.Image,
 	rect FRectangle,
 	clr color.Color,
-	antialias bool,
 ) {
 	path := GetRectPath(rect)
-	DrawFilledPath(dst, path, clr, antialias)
+	DrawFilledPath(dst, path, clr)
 }
 
 func StrokeRect(
@@ -33,23 +32,23 @@ func StrokeRect(
 	rect FRectangle,
 	strokeWidth float64,
 	clr color.Color,
-	antialias bool,
 ) {
 	path := GetRectPath(rect)
 	strokeOp := &ebv.StrokeOptions{}
 	strokeOp.MiterLimit = 4
 	strokeOp.Width = float32(strokeWidth)
-	StrokePath(dst, path, strokeOp, clr, antialias)
+	StrokePath(dst, path, strokeOp, clr)
 }
 
 func DrawFilledCircle(
 	dst *eb.Image,
 	x, y, r float64,
 	clr color.Color,
-	antialias bool,
 ) {
-	ebv.DrawFilledCircle(
-		dst, f32(x), f32(y), f32(r), clr, antialias)
+	path := &ebv.Path{}
+	path.Arc(f32(x), f32(y), f32(r), 0, Pi*2, ebv.Clockwise)
+	vs, is := path.AppendVerticesAndIndicesForFilling(nil, nil)
+	DrawVerticies(dst, vs, is, clr, eb.FillAll)
 }
 
 func StrokeCircle(
@@ -57,10 +56,16 @@ func StrokeCircle(
 	x, y, r float64,
 	strokeWidth float64,
 	clr color.Color,
-	antialias bool,
 ) {
-	ebv.StrokeCircle(
-		dst, f32(x), f32(y), f32(r), f32(strokeWidth), clr, antialias)
+	path := &ebv.Path{}
+	path.Arc(f32(x), f32(y), f32(r), 0, Pi*2, ebv.Clockwise)
+
+	strokeOp := &ebv.StrokeOptions{}
+	strokeOp.Width = f32(strokeWidth)
+	strokeOp.MiterLimit = 10
+
+	vs, is := path.AppendVerticesAndIndicesForStroke(nil, nil, strokeOp)
+	DrawVerticies(dst, vs, is, clr, eb.FillAll)
 }
 
 // raidus and segments array maps like this
@@ -208,10 +213,9 @@ func DrawFilledRoundRect(
 	rect FRectangle,
 	radius float64,
 	clr color.Color,
-	antialias bool,
 ) {
 	path := GetRoundRectPath(rect, [4]float64{radius, radius, radius, radius})
-	DrawFilledPath(dst, path, clr, antialias)
+	DrawFilledPath(dst, path, clr)
 }
 
 func StrokeRoundRect(
@@ -220,13 +224,12 @@ func StrokeRoundRect(
 	radius float64,
 	stroke float64,
 	clr color.Color,
-	antialias bool,
 ) {
 	path := GetRoundRectPath(rect, [4]float64{radius, radius, radius, radius})
 	strokeOp := &ebv.StrokeOptions{}
 	strokeOp.MiterLimit = 4
 	strokeOp.Width = float32(stroke)
-	StrokePath(dst, path, strokeOp, clr, antialias)
+	StrokePath(dst, path, strokeOp, clr)
 }
 
 func DrawFilledRoundRectFast(
@@ -235,14 +238,13 @@ func DrawFilledRoundRectFast(
 	radius float64,
 	segments int,
 	clr color.Color,
-	antialias bool,
 ) {
 	path := GetRoundRectPathFast(
 		rect,
 		[4]float64{radius, radius, radius, radius},
 		[4]int{segments, segments, segments, segments},
 	)
-	DrawFilledPath(dst, path, clr, antialias)
+	DrawFilledPath(dst, path, clr)
 }
 
 func StrokeRoundRectFast(
@@ -252,7 +254,6 @@ func StrokeRoundRectFast(
 	segments int,
 	stroke float64,
 	clr color.Color,
-	antialias bool,
 ) {
 	path := GetRoundRectPathFast(
 		rect,
@@ -262,7 +263,7 @@ func StrokeRoundRectFast(
 	strokeOp := &ebv.StrokeOptions{}
 	strokeOp.MiterLimit = 4
 	strokeOp.Width = float32(stroke)
-	StrokePath(dst, path, strokeOp, clr, antialias)
+	StrokePath(dst, path, strokeOp, clr)
 }
 
 // raidus array maps like this
@@ -276,10 +277,9 @@ func DrawFilledRoundRectEx(
 	rect FRectangle,
 	radiuses [4]float64,
 	clr color.Color,
-	antialias bool,
 ) {
 	path := GetRoundRectPath(rect, radiuses)
-	DrawFilledPath(dst, path, clr, antialias)
+	DrawFilledPath(dst, path, clr)
 }
 
 // raidus array maps like this
@@ -294,13 +294,12 @@ func StrokeRoundRectEx(
 	radiuses [4]float64,
 	stroke float64,
 	clr color.Color,
-	antialias bool,
 ) {
 	path := GetRoundRectPath(rect, radiuses)
 	strokeOp := &ebv.StrokeOptions{}
 	strokeOp.Width = float32(stroke)
 	strokeOp.MiterLimit = 4
-	StrokePath(dst, path, strokeOp, clr, antialias)
+	StrokePath(dst, path, strokeOp, clr)
 }
 
 // raidus array maps like this
@@ -315,10 +314,9 @@ func DrawFilledRoundRectFastEx(
 	radiuses [4]float64,
 	segments [4]int,
 	clr color.Color,
-	antialias bool,
 ) {
 	path := GetRoundRectPathFast(rect, radiuses, segments)
-	DrawFilledPath(dst, path, clr, antialias)
+	DrawFilledPath(dst, path, clr)
 }
 
 // raidus array maps like this
@@ -334,13 +332,12 @@ func StrokeRoundRectFastEx(
 	segments [4]int,
 	stroke float64,
 	clr color.Color,
-	antialias bool,
 ) {
 	path := GetRoundRectPathFast(rect, radiuses, segments)
 	strokeOp := &ebv.StrokeOptions{}
 	strokeOp.Width = float32(stroke)
 	strokeOp.MiterLimit = 4
-	StrokePath(dst, path, strokeOp, clr, antialias)
+	StrokePath(dst, path, strokeOp, clr)
 }
 
 func ArcFast(p *ebv.Path, x, y, radius, startAngle, endAngle float64, dir ebv.Direction, segments int) {
@@ -405,7 +402,6 @@ func DrawVerticies(
 	vs []eb.Vertex,
 	is []uint16,
 	clr color.Color,
-	antialias bool,
 	fillRule eb.FillRule,
 ) {
 	r, g, b, a := clr.RGBA()
@@ -418,24 +414,21 @@ func DrawVerticies(
 		vs[i].ColorA = float32(a) / 0xffff
 	}
 
-	op := &eb.DrawTrianglesOptions{}
+	op := &DrawTrianglesOptions{}
 	op.ColorScaleMode = eb.ColorScaleModePremultipliedAlpha
-	op.AntiAlias = antialias
 	op.FillRule = fillRule
-	dst.DrawTriangles(vs, is, WhiteImage, op)
+	DrawTriangles(dst, vs, is, WhiteImage, op)
 }
 
 func DrawFilledPath(
 	dst *eb.Image,
 	path *ebv.Path,
 	clr color.Color,
-	antialias bool,
 ) {
 	DrawFilledPathEx(
 		dst,
 		path,
 		clr,
-		antialias,
 		eb.FillAll,
 	)
 }
@@ -445,14 +438,12 @@ func StrokePath(
 	path *ebv.Path,
 	strokeOp *ebv.StrokeOptions,
 	clr color.Color,
-	antialias bool,
 ) {
 	StrokePathEx(
 		dst,
 		path,
 		strokeOp,
 		clr,
-		antialias,
 		eb.FillAll,
 	)
 }
@@ -461,11 +452,10 @@ func DrawFilledPathEx(
 	dst *eb.Image,
 	path *ebv.Path,
 	clr color.Color,
-	antialias bool,
 	fillRule eb.FillRule,
 ) {
 	vs, is := path.AppendVerticesAndIndicesForFilling(nil, nil)
-	DrawVerticies(dst, vs, is, clr, antialias, fillRule)
+	DrawVerticies(dst, vs, is, clr, fillRule)
 }
 
 func StrokePathEx(
@@ -473,9 +463,8 @@ func StrokePathEx(
 	path *ebv.Path,
 	strokeOp *ebv.StrokeOptions,
 	clr color.Color,
-	antialias bool,
 	fillRule eb.FillRule,
 ) {
 	vs, is := path.AppendVerticesAndIndicesForStroke(nil, nil, strokeOp)
-	DrawVerticies(dst, vs, is, clr, antialias, fillRule)
+	DrawVerticies(dst, vs, is, clr, fillRule)
 }

@@ -139,8 +139,6 @@ func (b *ImageButton) Draw(dst *eb.Image) {
 		rectCenter := FRectangleCenter(b.Rect)
 		op.GeoM.Translate(rectCenter.X, rectCenter.Y)
 
-		op.Filter = eb.FilterLinear
-
 		var imageColor color.Color
 
 		switch b.BaseButton.State {
@@ -207,7 +205,7 @@ func (b *TextButton) Draw(dst *eb.Image) {
 	}
 
 	// draw background color
-	DrawFilledRect(dst, b.Rect, bgColor, true)
+	DrawFilledRect(dst, b.Rect, bgColor)
 
 	// draw text color
 	if len(b.Text) > 0 {
@@ -215,14 +213,13 @@ func (b *TextButton) Draw(dst *eb.Image) {
 
 		scale := min(b.Rect.Dx()*0.9/textW, b.Rect.Dy()*0.9/textH)
 
-		op := &ebt.DrawOptions{}
+		op := &DrawTextOptions{}
 		op.ColorScale.ScaleWithColor(textColor)
-		op.Filter = eb.FilterLinear
 
 		op.GeoM.Concat(TransformToCenter(textW, textH, scale, scale, 0))
 		center := FRectangleCenter(b.Rect)
 		op.GeoM.Translate(center.X, center.Y)
 
-		ebt.Draw(dst, b.Text, ClearFace, op)
+		DrawText(dst, b.Text, ClearFace, op)
 	}
 }

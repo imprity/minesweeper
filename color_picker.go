@@ -208,7 +208,7 @@ func (cp *ColorPicker) Update() {
 func (cp *ColorPicker) Draw(dst *eb.Image) {
 	// draw bg rect
 	{
-		DrawFilledRect(dst, cp.Rect, color.NRGBA{0, 0, 0, 130}, true)
+		DrawFilledRect(dst, cp.Rect, color.NRGBA{0, 0, 0, 130})
 	}
 	svRect := cp.svRect()
 	hRect := cp.hRect()
@@ -240,10 +240,9 @@ func (cp *ColorPicker) Draw(dst *eb.Image) {
 
 		indices := [6]uint16{0, 1, 2, 0, 2, 3}
 
-		op := &eb.DrawTrianglesShaderOptions{}
-		op.AntiAlias = true
+		op := &DrawTrianglesShaderOptions{}
 
-		dst.DrawTrianglesShader(verts[:], indices[:], hsvShader, op)
+		DrawTrianglesShader(dst, verts[:], indices[:], hsvShader, op)
 	}
 
 	// draw hue rect
@@ -269,10 +268,9 @@ func (cp *ColorPicker) Draw(dst *eb.Image) {
 
 		indices := [6]uint16{0, 1, 2, 0, 2, 3}
 
-		op := &eb.DrawTrianglesShaderOptions{}
-		op.AntiAlias = true
+		op := &DrawTrianglesShaderOptions{}
 
-		dst.DrawTrianglesShader(verts[:], indices[:], hsvShader, op)
+		DrawTrianglesShader(dst, verts[:], indices[:], hsvShader, op)
 	}
 
 	// draw alpha rect
@@ -298,10 +296,9 @@ func (cp *ColorPicker) Draw(dst *eb.Image) {
 
 		indices := [6]uint16{0, 1, 2, 0, 2, 3}
 
-		op := &eb.DrawTrianglesShaderOptions{}
-		op.AntiAlias = true
+		op := &DrawTrianglesShaderOptions{}
 
-		dst.DrawTrianglesShader(verts[:], indices[:], hsvShader, op)
+		DrawTrianglesShader(dst, verts[:], indices[:], hsvShader, op)
 	}
 
 	// draw sv cursor
@@ -315,9 +312,9 @@ func (cp *ColorPicker) Draw(dst *eb.Image) {
 		fillColor.A = 255
 
 		DrawFilledCircle(
-			dst, cursorX, cursorY, cursorSize, fillColor, true)
+			dst, cursorX, cursorY, cursorSize, fillColor)
 		StrokeCircle(
-			dst, cursorX, cursorY, cursorSize, 3, color.NRGBA{255, 255, 255, 255}, true)
+			dst, cursorX, cursorY, cursorSize, 3, color.NRGBA{255, 255, 255, 255})
 	}
 
 	// draw hue cursor
@@ -328,8 +325,8 @@ func (cp *ColorPicker) Draw(dst *eb.Image) {
 		cursorRect := FRectWH(12, hRect.Dy()+5)
 		cursorRect = CenterFRectangle(cursorRect, cursorX, cursorY)
 
-		DrawFilledRect(dst, cursorRect, ColorFromHSV(cp.Hue, 1, 1), true)
-		StrokeRect(dst, cursorRect, 3, color.NRGBA{255, 255, 255, 255}, true)
+		DrawFilledRect(dst, cursorRect, ColorFromHSV(cp.Hue, 1, 1))
+		StrokeRect(dst, cursorRect, 3, color.NRGBA{255, 255, 255, 255})
 	}
 
 	// draw alpha cursor
@@ -342,8 +339,8 @@ func (cp *ColorPicker) Draw(dst *eb.Image) {
 
 		alpha := uint8(cp.Alpha * 255)
 
-		DrawFilledRect(dst, cursorRect, color.NRGBA{alpha, alpha, alpha, 255}, true)
-		StrokeRect(dst, cursorRect, 3, color.NRGBA{255, 255, 255, 255}, true)
+		DrawFilledRect(dst, cursorRect, color.NRGBA{alpha, alpha, alpha, 255})
+		StrokeRect(dst, cursorRect, 3, color.NRGBA{255, 255, 255, 255})
 	}
 
 	// draw text
@@ -359,27 +356,26 @@ func (cp *ColorPicker) Draw(dst *eb.Image) {
 
 		scale := min(textRect.Dx()/sizeX, textRectHeight/sizeY)
 
-		op := &ebt.DrawOptions{}
+		op := &DrawTextOptions{}
 		op.ColorScale.ScaleWithColor(color.NRGBA{255, 255, 255, 255})
-		op.Filter = eb.FilterLinear
 
 		op.GeoM.Scale(scale, scale)
 		op.GeoM.Translate(textRect.Min.X, textRect.Min.Y+textRectHeight*0)
 
-		ebt.Draw(dst, fmt.Sprintf("%.2f %.2f %.2f %.2f", cp.Hue, cp.Saturation, cp.Value, cp.Alpha), ClearFace, op)
+		DrawText(dst, fmt.Sprintf("%.2f %.2f %.2f %.2f", cp.Hue, cp.Saturation, cp.Value, cp.Alpha), ClearFace, op)
 
 		op.GeoM.Reset()
 		op.GeoM.Scale(scale, scale)
 		op.GeoM.Translate(textRect.Min.X, textRect.Min.Y+textRectHeight*1)
 
 		c := cp.Color()
-		ebt.Draw(dst, fmt.Sprintf("%d %d %d %d", c.R, c.G, c.B, c.A), ClearFace, op)
+		DrawText(dst, fmt.Sprintf("%d %d %d %d", c.R, c.G, c.B, c.A), ClearFace, op)
 
 		op.GeoM.Reset()
 		op.GeoM.Scale(scale, scale)
 		op.GeoM.Translate(textRect.Min.X, textRect.Min.Y+textRectHeight*2)
 
-		ebt.Draw(dst, ColorToString(c), ClearFace, op)
+		DrawText(dst, ColorToString(c), ClearFace, op)
 	}
 
 	cp.CopyButton.Draw(dst)

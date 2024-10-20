@@ -109,20 +109,18 @@ func DrawDebugMsgs(dst *eb.Image) {
 		dst,
 		rect,
 		color.NRGBA{0, 0, 0, 100},
-		true,
 	)
 
 	// draw text
-	op := &ebt.DrawOptions{}
+	op := &DrawTextOptions{}
 	op.GeoM.Scale(scale, scale)
 	op.GeoM.Translate(
 		rect.Min.X+hozMargin, rect.Min.Y+vertMargin,
 	)
 	op.ColorScale.ScaleWithColor(color.NRGBA{255, 255, 255, 255})
-	op.Filter = eb.FilterLinear
 	op.LayoutOptions.LineSpacing = fontLineSpacing
 
-	ebt.Draw(dst, text, ClearFace, op)
+	DrawText(dst, text, ClearFace, op)
 }
 
 func ClearDebugMsgs() {

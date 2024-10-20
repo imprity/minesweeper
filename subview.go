@@ -46,15 +46,6 @@ type DrawSubViewOptions struct {
 	//
 	// The default (zero) value is identity, which is (1, 1, 1, 1).
 	ColorScale eb.ColorScale
-
-	// Blend is a blending way of the source color and the destination color.
-	// Blend is used only when CompositeMode is CompositeModeCustom.
-	// The default (zero) value is the regular alpha blending.
-	Blend eb.Blend
-
-	// Filter is a type of texture filter.
-	// The default (zero) value is FilterNearest.
-	Filter eb.Filter
 }
 
 func DrawSubView(dst *eb.Image, sv SubView, options *DrawSubViewOptions) {
@@ -106,12 +97,9 @@ func DrawSubView(dst *eb.Image, sv SubView, options *DrawSubViewOptions) {
 		0, 1, 2, 0, 2, 3,
 	}
 
-	op := &eb.DrawTrianglesOptions{}
+	op := &DrawTrianglesOptions{}
 
-	op.Filter = options.Filter
-	op.AntiAlias = true // why not
 	op.ColorScaleMode = eb.ColorScaleModePremultipliedAlpha
-	op.Blend = options.Blend
 
-	dst.DrawTriangles(verts[:], indices[:], sv.Image, op)
+	DrawTriangles(dst, verts[:], indices[:], sv.Image, op)
 }
