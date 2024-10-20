@@ -89,6 +89,7 @@ func (rb *RetryButton) Draw(dst *eb.Image) {
 		dst,
 		bottomRect,
 		radiusPx,
+		true,
 		segments,
 		color.NRGBA{0, 0, 0, 255},
 	)
@@ -97,6 +98,7 @@ func (rb *RetryButton) Draw(dst *eb.Image) {
 		dst,
 		topRect,
 		radiusPx,
+		true,
 		segments,
 		color.NRGBA{105, 223, 145, 255},
 	)
@@ -1469,8 +1471,8 @@ func (g *Game) DrawBoard(dst *eb.Image) {
 				innerRadius := radius * min(innerRect.Dx(), innerRect.Dy()) * 0.5
 				outerRadius := radius * min(outerRect.Dx(), outerRect.Dy()) * 0.5
 
-				DrawFilledRoundRectFast(dst, outerRect, outerRadius, 5, ColorMineBg1)
-				DrawFilledRoundRectFast(dst, innerRect, innerRadius, 5, ColorMineBg2)
+				DrawFilledRoundRectFast(dst, outerRect, outerRadius, true, 5, ColorMineBg1)
+				DrawFilledRoundRectFast(dst, innerRect, innerRadius, true, 5, ColorMineBg2)
 
 				DrawSubViewInRect(dst, innerRect, 1, 0, 0, ColorMine, GetMineTile())
 			}
@@ -1513,8 +1515,8 @@ func (g *Game) DrawBoard(dst *eb.Image) {
 				fillColor := style.TileFillColor
 				strokeColor := style.TileStrokeColor
 
-				DrawFilledRoundRectFast(dst, strokeRect, radiusPx, segments, strokeColor)
-				DrawFilledRoundRectFast(dst, fillRect, radiusPx, segments, fillColor)
+				DrawFilledRoundRectFast(dst, strokeRect, radiusPx, true, segments, strokeColor)
+				DrawFilledRoundRectFast(dst, fillRect, radiusPx, true, segments, fillColor)
 			}
 
 			if style.DrawFg && style.FgType != TileFgTypeNone {
@@ -2335,6 +2337,7 @@ func DrawRoundBoardTile(
 				dst,
 				tileRect,
 				tileRadiuses,
+				true,
 				[4]int{segments, segments, segments, segments},
 				clr,
 			)
