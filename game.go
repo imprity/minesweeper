@@ -523,8 +523,7 @@ type Game struct {
 
 	DefeatAnimTimer Timer
 
-	WinAnimTimer      Timer
-	WinTilesAnimTimer [][]Timer
+	WinAnimTimer Timer
 
 	RetryButton          *RetryButton
 	RetryButtonAnimTimer Timer
@@ -600,8 +599,6 @@ func (g *Game) ResetBoard(width, height int) {
 
 	g.Board = NewBoard(width, height)
 	g.PrevBoard = NewBoard(width, height)
-
-	g.WinTilesAnimTimer = New2DArray[Timer](width, height)
 
 	g.WinAnimTimer.Current = 0
 
@@ -925,7 +922,6 @@ func (g *Game) Update() error {
 
 			g.SkipAllTileAnimations()
 		}
-
 	}
 
 	// ============================
@@ -933,13 +929,18 @@ func (g *Game) Update() error {
 	// ============================
 	if prevState == GameStateWon {
 		g.WinAnimTimer.TickUp()
+	}
 
-		for x := range g.Board.Width {
-			for y := range g.Board.Height {
-				if g.WinTilesAnimTimer[x][y].Duration > 0 {
-					g.WinTilesAnimTimer[x][y].TickUp()
-				}
-			}
+	// skipping defeat animation
+	if prevState == GameStateWon {
+		if g.WinAnimTimer.Current < g.WinAnimTimer.Duration && justPressedAny {
+			// TODO :
+			// nasty hack to stop skipping animation from triggering retry button
+			// by delaying RetryPopup from showing up by a tiny bit
+			// find some better way to handle it
+			g.WinAnimTimer.Current = g.WinAnimTimer.Duration - time.Millisecond*5
+
+			g.SkipAllTileAnimations()
 		}
 	}
 
@@ -947,7 +948,6 @@ func (g *Game) Update() error {
 	// update RetryButton
 	// ===================================
 	{
-
 		if g.GameState == GameStateWon && g.WinAnimTimer.Current >= g.WinAnimTimer.Duration {
 			g.ShowRetryButton = true
 			g.RetryButtonAnimTimer.TickUp()
@@ -2014,8 +2014,8 @@ func (g *Game) StartWinAnimation(originX, originY int) {
 
 	maxDist := math.Sqrt(fw*fw + fh*fh)
 
-	const maxDuration = time.Millisecond * 3000
-	const minDuration = time.Millisecond * 100
+	const maxDuration = time.Millisecond * 1000
+	const minDuration = time.Millisecond * 50
 	const distStartOffset = time.Millisecond * 3
 
 	var winDuration time.Duration
@@ -2078,7 +2078,7 @@ func (g *Game) StartWinAnimation(originX, originY int) {
 		}
 	}
 
-	g.WinAnimTimer.Duration = winDuration + time.Millisecond*400
+	g.WinAnimTimer.Duration = winDuration + time.Millisecond*100
 	g.WinAnimTimer.Current = 0
 }
 
