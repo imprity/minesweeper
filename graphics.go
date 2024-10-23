@@ -101,6 +101,9 @@ type DrawTextOptions struct {
 }
 
 func DrawImage(dst *eb.Image, src *eb.Image, options *DrawImageOptions) {
+	if options == nil {
+		options = &DrawImageOptions{}
+	}
 	op := &eb.DrawImageOptions{}
 	op.GeoM = options.GeoM
 	op.ColorScale = options.ColorScale
@@ -115,6 +118,9 @@ func DrawRectShader(
 	shader *eb.Shader,
 	options *DrawRectShaderOptions,
 ) {
+	if options == nil {
+		options = &DrawRectShaderOptions{}
+	}
 	op := &eb.DrawRectShaderOptions{}
 	op.GeoM = options.GeoM
 	op.ColorScale = options.ColorScale
@@ -130,6 +136,9 @@ func DrawTriangles(
 	img *eb.Image,
 	options *DrawTrianglesOptions,
 ) {
+	if options == nil {
+		options = &DrawTrianglesOptions{}
+	}
 	op := &eb.DrawTrianglesOptions{}
 	op.ColorScaleMode = options.ColorScaleMode
 	op.Blend = CurrentBlend()
@@ -147,6 +156,9 @@ func DrawTrianglesShader(
 	shader *eb.Shader,
 	options *DrawTrianglesShaderOptions,
 ) {
+	if options == nil {
+		options = &DrawTrianglesShaderOptions{}
+	}
 	op := &eb.DrawTrianglesShaderOptions{}
 	op.Blend = CurrentBlend()
 	op.Uniforms = options.Uniforms
@@ -163,6 +175,9 @@ func DrawText(
 	face ebt.Face,
 	options *DrawTextOptions,
 ) {
+	if options == nil {
+		options = &DrawTextOptions{}
+	}
 	op := &ebt.DrawOptions{}
 	op.GeoM = options.GeoM
 	op.ColorScale = options.ColorScale

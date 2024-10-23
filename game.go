@@ -11,7 +11,6 @@ import (
 
 	eb "github.com/hajimehoshi/ebiten/v2"
 	ebt "github.com/hajimehoshi/ebiten/v2/text/v2"
-	ebv "github.com/hajimehoshi/ebiten/v2/vector"
 )
 
 var _ = fmt.Printf
@@ -462,8 +461,6 @@ type TileStyle struct {
 	FgColor color.Color
 
 	FgType TileFgType
-
-	Alpha float64
 }
 
 func NewTileStyle() TileStyle {
@@ -475,7 +472,6 @@ func NewTileStyle() TileStyle {
 		TileStrokeColor: color.NRGBA{0, 0, 0, 0},
 		FgScale:         1,
 		FgColor:         color.NRGBA{0, 0, 0, 0},
-		Alpha:           1,
 	}
 }
 
@@ -552,7 +548,7 @@ type Game struct {
 
 	ColorTablePicker *ColorTablePicker
 
-	MaskImage *eb.Image
+	TileImage *eb.Image
 }
 
 func NewGame() *Game {
@@ -565,7 +561,7 @@ func NewGame() *Game {
 		10, 15, 20,
 	}
 
-	g.MaskImage = eb.NewImage(int(ScreenWidth), int(ScreenHeight))
+	g.TileImage = eb.NewImage(int(ScreenWidth), int(ScreenHeight))
 
 	g.TileHighLightTimer.Duration = time.Millisecond * 100
 	g.NumberClickTimer.Duration = time.Millisecond * 30
@@ -1022,9 +1018,6 @@ func (g *Game) Update() error {
 }
 
 func (g *Game) Draw(dst *eb.Image) {
-	// clear mask image
-	g.MaskImage.Clear()
-
 	// background
 	dst.Fill(TheColorTable[ColorBg])
 
@@ -1417,8 +1410,7 @@ func (g *Game) Draw(dst *eb.Image) {
 	g.ColorTablePicker.Draw(dst)
 }
 
-func (g *Game) DrawBoard(dst *eb.Image) {
-	// TODO: support alpha
+func (g *Game) forEachBgTile(callback func(x, y int, style TileStyle, bgTileRect FRectangle)) {
 	iter := NewBoardIterator(0, 0, g.Board.Width-1, g.Board.Height-1)
 
 	for iter.HasNext() {
@@ -1426,18 +1418,270 @@ func (g *Game) DrawBoard(dst *eb.Image) {
 
 		style := g.RenderTileStyles[x][y]
 
-		if !style.DrawTile && !style.DrawFg && !style.DrawBg {
-			continue
-		}
-
 		ogTileRect := GetBoardTileRect(g.BoardRect(), g.Board.Width, g.Board.Height, x, y)
 
 		// draw background tile
-		if style.DrawBg && style.BgScale > 0.001 {
-			bgTileRect := ogTileRect
-			bgTileRect = bgTileRect.Add(FPt(style.BgOffsetX, style.BgOffsetY))
-			bgTileRect = FRectScaleCentered(bgTileRect, style.BgScale)
+		bgTileRect := ogTileRect
+		bgTileRect = bgTileRect.Add(FPt(style.BgOffsetX, style.BgOffsetY))
+		bgTileRect = FRectScaleCentered(bgTileRect, style.BgScale)
 
+		callback(x, y, style, bgTileRect)
+	}
+}
+
+func (g *Game) forEachTile(callback func(x, y int, style TileStyle, strokeRect, fillRect FRectangle, radiusPx [4]float64)) {
+	iter := NewBoardIterator(0, 0, g.Board.Width-1, g.Board.Height-1)
+
+	for iter.HasNext() {
+		x, y := iter.GetNext()
+
+		style := g.RenderTileStyles[x][y]
+
+		ogTileRect := GetBoardTileRect(g.BoardRect(), g.Board.Width, g.Board.Height, x, y)
+
+		tileRect := ogTileRect
+
+		tileRect = tileRect.Add(FPt(style.TileOffsetX, style.TileOffsetY))
+		tileRect = FRectScaleCentered(tileRect, style.TileScale)
+
+		strokeRect := tileRect.Inset(-2)
+		//strokeRect := tileRect
+		fillRect := tileRect.Add(FPt(0, -1.5))
+
+		radiusPx := float64(0)
+
+		if style.TileScale < 1.00 {
+			radius := 1 - style.TileScale
+			radius = Clamp(radius, 0, 1)
+			radius = EaseOutQuint(radius)
+			radiusPx = min(fillRect.Dx(), fillRect.Dy()) * 0.5 * radius
+		} else {
+			dx := fillRect.Dx() - ogTileRect.Dx()
+			dy := fillRect.Dy() - ogTileRect.Dy()
+
+			t := min(dx, dy)
+			t = max(t, 0)
+
+			radiusPx = t * 0.7
+		}
+
+		radiusPx = max(fillRect.Dx(), fillRect.Dy()) * 0.5 * 0.2
+
+		tileRadiuses := [4]float64{
+			radiusPx,
+			radiusPx,
+			radiusPx,
+			radiusPx,
+		}
+
+		if Abs(style.TileScale-1) < 0.1 {
+			for i := range 4 {
+				rx := x
+				ry := y
+
+				//   0
+				//   |
+				// 3- -1
+				//   |
+				//   2
+
+				switch i {
+				case 0:
+					ry -= 1
+				case 1:
+					rx += 1
+				case 2:
+					ry += 1
+				case 3:
+					rx -= 1
+				}
+
+				if 0 <= rx && rx < g.Board.Width && 0 <= ry && ry < g.Board.Height {
+					if g.RenderTileStyles[rx][ry].DrawTile {
+						tileRadiuses[i] = 0
+						tileRadiuses[(i+1)%4] = 0
+					}
+				}
+			}
+		}
+
+		callback(x, y, style, strokeRect, fillRect, tileRadiuses)
+	}
+}
+
+func (g *Game) forEachFgTile(callback func(x, y int, style TileStyle, fgRect FRectangle)) {
+	g.forEachTile(func(x, y int, style TileStyle, strokeRect, fillRect FRectangle, radiusPx [4]float64) {
+		fgRect := fillRect
+		callback(x, y, style, fgRect)
+	})
+}
+
+func ShouldDrawBgTile(style TileStyle) bool {
+	return style.DrawBg && style.BgScale > 0.001
+}
+
+func ShouldDrawTile(style TileStyle) bool {
+	return style.TileScale > 0.001 && style.DrawTile
+}
+
+func ShouldDrawFgTile(style TileStyle) bool {
+	return style.TileScale > 0.001 && style.FgScale > 0.001 && style.DrawFg && style.FgType != TileFgTypeNone
+}
+
+func (g *Game) DrawBoard(dst *eb.Image) {
+	// TODO: support alpha
+	/*
+		iter := NewBoardIterator(0, 0, g.Board.Width-1, g.Board.Height-1)
+
+		iter.Reset()
+		for iter.HasNext() {
+			x, y := iter.GetNext()
+
+			style := g.RenderTileStyles[x][y]
+
+			if !style.DrawTile && !style.DrawFg && !style.DrawBg {
+				continue
+			}
+
+			ogTileRect := GetBoardTileRect(g.BoardRect(), g.Board.Width, g.Board.Height, x, y)
+
+			// draw background tile
+			if style.DrawBg && style.BgScale > 0.001 {
+				bgTileRect := ogTileRect
+				bgTileRect = bgTileRect.Add(FPt(style.BgOffsetX, style.BgOffsetY))
+				bgTileRect = FRectScaleCentered(bgTileRect, style.BgScale)
+
+				DrawFilledRect(dst, bgTileRect, style.BgFillColor)
+
+				// draw highlight
+				if style.BgTileHightlight > 0 {
+					t := style.BgTileHightlight
+					c := TheColorTable[ColorTileHighLight]
+					DrawFilledRect(
+						dst,
+						bgTileRect,
+						color.NRGBA{c.R, c.G, c.B, uint8(f64(c.A) * t)},
+					)
+				}
+
+				// draw bomb animation
+				if style.BgBombAnim > 0 {
+					t := Clamp(style.BgBombAnim, 0, 1)
+
+					const outerMargin = 1
+					const innerMargin = 2
+
+					outerRect := bgTileRect.Inset(outerMargin)
+					outerRect = outerRect.Inset(min(outerRect.Dx(), outerRect.Dy()) * 0.5 * (1 - t))
+					innerRect := outerRect.Inset(innerMargin)
+
+					innerRect = innerRect.Add(FPt(0, innerMargin))
+
+					radius := Lerp(1, 0.1, t*t*t)
+
+					innerRadius := radius * min(innerRect.Dx(), innerRect.Dy()) * 0.5
+					outerRadius := radius * min(outerRect.Dx(), outerRect.Dy()) * 0.5
+
+					DrawFilledRoundRectFast(dst, outerRect, outerRadius, true, 5, ColorMineBg1)
+					DrawFilledRoundRectFast(dst, innerRect, innerRadius, true, 5, ColorMineBg2)
+
+					DrawSubViewInRect(dst, innerRect, 1, 0, 0, ColorMine, GetMineTile())
+				}
+			}
+		}
+
+		g.TileImage.Clear()
+
+		iter.Reset()
+		for iter.HasNext() {
+			x, y := iter.GetNext()
+
+			style := g.RenderTileStyles[x][y]
+
+			if !style.DrawTile && !style.DrawFg && !style.DrawBg {
+				continue
+			}
+
+			ogTileRect := GetBoardTileRect(g.BoardRect(), g.Board.Width, g.Board.Height, x, y)
+
+			// draw foreground tile
+			if style.TileScale > 0.001 {
+				tileRect := ogTileRect
+
+				tileRect = tileRect.Add(FPt(style.TileOffsetX, style.TileOffsetY))
+				tileRect = FRectScaleCentered(tileRect, style.TileScale)
+
+				//strokeRect := tileRect.Inset(-2)
+				strokeRect := tileRect
+				fillRect := tileRect.Add(FPt(0, -2))
+
+				radiusPx := float64(0)
+
+				if !CloseTo(style.TileScale, 1) {
+					if style.TileScale < 1 {
+						radius := 1 - style.TileScale
+						radius = Clamp(radius, 0, 1)
+						radius = EaseOutQuint(radius)
+						radiusPx = min(fillRect.Dx(), fillRect.Dy()) * 0.5 * radius
+					} else { // style.TileStyle > 1
+						dx := fillRect.Dx() - ogTileRect.Dx()
+						dy := fillRect.Dy() - ogTileRect.Dy()
+
+						t := min(dx, dy)
+						t = max(t, 0)
+
+						radiusPx = t * 0.7
+					}
+				}
+
+				const segments = 5
+
+				// TODO: each corner should have it's own radiuses
+				if style.DrawTile {
+					fillColor := style.TileFillColor
+					strokeColor := style.TileStrokeColor
+
+					DrawFilledRoundRectFast(dst, strokeRect, radiusPx, true, segments, strokeColor)
+					DrawFilledRoundRectFast(dst, fillRect, radiusPx, true, segments, fillColor)
+				}
+
+				if style.DrawFg && style.FgType != TileFgTypeNone {
+					fgRect := fillRect
+
+					fgColor := style.FgColor
+
+					if style.FgType == TileFgTypeNumber {
+						count := g.Board.GetNeighborMineCount(x, y)
+						if 1 <= count && count <= 8 {
+							DrawSubViewInRect(
+								dst,
+								fgRect,
+								style.FgScale,
+								style.FgOffsetX, style.FgOffsetY,
+								fgColor,
+								GetNumberTile(count),
+							)
+						}
+					} else if style.FgType == TileFgTypeFlag {
+						DrawSubViewInRect(
+							dst,
+							fgRect,
+							style.FgScale,
+							style.FgOffsetX, style.FgOffsetY,
+							fgColor,
+							GetFlagTile(),
+						)
+					}
+				}
+			}
+		}
+	*/
+
+	// ============================
+	// draw background tiles
+	// ============================
+	g.forEachBgTile(func(x, y int, style TileStyle, bgTileRect FRectangle) {
+		if ShouldDrawBgTile(style) {
 			DrawFilledRect(dst, bgTileRect, style.BgFillColor)
 
 			// draw highlight
@@ -1475,78 +1719,94 @@ func (g *Game) DrawBoard(dst *eb.Image) {
 				DrawSubViewInRect(dst, innerRect, 1, 0, 0, ColorMine, GetMineTile())
 			}
 		}
+	})
 
-		// draw foreground tile
-		if style.TileScale > 0.001 {
-			tileRect := ogTileRect
+	// ============================
+	// draw tiles
+	// ============================
+	const segments = 5
 
-			tileRect = tileRect.Add(FPt(style.TileOffsetX, style.TileOffsetY))
-			tileRect = FRectScaleCentered(tileRect, style.TileScale)
+	g.TileImage.Clear()
 
-			//strokeRect := tileRect.Inset(-2)
-			strokeRect := tileRect
-			fillRect := tileRect.Add(FPt(0, -2))
+	g.forEachTile(func(x, y int, style TileStyle, strokeRect, fillRect FRectangle, radiusPx [4]float64) {
+		if ShouldDrawTile(style) {
+			strokeColor := style.TileStrokeColor
 
-			radiusPx := float64(0)
+			DrawFilledRoundRectFastEx(g.TileImage, strokeRect, radiusPx, true, [4]int{segments, segments, segments, segments}, strokeColor)
+		}
+	})
 
-			if !CloseTo(style.TileScale, 1) {
-				if style.TileScale < 1 {
-					radius := 1 - style.TileScale
-					radius = Clamp(radius, 0, 1)
-					radius = EaseOutQuint(radius)
-					radiusPx = min(fillRect.Dx(), fillRect.Dy()) * 0.5 * radius
-				} else { // style.TileStyle > 1
-					dx := fillRect.Dx() - ogTileRect.Dx()
-					dy := fillRect.Dy() - ogTileRect.Dy()
+	g.forEachTile(func(x, y int, style TileStyle, strokeRect, fillRect FRectangle, radiusPx [4]float64) {
+		if ShouldDrawTile(style) {
+			fillColor := style.TileFillColor
 
-					t := min(dx, dy)
-					t = max(t, 0)
+			DrawFilledRoundRectFastEx(g.TileImage, fillRect, radiusPx, true, [4]int{segments, segments, segments, segments}, fillColor)
+		}
+	})
 
-					radiusPx = t * 0.7
-				}
-			}
+	// draw water effect
+	if g.GameState == GameStateWon {
+		rect := g.BoardRect()
+		rect = rect.Inset(-3)
 
-			const segments = 5
+		colors := [4]color.Color{
+			ColorWater1,
+			ColorWater2,
+			ColorWater3,
+			ColorWater4,
+		}
 
-			// TODO: each corner should have it's own radiuses
-			if style.DrawTile {
-				fillColor := style.TileFillColor
-				strokeColor := style.TileStrokeColor
+		t := EaseOutQuint(g.WinAnimTimer.Normalize())
 
-				DrawFilledRoundRectFast(dst, strokeRect, radiusPx, true, segments, strokeColor)
-				DrawFilledRoundRectFast(dst, fillRect, radiusPx, true, segments, fillColor)
-			}
+		for i, c := range colors {
+			nrgba := ColorToNRGBA(c)
+			colors[i] = color.NRGBA{nrgba.R, nrgba.G, nrgba.B, uint8(f64(nrgba.A) * t)}
+		}
 
-			if style.DrawFg && style.FgType != TileFgTypeNone {
-				fgRect := fillRect
+		waterT := EaseOutQuint(t)
 
-				fgColor := style.FgColor
+		BeginBlend(eb.BlendSourceAtop)
+		DrawWaterRect(
+			g.TileImage,
+			rect,
+			GlobalTimerNow()+time.Duration(waterT*f64(time.Second)*10),
+			colors,
+			FPt(0, 0),
+		)
+		EndBlend()
+	}
 
-				if style.FgType == TileFgTypeNumber {
-					count := g.Board.GetNeighborMineCount(x, y)
-					if 1 <= count && count <= 8 {
-						DrawSubViewInRect(
-							dst,
-							fgRect,
-							style.FgScale,
-							style.FgOffsetX, style.FgOffsetY,
-							fgColor,
-							GetNumberTile(count),
-						)
-					}
-				} else if style.FgType == TileFgTypeFlag {
+	// draw TileImage
+	DrawImage(dst, g.TileImage, nil)
+
+	g.forEachFgTile(func(x, y int, style TileStyle, fgRect FRectangle) {
+		if ShouldDrawFgTile(style) {
+			fgColor := style.FgColor
+
+			if style.FgType == TileFgTypeNumber {
+				count := g.Board.GetNeighborMineCount(x, y)
+				if 1 <= count && count <= 8 {
 					DrawSubViewInRect(
 						dst,
 						fgRect,
 						style.FgScale,
 						style.FgOffsetX, style.FgOffsetY,
 						fgColor,
-						GetFlagTile(),
+						GetNumberTile(count),
 					)
 				}
+			} else if style.FgType == TileFgTypeFlag {
+				DrawSubViewInRect(
+					dst,
+					fgRect,
+					style.FgScale,
+					style.FgOffsetX, style.FgOffsetY,
+					fgColor,
+					GetFlagTile(),
+				)
 			}
 		}
-	}
+	})
 }
 
 func (g *Game) BoardRect() FRectangle {
@@ -1746,6 +2006,8 @@ func (g *Game) StartDefeatAnimation(originX, originY int) {
 }
 
 func (g *Game) StartWinAnimation(originX, originY int) {
+	g.SkipAllTileAnimations()
+
 	fw, fh := f64(g.Board.Width), f64(g.Board.Height)
 
 	originF := FPt(f64(originX), f64(originY))
@@ -1772,7 +2034,46 @@ func (g *Game) StartWinAnimation(originX, originY int) {
 
 				winDuration = max(winDuration, timer.Duration-timer.Current)
 
-				g.WinTilesAnimTimer[x][y] = timer
+				// add new animation
+				var anim CallbackTileAnimation
+
+				var ogFgColor color.Color
+
+				anim.OnUpdate = func(x, y int, style TileStyle) TileStyle {
+					timer.TickUp()
+
+					scaleT := timer.NormalizeUnclamped() * 0.8
+					scaleT = Clamp(scaleT, 0, 1)
+					scaleT = EaseOutElastic(scaleT)
+
+					// force scale to be 1 at the end of win animation
+					scaleT = max(scaleT, EaseInQuint(g.WinAnimTimer.Normalize()))
+
+					style.TileScale = scaleT
+					style.FgScale = Clamp(scaleT, 0, 1)
+
+					colorT := EaseOutQuint(timer.Normalize())
+					colorT = Clamp(colorT, 0, 1)
+
+					if ogFgColor == nil {
+						ogFgColor = style.FgColor
+					}
+
+					style.FgColor = LerpColorRGBA(ogFgColor, ColorElementWon, colorT)
+
+					return style
+				}
+
+				anim.OnSkip = func(x, y int, style TileStyle) TileStyle {
+					timer.Current = timer.Duration
+					return anim.OnUpdate(x, y, style)
+				}
+
+				anim.OnDone = func(x, y int, style TileStyle) bool {
+					return timer.Current >= timer.Duration
+				}
+
+				g.TileAnimations[x][y].Enqueue(anim)
 			}
 		}
 	}
@@ -1981,368 +2282,6 @@ func IsOddTile(boardWidth, boardHeight, x, y int) bool {
 	}
 }
 
-func DrawRoundBoardTileOld(
-	dst *eb.Image,
-	board [][]bool,
-	radiuses [][]float64,
-	boardRect FRectangle,
-	fillColor1, fillColor2 color.Color,
-	strokeColor color.Color, strokeWidth float64,
-	doFill bool,
-) {
-	const segmentCount = 6
-	boardWidth := len(board)
-	boardHeight := len(board[0])
-
-	isRevealed := func(x, y int) bool {
-		if !(0 <= x && x < boardWidth) {
-			return false
-		}
-		if !(0 <= y && y < boardHeight) {
-			return false
-		}
-		return board[x][y]
-	}
-
-	iter := NewBoardIterator(0, 0, boardWidth, boardHeight)
-
-	for iter.HasNext() {
-		x, y := iter.GetNext()
-
-		boardTileRect := GetBoardTileRect(boardRect, boardWidth, boardHeight, x, y)
-		rect := boardTileRect.Add(FPt(-boardTileRect.Dx()*0.5, -boardTileRect.Dy()*0.5))
-
-		//	0 --- 1
-		//	|     |
-		//	|     |
-		//	3 --- 2
-		revealed := [4]bool{}
-
-		revealed[0] = isRevealed(x-1, y-1)
-		revealed[1] = isRevealed(x, y-1)
-		revealed[2] = isRevealed(x, y)
-		revealed[3] = isRevealed(x-1, y)
-
-		revealCount := 0
-		for _, v := range revealed {
-			if v {
-				revealCount++
-			}
-		}
-
-		rectCornerRect := func(r FRectangle, corner int) FRectangle {
-			hx := r.Dx() * 0.5
-			hy := r.Dy() * 0.5
-
-			switch corner {
-			case 0:
-				return FRectXYWH(r.Min.X, r.Min.Y, hx, hy)
-			case 1:
-				return FRectXYWH(r.Min.X+hx, r.Min.Y, hx, hy)
-			case 2:
-				return FRectXYWH(r.Min.X+hx, r.Min.Y+hx, hx, hy)
-			case 3:
-				return FRectXYWH(r.Min.X, r.Min.Y+hx, hx, hy)
-			}
-			return FRectangle{}
-		}
-
-		cornerDirs := [4]FPoint{
-			{-1, -1},
-			{1, -1},
-			{1, 1},
-			{-1, 1},
-		}
-
-		isOddCorner := func(corner int) bool {
-			if IsOddTile(boardWidth, boardHeight, x, y) {
-				return corner%2 == 0
-			} else {
-				return corner%2 != 0
-			}
-		}
-
-		cornerColor := func(corner int) color.Color {
-			if !isOddCorner(corner) {
-				return fillColor1
-			} else {
-				return fillColor2
-			}
-		}
-
-		// in pixels
-		cornerRadius := func(corner int) float64 {
-			rx, ry := x, y
-			switch corner {
-			case 0:
-				rx -= 1
-				ry -= 1
-			case 1:
-				ry -= 1
-			case 2:
-				// pass
-			case 3:
-				rx -= 1
-			}
-
-			rx = Clamp(rx, 0, boardWidth-1)
-			ry = Clamp(ry, 0, boardHeight-1)
-
-			radius := radiuses[rx][ry]
-			radius = Clamp(radius, 0, 1)
-
-			return min(rect.Dx()*0.5, rect.Dy()*0.5) * radius
-		}
-
-		cornerOpposite := func(corner int) int {
-			return (corner + 2) % 4
-		}
-
-		rectCornerVert := func(r FRectangle, corner int) FPoint {
-			switch corner {
-			case 0:
-				return r.Min
-			case 1:
-				return FPoint{r.Max.X, r.Min.Y}
-			case 2:
-				return r.Max
-			case 3:
-				return FPoint{r.Min.X, r.Max.Y}
-			}
-			return FPoint{}
-		}
-
-		getConcaveOrSharpCornersRectPath := func(
-			isConcave [4]bool,
-			concaveRadius [4]float64,
-		) [4]*ebv.Path {
-			var paths [4]*ebv.Path
-
-			for i := range 4 {
-
-				if !isConcave[i] {
-					cornerRect := rectCornerRect(rect, i)
-					paths[i] = GetRectPath(cornerRect)
-				} else {
-					p := &ebv.Path{}
-
-					cornerRect := rectCornerRect(rect, i)
-
-					edgeCorner := cornerOpposite(i)
-					edgeCornerVert := rectCornerVert(cornerRect, edgeCorner)
-
-					arcCenter := FPt(
-						edgeCornerVert.X+cornerDirs[i].X*concaveRadius[i],
-						edgeCornerVert.Y+cornerDirs[i].Y*concaveRadius[i],
-					)
-
-					p.MoveTo(f32(edgeCornerVert.X), f32(edgeCornerVert.Y))
-
-					startAngle := Pi*0.5 + Pi*0.5*f64(i)
-					endAngle := startAngle - Pi*0.5
-					ArcFast(
-						p,
-						(arcCenter.X), (arcCenter.Y),
-						(concaveRadius[i]),
-						startAngle, endAngle,
-						ebv.CounterClockwise,
-						segmentCount,
-					)
-
-					p.Close()
-
-					paths[i] = p
-				}
-			}
-
-			return paths
-		}
-
-		drawCorner := func(corner int, roundCorner int) {
-			p := &ebv.Path{}
-
-			roundOpposite := cornerOpposite(roundCorner)
-
-			cornerRect := rectCornerRect(rect, corner)
-			roundVert := rectCornerVert(cornerRect, roundCorner)
-
-			radius := cornerRadius(corner)
-
-			arcCenter := FPoint{
-				X: roundVert.X + cornerDirs[roundOpposite].X*radius,
-				Y: roundVert.Y + cornerDirs[roundOpposite].Y*radius,
-			}
-
-			startAngle := Pi + Pi*0.5*f64(roundCorner)
-			endAngle := startAngle + Pi*0.5
-
-			ArcFast(
-				p,
-				(arcCenter.X), (arcCenter.Y),
-				(radius), (startAngle), (endAngle), ebv.Clockwise,
-				segmentCount,
-			)
-
-			c := roundCorner
-			c = (c + 1) % 4
-			for range 3 {
-				v := rectCornerVert(cornerRect, c)
-				p.LineTo(f32(v.X), f32(v.Y))
-				c = (c + 1) % 4
-			}
-
-			p.Close()
-
-			if doFill {
-				DrawFilledPath(dst, p, cornerColor(corner))
-			} else {
-				op := &ebv.StrokeOptions{}
-				op.Width = f32(strokeWidth)
-				op.MiterLimit = 4
-				StrokePath(dst, p, op, strokeColor)
-			}
-		}
-
-		switch revealCount {
-		case 0:
-			// pass
-		case 1:
-			for i, v := range revealed {
-				if v {
-					drawCorner(i, cornerOpposite(i))
-				}
-			}
-		case 2:
-			for i, v := range revealed {
-				if v {
-					drawCorner(i, cornerOpposite(i))
-				}
-			}
-		case 3:
-			var unRevealed int
-			for i, v := range revealed {
-				if !v {
-					unRevealed = i
-					break
-				}
-			}
-			var isConcave [4]bool
-			var concaveRadius [4]float64
-
-			radius := cornerRadius(unRevealed)
-
-			isConcave[unRevealed] = true
-			concaveRadius[unRevealed] = radius
-
-			paths := getConcaveOrSharpCornersRectPath(
-				isConcave, concaveRadius,
-			)
-
-			if doFill {
-				for _, p := range paths {
-					DrawFilledPath(dst, p, cornerColor((unRevealed+1)%4))
-				}
-				drawCorner(cornerOpposite(unRevealed), unRevealed)
-			} else {
-				for _, p := range paths {
-					op := &ebv.StrokeOptions{}
-					op.Width = f32(strokeWidth)
-					op.MiterLimit = 4
-					StrokePath(dst, p, op, strokeColor)
-				}
-			}
-		case 4:
-			if doFill {
-				for i, v := range revealed {
-					if v {
-						DrawFilledRect(dst, rectCornerRect(rect, i), cornerColor(i))
-					}
-				}
-			}
-		}
-	}
-}
-
-func DrawRoundBoardTile(
-	dst *eb.Image,
-	board [][]bool,
-	boardRect FRectangle,
-	radiuses [][]float64,
-	scales [][]float64,
-	inset float64,
-	fillColor1, fillColor2 color.Color,
-) {
-	const segments = 5
-	boardWidth := len(board)
-	boardHeight := len(board[0])
-
-	for x := range boardWidth {
-		for y := range boardWidth {
-			if !board[x][y] {
-				continue
-			}
-			tileRect := GetBoardTileRect(boardRect, boardWidth, boardHeight, x, y)
-			center := FRectangleCenter(tileRect)
-			tileRect = CenterFRectangle(
-				FRectWH(tileRect.Dx()*scales[x][y], tileRect.Dy()*scales[x][y]),
-				center.X, center.Y,
-			)
-			tileRect = tileRect.Inset(inset)
-			radiusPx := min(tileRect.Dx(), tileRect.Dy()) * 0.5 * radiuses[x][y]
-
-			tileRadiuses := [4]float64{
-				radiusPx,
-				radiusPx,
-				radiusPx,
-				radiusPx,
-			}
-
-			if inset <= 0 && scales[x][y] == 1 {
-				for i := range 4 {
-					rx := x
-					ry := y
-					//   0
-					//   |
-					// 3- -1
-					//   |
-					//   2
-
-					switch i {
-					case 0:
-						ry -= 1
-					case 1:
-						rx += 1
-					case 2:
-						ry += 1
-					case 3:
-						rx -= 1
-					}
-
-					if 0 <= rx && rx < boardWidth && 0 <= ry && ry < boardHeight {
-						if board[rx][ry] {
-							tileRadiuses[i] = 0
-							tileRadiuses[(i+1)%4] = 0
-						}
-					}
-				}
-			}
-
-			clr := fillColor1
-			if IsOddTile(boardWidth, boardHeight, x, y) {
-				clr = fillColor2
-			}
-			DrawFilledRoundRectFastEx(
-				dst,
-				tileRect,
-				tileRadiuses,
-				true,
-				[4]int{segments, segments, segments, segments},
-				clr,
-			)
-		}
-	}
-}
-
 func DrawWaterRect(
 	dst *eb.Image,
 	rect FRectangle,
@@ -2380,8 +2319,8 @@ func DrawWaterRect(
 }
 
 func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
-	if g.MaskImage.Bounds().Dx() != outsideWidth || g.MaskImage.Bounds().Dy() != outsideHeight {
-		g.MaskImage = eb.NewImage(outsideWidth, outsideHeight)
+	if g.TileImage.Bounds().Dx() != outsideWidth || g.TileImage.Bounds().Dy() != outsideHeight {
+		g.TileImage = eb.NewImage(outsideWidth, outsideHeight)
 	}
 	return outsideWidth, outsideHeight
 }
