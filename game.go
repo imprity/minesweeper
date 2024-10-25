@@ -619,6 +619,7 @@ func (g *Game) ResetBoard(width, height int) {
 			g.BaseTileStyles[x][y] = NewTileStyle()
 		}
 	}
+	g.RenderTileStyles = New2DArray[TileStyle](width, height)
 
 	// TODO: This is just a temporary code to set style's background
 	// I think we should make a board background reveal animation
@@ -630,10 +631,9 @@ func (g *Game) ResetBoard(width, height int) {
 			if IsOddTile(width, height, x, y) {
 				g.BaseTileStyles[x][y].BgFillColor = ColorTileNormal2
 			}
+			g.RenderTileStyles[x][y] = g.BaseTileStyles[x][y]
 		}
 	}
-
-	g.RenderTileStyles = New2DArray[TileStyle](width, height)
 
 	g.TileAnimations = New2DArray[CircularQueue[TileAnimation]](width, height)
 	for x := range width {
