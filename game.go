@@ -514,8 +514,8 @@ type Game struct {
 	Board     Board
 	PrevBoard Board
 
-	MineCount      [DifficultySize]int // constant
-	BoardTileCount [DifficultySize]int // constant
+	MineCount      [DifficultySize]int         // constant
+	BoardTileCount [DifficultySize]image.Point // constant
 
 	BoardTouched bool
 
@@ -567,8 +567,8 @@ func NewGame() *Game {
 	g.MineCount = [DifficultySize]int{
 		10, 40, 100,
 	}
-	g.BoardTileCount = [DifficultySize]int{
-		10, 16, 20,
+	g.BoardTileCount = [DifficultySize]image.Point{
+		image.Pt(10, 9), image.Pt(15, 13), image.Pt(24, 20),
 	}
 
 	g.TileImage = eb.NewImage(int(ScreenWidth), int(ScreenHeight))
@@ -576,7 +576,7 @@ func NewGame() *Game {
 	g.TileHighLightTimer.Duration = time.Millisecond * 100
 	g.NumberClickTimer.Duration = time.Millisecond * 30
 
-	g.BoardSizeRatio = 0.8
+	g.BoardSizeRatio = 0.85
 
 	g.RetryButtonAnimTimer.Duration = time.Millisecond * 400
 
@@ -592,12 +592,12 @@ func NewGame() *Game {
 	g.ResetAnimTimer.Duration = time.Millisecond * 400
 	g.ResetAnimTippingPoint = 0.3
 
-	g.ResetBoard(g.BoardTileCount[g.Difficulty], g.BoardTileCount[g.Difficulty])
+	g.ResetBoard(g.BoardTileCount[g.Difficulty].X, g.BoardTileCount[g.Difficulty].Y)
 
 	g.DifficultySelectUI = NewDifficultySelectUI(g.BoardRect())
 	g.DifficultySelectUI.OnDifficultyChange = func(d Difficulty) {
 		g.Difficulty = d
-		g.ResetBoard(g.BoardTileCount[d], g.BoardTileCount[d])
+		g.ResetBoard(g.BoardTileCount[d].X, g.BoardTileCount[d].Y)
 	}
 
 	g.ColorTablePicker = NewColorTablePicker()
@@ -998,7 +998,7 @@ func (g *Game) Update() error {
 		g.ResetAnimTimer.TickUp()
 	}
 	if g.ResetAnimTimer.Current >= g.ResetAnimTimer.Duration {
-		g.ResetBoard(g.BoardTileCount[g.Difficulty], g.BoardTileCount[g.Difficulty])
+		g.ResetBoard(g.BoardTileCount[g.Difficulty].X, g.BoardTileCount[g.Difficulty].Y)
 		g.GameState = GameStatePlaying
 	}
 
@@ -1006,7 +1006,7 @@ func (g *Game) Update() error {
 	// update DifficultySelectUI
 	// ===================================
 	g.DifficultySelectUI.DoShow = !g.BoardTouched
-	g.DifficultySelectUI.Update(g.BoardRect())
+	g.DifficultySelectUI.Update(g.MaxBoardRect())
 
 	// ==========================
 	// debug mode
@@ -1046,7 +1046,7 @@ func (g *Game) Draw(dst *eb.Image) {
 		g.RetryButton.Draw(dst)
 	}
 
-	g.DifficultySelectUI.Draw(dst, g.BoardRect())
+	g.DifficultySelectUI.Draw(dst, g.MaxBoardRect())
 
 	g.ColorTablePicker.Draw(dst)
 }
@@ -1316,14 +1316,31 @@ func (g *Game) DrawBoard(dst *eb.Image) {
 }
 
 func (g *Game) BoardRect() FRectangle {
-	size := min(ScreenWidth, ScreenHeight) * g.BoardSizeRatio
-	halfSize := size * 0.5
-	halfWidth := ScreenWidth * 0.5
-	halfHeight := ScreenHeight * 0.5
-	return FRect(
-		halfWidth-halfSize, halfHeight-halfSize,
-		halfWidth+halfSize, halfHeight+halfSize,
-	)
+	var boardTileWidth, boardTileHeight int
+
+	boardTileWidth = g.BoardTileCount[g.Difficulty].X
+	boardTileHeight = g.BoardTileCount[g.Difficulty].Y
+
+	maxSize := min(ScreenWidth, ScreenHeight) * g.BoardSizeRatio
+
+	var boardWidth, boardHeight float64
+
+	if boardTileWidth > boardTileHeight {
+		boardWidth = maxSize
+		boardHeight = maxSize * f64(boardTileHeight) / f64(boardTileWidth)
+	} else {
+		boardHeight = maxSize
+		boardWidth = maxSize * f64(boardTileWidth) / f64(boardTileHeight)
+	}
+
+	boardRect := FRectWH(boardWidth, boardHeight)
+	return CenterFRectangle(boardRect, ScreenWidth*0.5, ScreenHeight*0.5)
+}
+
+func (g *Game) MaxBoardRect() FRectangle {
+	maxSize := min(ScreenWidth, ScreenHeight) * g.BoardSizeRatio
+	boardRect := FRectWH(maxSize, maxSize)
+	return CenterFRectangle(boardRect, ScreenWidth*0.5, ScreenHeight*0.5)
 }
 
 func (g *Game) MousePosToBoardPos(mousePos FPoint) (int, int) {
@@ -1864,15 +1881,10 @@ func (g *Game) DrawTile(
 }
 
 func IsOddTile(boardWidth, boardHeight, x, y int) bool {
-	index := x + boardHeight*y
-	if boardWidth%2 == 0 {
-		if y%2 == 0 {
-			return index%2 != 0
-		} else {
-			return index%2 == 0
-		}
+	if y%2 == 0 {
+		return x%2 != 0
 	} else {
-		return index%2 != 0
+		return x%2 == 0
 	}
 }
 
