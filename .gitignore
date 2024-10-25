@@ -1,3 +1,4 @@
 *.exe
 minesweeper
 tmps/
+web_build/minesweeper.wasm
