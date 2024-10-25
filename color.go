@@ -139,6 +139,16 @@ func LerpColorRGBA(c1, c2 color.Color, t float64) color.NRGBA {
 	return color.NRGBA{uint8(r * 255), uint8(g * 255), uint8(b * 255), uint8(a * 255)}
 }
 
+func ColorFade(c color.Color, a float64) color.NRGBA {
+	nc := ColorNormalized(c, false)
+	return color.NRGBA{
+		uint8(255 * nc[0]),
+		uint8(255 * nc[1]),
+		uint8(255 * nc[2]),
+		uint8(255 * nc[3] * a),
+	}
+}
+
 func ColorToString(clr color.Color) string {
 	c := ColorToNRGBA(clr)
 	return fmt.Sprintf("#%02X%02X%02X%02X", c.R, c.G, c.B, c.A)

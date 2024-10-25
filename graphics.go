@@ -183,5 +183,6 @@ func DrawText(
 	op.ColorScale = options.ColorScale
 	op.Blend = CurrentBlend()
 	op.Filter = CurrentFilter()
+	op.LayoutOptions = options.LayoutOptions
 	ebt.Draw(dst, text, face, op)
 }

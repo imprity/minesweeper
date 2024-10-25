@@ -411,6 +411,14 @@ func CloseTo(a, b float64) bool {
 	return false
 }
 
+func CloseToEx(a, b, errorMargin float64) bool {
+	d := a - b
+	if -errorMargin <= d && d <= errorMargin {
+		return true
+	}
+	return false
+}
+
 // ========================
 // easing functions
 // ========================
@@ -441,6 +449,18 @@ func EaseInQuint(t float64) float64 {
 	return math.Pow(t, 5)
 }
 
+func EaseInElastic(t float64) float64 {
+	const c4 = (2 * math.Pi) / 3
+
+	if t == 0 {
+		return 0
+	}
+	if t == 1 {
+		return 1
+	}
+	return -math.Pow(2, 10*t-10) * math.Sin((t*10-10.75)*c4)
+}
+
 func EaseOutElastic(t float64) float64 {
 	const c4 = (2 * math.Pi) / 3
 
@@ -451,6 +471,23 @@ func EaseOutElastic(t float64) float64 {
 		return 1
 	}
 	return math.Pow(2, -10*t)*math.Sin((t*10-0.75)*c4) + 1
+}
+
+func EaseInOutElastic(t float64) float64 {
+	const c5 = (2 * math.Pi) / 4.5
+
+	if t == 0 {
+		return 0
+	}
+	if t == 1 {
+		return 1
+	}
+
+	if t < 0.5 {
+		return -(math.Pow(2, 20*t-10) * math.Sin((20*t-11.125)*c5)) / 2
+	}
+
+	return (math.Pow(2, -20*t+10)*math.Sin((20*t-11.125)*c5))/2 + 1
 }
 
 /*
