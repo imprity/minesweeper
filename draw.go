@@ -8,6 +8,19 @@ import (
 	ebv "github.com/hajimehoshi/ebiten/v2/vector"
 )
 
+func StrokeLine(
+	dst *eb.Image,
+	x0, y0, x1, y1 float64,
+	strokeWidth float64,
+	clr color.Color,
+) {
+	// TODO : this is slow
+	p := &ebv.Path{}
+	p.MoveTo(f32(x0), f32(y0))
+	p.LineTo(f32(x1), f32(y1))
+	StrokePath(dst, p, &ebv.StrokeOptions{Width: f32(strokeWidth)}, clr)
+}
+
 func GetRectPath(rect FRectangle) *ebv.Path {
 	path := &ebv.Path{}
 	path.MoveTo(f32(rect.Min.X), f32(rect.Min.Y))

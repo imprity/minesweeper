@@ -31,12 +31,18 @@ func init() {
 
 type App struct {
 	ShowDebugConsole bool
-	Game             *Game
+	// TEST TEST TEST TEST TEST TEST
+	//Game             *Game
+	Game *BezierDrawer
+	// TEST TEST TEST TEST TEST TEST
 }
 
 func NewApp() *App {
 	a := new(App)
-	a.Game = NewGame()
+	// TEST TEST TEST TEST TEST TEST
+	//a.Game = NewGame()
+	a.Game = NewBezierDrawer()
+	// TEST TEST TEST TEST TEST TEST
 	return a
 }
 
