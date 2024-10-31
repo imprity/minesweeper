@@ -420,6 +420,44 @@ func CloseToEx(a, b, errorMargin float64) bool {
 }
 
 // ========================
+// bezier curve
+// ========================
+
+func BezierCurve(p0, p1, p2, p3, t float64) float64 {
+	it := 1 - t
+	return it*it*it*p0 + 3*it*it*t*p1 + 3*it*t*t*p2 + t*t*t*p3
+}
+
+func BezierCurveFPt(p0, p1, p2, p3 FPoint, t float64) FPoint {
+	return FPt(
+		BezierCurve(p0.X, p1.X, p2.X, p3.X, t),
+		BezierCurve(p0.Y, p1.Y, p2.Y, p3.Y, t),
+	)
+}
+
+// approximates t for given n in bezier curve using Newton's method
+// hard coded to only support 0 - 1
+func BezierCurveNewton(p0, p1, p2, p3, n float64) float64 {
+	n = Clamp(n, 0, 1)
+	t := n
+	for range 4 {
+		it := 1 - t
+		f := BezierCurve(p0, p1, p2, p3, t) - n
+		fd := 3*it*it*(p1-p0) + 6*it*t*(p2-p1) + 3*t*t*(p3-p2)
+		if Abs(fd) < 0.0001 {
+			break
+		}
+		if Abs(f) < 0.0001 {
+			break
+		}
+		t = t - f/fd
+		t = Clamp(t, 0, 1)
+	}
+
+	return Clamp(t, 0, 1)
+}
+
+// ========================
 // easing functions
 // ========================
 

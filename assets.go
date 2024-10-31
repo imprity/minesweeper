@@ -247,6 +247,23 @@ func LoadAssets() {
 	if err := loadColorTable(); err != nil {
 		ErrorLogger.Printf("failed to load color table: %v", err)
 	}
+
+	// load bezier table
+	loadBezierTable := func() error {
+		jsonData, err := loadData("assets/bezier-table.json")
+		if err != nil {
+			return err
+		}
+		table, err := BezierTableFromJson(jsonData)
+		if err != nil {
+			return err
+		}
+		TheBezierTable = table
+		return nil
+	}
+	if err := loadBezierTable(); err != nil {
+		ErrorLogger.Printf("failed to load bezier table: %v", err)
+	}
 }
 
 func SaveColorTable() {
@@ -258,6 +275,31 @@ func SaveColorTable() {
 			return err
 		}
 		path, err := RelativePath("assets/color-table.json")
+		if err != nil {
+			return err
+		}
+		err = os.WriteFile(path, jsonBytes, 0664)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	}
+
+	if err := saveImp(); err != nil {
+		ErrorLogger.Printf("failed to save color table: %v", err)
+	}
+}
+
+func SaveBezierTable() {
+	InfoLogger.Print("saving bezier table")
+
+	saveImp := func() error {
+		jsonBytes, err := BezierTableToJson(TheBezierTable)
+		if err != nil {
+			return err
+		}
+		path, err := RelativePath("assets/bezier-table.json")
 		if err != nil {
 			return err
 		}

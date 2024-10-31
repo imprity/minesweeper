@@ -31,18 +31,12 @@ func init() {
 
 type App struct {
 	ShowDebugConsole bool
-	// TEST TEST TEST TEST TEST TEST
-	//Game             *Game
-	Game *BezierDrawer
-	// TEST TEST TEST TEST TEST TEST
+	Game             *Game
 }
 
 func NewApp() *App {
 	a := new(App)
-	// TEST TEST TEST TEST TEST TEST
-	//a.Game = NewGame()
-	a.Game = NewBezierDrawer()
-	// TEST TEST TEST TEST TEST TEST
+	a.Game = NewGame()
 	return a
 }
 
@@ -75,8 +69,9 @@ func (a *App) Update() error {
 		LoadAssets()
 	}
 
-	if IsKeyJustPressed(SaveColorTableKey) {
+	if IsKeyJustPressed(SaveAssetsKey) {
 		SaveColorTable()
+		SaveBezierTable()
 	}
 
 	// ==========================

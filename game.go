@@ -120,110 +120,6 @@ func (rb *RetryButton) Draw(dst *eb.Image) {
 	DrawImage(dst, RetryButtonImage, op)
 }
 
-type ColorTablePicker struct {
-	DoShow bool
-
-	ColorPicker *ColorPicker
-
-	TableIndex ColorTableIndex
-
-	wasShowing bool
-}
-
-func NewColorTablePicker() *ColorTablePicker {
-	ct := new(ColorTablePicker)
-	ct.ColorPicker = NewColorPicker()
-
-	return ct
-}
-
-func (ct *ColorTablePicker) Update() {
-	if !ct.DoShow {
-		return
-	}
-
-	if !ct.wasShowing && ct.DoShow {
-		ct.ColorPicker.SetColor(TheColorTable[ct.TableIndex])
-	}
-	ct.wasShowing = ct.DoShow
-
-	ct.ColorPicker.Rect = FRectWH(200, 400)
-	ct.ColorPicker.Rect = FRectMoveTo(ct.ColorPicker.Rect, ScreenWidth-210, 10)
-	ct.ColorPicker.Update()
-
-	const firstRate = 200 * time.Millisecond
-	const repeatRate = 50 * time.Millisecond
-	changed := false
-
-	if HandleKeyRepeat(firstRate, repeatRate, ColorPickerUpKey) {
-		ct.TableIndex--
-		changed = true
-	}
-	if HandleKeyRepeat(firstRate, repeatRate, ColorPickerDownKey) {
-		ct.TableIndex++
-		changed = true
-	}
-	ct.TableIndex = Clamp(ct.TableIndex, 0, ColorTableSize-1)
-
-	if changed {
-		ct.ColorPicker.SetColor(TheColorTable[ct.TableIndex])
-	}
-
-	TheColorTable[ct.TableIndex] = ct.ColorPicker.Color()
-}
-
-func (ct *ColorTablePicker) Draw(dst *eb.Image) {
-	if !ct.DoShow {
-		return
-	}
-
-	ct.ColorPicker.Draw(dst)
-
-	// draw list of table entries
-	{
-		const textScale = 0.3
-
-		lineSpacing := FontLineSpacing(ClearFace)
-
-		// get bg width
-		bgWidth := float64(0)
-		for i := ColorTableIndex(0); i < ColorTableSize; i++ {
-			text := i.String()
-			w, _ := ebt.Measure(text, ClearFace, lineSpacing)
-			bgWidth = max(bgWidth, w*textScale)
-		}
-		bgHeight := lineSpacing * textScale * f64(ColorTableSize)
-
-		bgWidth += 20
-		bgHeight += 20
-
-		// draw bg
-		DrawFilledRect(
-			dst, FRectWH(bgWidth, bgHeight), color.NRGBA{0, 0, 0, 150},
-		)
-
-		// draw list texts
-		offsetY := float64(0)
-
-		for i := ColorTableIndex(0); i < ColorTableSize; i++ {
-			text := i.String()
-			op := &DrawTextOptions{}
-
-			op.GeoM.Scale(textScale, textScale)
-			op.GeoM.Translate(0, offsetY)
-			if i == ct.TableIndex {
-				op.ColorScale.ScaleWithColor(color.NRGBA{255, 0, 0, 255})
-			} else {
-				op.ColorScale.ScaleWithColor(color.NRGBA{255, 255, 255, 255})
-			}
-
-			DrawText(dst, text, ClearFace, op)
-
-			offsetY += lineSpacing * textScale
-		}
-	}
-}
-
 type DifficultySelectUI struct {
 	DoShow bool
 
@@ -557,7 +453,7 @@ type Game struct {
 	WaterAlpha      float64
 	WaterFlowOffset time.Duration
 
-	ColorTablePicker *ColorTablePicker
+	ResourceEditor *ResourceEditor
 
 	TileImage *eb.Image
 }
@@ -599,7 +495,7 @@ func NewGame() *Game {
 		g.ResetBoard(g.BoardTileCount[d].X, g.BoardTileCount[d].Y)
 	}
 
-	g.ColorTablePicker = NewColorTablePicker()
+	g.ResourceEditor = NewResourceEditor()
 
 	return g
 }
@@ -981,9 +877,9 @@ func (g *Game) Update() error {
 	// color table picker
 	// ==========================
 	if IsKeyJustPressed(ShowColorPickerKey) {
-		g.ColorTablePicker.DoShow = !g.ColorTablePicker.DoShow
+		g.ResourceEditor.DoShow = !g.ResourceEditor.DoShow
 	}
-	g.ColorTablePicker.Update()
+	g.ResourceEditor.Update()
 
 	return nil
 }
@@ -1000,7 +896,7 @@ func (g *Game) Draw(dst *eb.Image) {
 
 	g.DifficultySelectUI.Draw(dst, g.MaxBoardRect())
 
-	g.ColorTablePicker.Draw(dst)
+	g.ResourceEditor.Draw(dst)
 }
 
 func (g *Game) forEachBgTile(callback func(x, y int, style TileStyle, bgTileRect FRectangle)) {

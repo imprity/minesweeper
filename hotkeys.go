@@ -5,8 +5,8 @@ import (
 )
 
 const (
-	ReloadAssetsKey   eb.Key = eb.KeyF5
-	SaveColorTableKey eb.Key = eb.KeyF10
+	ReloadAssetsKey eb.Key = eb.KeyF5
+	SaveAssetsKey   eb.Key = eb.KeyF10
 
 	ShowDebugConsoleKey = eb.KeyF1
 
