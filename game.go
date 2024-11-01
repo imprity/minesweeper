@@ -442,8 +442,7 @@ type Game struct {
 
 	BoardSizeRatio float64 // constant, relative to min(ScreenWidth, ScreenHeight)
 
-	RevealMines     bool
-	ColorPickerMode bool
+	RevealMines bool
 
 	WaterAlpha      float64
 	WaterFlowOffset time.Duration
@@ -471,11 +470,12 @@ func NewGame() *Game {
 	g.BoardSizeRatio = 0.85
 
 	g.RetryButton = NewRetryButton()
+	g.RetryButton.Disabled = true
 	g.RetryButton.ActOnRelease = true
 	g.RetryButtonScale = 1
 
 	g.RetryButton.OnClick = func() {
-		g.StartResetBoardAnimation()
+		g.QueueResetBoardAnimation()
 	}
 
 	g.GameAnimations = NewCircularQueue[CallbackAnimation](10)
@@ -701,7 +701,7 @@ func (g *Game) Update() error {
 			for x := range g.Board.Width {
 				for y := range g.Board.Height {
 					if g.Board.Revealed[x][y] && !g.PrevBoard.Revealed[x][y] {
-						g.StartRevealAnimation(
+						g.QueueRevealAnimation(
 							g.PrevBoard.Revealed, g.Board.Revealed, boardX, boardY)
 
 						break REVEAL_CHECK
@@ -711,9 +711,9 @@ func (g *Game) Update() error {
 
 			if prevState != g.GameState {
 				if g.GameState == GameStateLost {
-					g.StartDefeatAnimation(boardX, boardY)
+					g.QueueDefeatAnimation(boardX, boardY)
 				} else if g.GameState == GameStateWon {
-					g.StartWinAnimation(boardX, boardY)
+					g.QueueWinAnimation(boardX, boardY)
 				}
 			}
 		}
@@ -729,10 +729,11 @@ func (g *Game) Update() error {
 		anim.Update()
 
 		if anim.Done() {
+			g.GameAnimations.Dequeue()
+
 			if anim.AfterDone != nil {
 				anim.AfterDone()
 			}
-			g.GameAnimations.Dequeue()
 		}
 	}
 
@@ -744,10 +745,10 @@ func (g *Game) Update() error {
 				anim.Update()
 
 				if anim.Done() {
+					g.TileAnimations[x][y].Dequeue()
 					if anim.AfterDone != nil {
 						anim.AfterDone()
 					}
-					g.TileAnimations[x][y].Dequeue()
 				}
 			}
 		}
@@ -849,12 +850,12 @@ func (g *Game) Update() error {
 	}
 	if IsKeyJustPressed(SetToDecoBoardKey) {
 		g.SetDebugBoardForDecoration()
-		g.StartRevealAnimation(
+		g.QueueRevealAnimation(
 			g.PrevBoard.Revealed, g.Board.Revealed, 0, 0)
 	}
 	if IsKeyJustPressed(InstantWinKey) {
 		g.SetBoardForInstantWin()
-		g.StartRevealAnimation(
+		g.QueueRevealAnimation(
 			g.PrevBoard.Revealed, g.Board.Revealed, 0, 0)
 	}
 
@@ -1215,8 +1216,8 @@ func (g *Game) TransformedRetryButtonRect() FRectangle {
 	return rect
 }
 
-func (g *Game) StartRevealAnimation(revealsBefore, revealsAfter [][]bool, originX, originy int) {
-	g.SkipAllTileAnimations()
+func (g *Game) QueueRevealAnimation(revealsBefore, revealsAfter [][]bool, originX, originy int) {
+	g.SkipAllAnimations()
 
 	fw, fh := f64(g.Board.Width-1), f64(g.Board.Height-1)
 
@@ -1298,8 +1299,8 @@ func (g *Game) StartRevealAnimation(revealsBefore, revealsAfter [][]bool, origin
 	}
 }
 
-func (g *Game) StartDefeatAnimation(originX, originY int) {
-	g.SkipAllTileAnimations()
+func (g *Game) QueueDefeatAnimation(originX, originY int) {
+	g.SkipAllAnimations()
 
 	var minePoses []image.Point
 
@@ -1367,19 +1368,42 @@ func (g *Game) StartDefeatAnimation(originX, originY int) {
 			return timer.Current >= timer.Duration
 		}
 
+		anim.AfterDone = func() {
+		}
+
 		g.TileAnimations[p.X][p.Y].Enqueue(anim)
 	}
 
 	defeatDuration += time.Millisecond * 10
 
-	//g.DefeatAnimTimer.Duration = defeatDuration
-	//g.DefeatAnimTimer.Current = 0
+	var defeatAnimTimer Timer
+	defeatAnimTimer.Duration = defeatDuration
 
-	g.QueueRetryButtonAnimation()
+	var anim CallbackAnimation
+	anim.Tag = AnimationTagDefeat
+
+	anim.Update = func() {
+		defeatAnimTimer.TickUp()
+	}
+
+	anim.Skip = func() {
+		defeatAnimTimer.Current = defeatAnimTimer.Duration
+		anim.Update()
+	}
+
+	anim.Done = func() bool {
+		return defeatAnimTimer.Current >= defeatAnimTimer.Duration
+	}
+
+	anim.AfterDone = func() {
+		g.QueueRetryButtonAnimation()
+	}
+
+	g.GameAnimations.Enqueue(anim)
 }
 
-func (g *Game) StartWinAnimation(originX, originY int) {
-	g.SkipAllTileAnimations()
+func (g *Game) QueueWinAnimation(originX, originY int) {
+	g.SkipAllAnimations()
 
 	fw, fh := f64(g.Board.Width), f64(g.Board.Height)
 
@@ -1393,6 +1417,7 @@ func (g *Game) StartWinAnimation(originX, originY int) {
 
 	var winDuration time.Duration
 
+	// queue tile animations
 	for x := range g.Board.Width {
 		for y := range g.Board.Height {
 			pos := FPt(f64(x), f64(y))
@@ -1466,6 +1491,7 @@ func (g *Game) StartWinAnimation(originX, originY int) {
 		}
 	}
 
+	// queue game animation
 	var winAnimTimer Timer
 
 	winAnimTimer.Duration = winDuration + time.Millisecond*100
@@ -1495,12 +1521,16 @@ func (g *Game) StartWinAnimation(originX, originY int) {
 		return winAnimTimer.Current >= winAnimTimer.Duration
 	}
 
-	g.GameAnimations.Enqueue(anim)
+	anim.AfterDone = func() {
+		g.QueueRetryButtonAnimation()
+	}
 
-	g.QueueRetryButtonAnimation()
+	g.GameAnimations.Enqueue(anim)
 }
 
 func (g *Game) QueueRetryButtonAnimation() {
+	g.SkipAllAnimations()
+
 	buttonRect := g.RetryButtonRect()
 	buttonRect = buttonRect.Inset(-10)
 
@@ -1624,8 +1654,9 @@ func (g *Game) QueueRetryButtonAnimation() {
 	}
 }
 
-func (g *Game) StartResetBoardAnimation() {
-	// TODO: reset board
+func (g *Game) QueueResetBoardAnimation() {
+	g.SkipAllAnimations()
+
 	fw, fh := f64(g.Board.Width), f64(g.Board.Height)
 
 	centerP := FPt(f64(g.Board.Width-1)*0.5, f64(g.Board.Height-1)*0.5)
@@ -1748,24 +1779,26 @@ func (g *Game) StartResetBoardAnimation() {
 	}
 }
 
-func (g *Game) SkipTileAnimationAt(x, y int) {
-	if !g.Board.IsPosInBoard(x, y) {
-		return
-	}
-
-	for !g.TileAnimations[x][y].IsEmpty() {
-		anim := g.TileAnimations[x][y].Dequeue()
-		anim.Skip()
-		if anim.AfterDone != nil {
-			anim.AfterDone()
-		}
-	}
-}
-
-func (g *Game) SkipAllTileAnimations() {
+func (g *Game) SkipAllAnimations() {
 	for x := range g.Board.Width {
 		for y := range g.Board.Height {
-			g.SkipTileAnimationAt(x, y)
+			for !g.TileAnimations[x][y].IsEmpty() {
+				anim := g.TileAnimations[x][y].Dequeue()
+				anim.Skip()
+				if anim.AfterDone != nil {
+					anim.AfterDone()
+				}
+			}
+		}
+	}
+
+	for !g.GameAnimations.IsEmpty() {
+		gameAnim := g.GameAnimations.Dequeue()
+
+		gameAnim.Skip()
+
+		if gameAnim.AfterDone != nil {
+			gameAnim.AfterDone()
 		}
 	}
 }
@@ -1777,13 +1810,13 @@ func (g *Game) SkipAllAnimationsUntilTag(tag AnimationTag) {
 			for !g.TileAnimations[x][y].IsEmpty() {
 				tileAnim := g.TileAnimations[x][y].At(0)
 				if tileAnim.Tag != tag {
+					g.TileAnimations[x][y].Dequeue()
+
 					tileAnim.Skip()
 
 					if tileAnim.AfterDone != nil {
 						tileAnim.AfterDone()
 					}
-
-					g.TileAnimations[x][y].Dequeue()
 				} else {
 					break TAG_LOOP
 				}
@@ -1794,13 +1827,13 @@ func (g *Game) SkipAllAnimationsUntilTag(tag AnimationTag) {
 	for !g.GameAnimations.IsEmpty() {
 		gameAnim := g.GameAnimations.At(0)
 		if gameAnim.Tag != tag {
+			g.GameAnimations.Dequeue()
+
 			gameAnim.Skip()
 
 			if gameAnim.AfterDone != nil {
 				gameAnim.AfterDone()
 			}
-
-			g.GameAnimations.Dequeue()
 		} else {
 			break
 		}
