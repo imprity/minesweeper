@@ -8,14 +8,15 @@ func _() {
 	// An "invalid array index" compiler error signifies that the constant values have changed.
 	// Re-run the stringer command to generate them again.
 	var x [1]struct{}
-	_ = x[BezierTest1-0]
-	_ = x[BezierTest2-1]
-	_ = x[BezierTableSize-2]
+	_ = x[BezierBoardHideTile-0]
+	_ = x[BezierBoardHideTileAlpha-1]
+	_ = x[BezierBoardHideButton-2]
+	_ = x[BezierTableSize-3]
 }
 
-const _BezierTableIndex_name = "BezierTest1BezierTest2BezierTableSize"
+const _BezierTableIndex_name = "BezierBoardHideTileBezierBoardHideTileAlphaBezierBoardHideButtonBezierTableSize"
 
-var _BezierTableIndex_index = [...]uint8{0, 11, 22, 37}
+var _BezierTableIndex_index = [...]uint8{0, 19, 43, 64, 79}
 
 func (i BezierTableIndex) String() string {
 	if i < 0 || i >= BezierTableIndex(len(_BezierTableIndex_index)-1) {

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"image/color"
 	"time"
 
@@ -133,11 +134,27 @@ func (re *ResourceEditor) Draw(dst *eb.Image) {
 		re.BezierEditor.Draw(dst)
 	}
 
+	helpText := fmt.Sprintf(
+		"press %s to reload assets\n"+
+			"press %s to save edited assets",
+		ReloadAssetsKey.String(),
+		SaveAssetsKey.String(),
+	)
+
 	// draw list of table entries
 	{
 		const textScale = 0.3
 
 		lineSpacing := FontLineSpacing(ClearFace)
+
+		var bgWidth float64
+		var bgHeight float64
+
+		{
+			w, _ := ebt.Measure(helpText, ClearFace, lineSpacing)
+			bgWidth = max(bgWidth, w*textScale)
+			bgHeight += lineSpacing * 3 * textScale
+		}
 
 		var indexLimit int
 
@@ -147,8 +164,6 @@ func (re *ResourceEditor) Draw(dst *eb.Image) {
 			indexLimit = int(BezierTableSize)
 		}
 
-		// get bg width
-		bgWidth := float64(0)
 		for i := 0; i < indexLimit; i++ {
 			var text string
 			if re.ShowingTable == 0 { // showing color picker
@@ -160,7 +175,7 @@ func (re *ResourceEditor) Draw(dst *eb.Image) {
 			w, _ := ebt.Measure(text, ClearFace, lineSpacing)
 			bgWidth = max(bgWidth, w*textScale)
 		}
-		bgHeight := lineSpacing * textScale * f64(ColorTableSize)
+		bgHeight += lineSpacing * textScale * f64(ColorTableSize)
 
 		bgWidth += 20
 		bgHeight += 20
@@ -170,9 +185,20 @@ func (re *ResourceEditor) Draw(dst *eb.Image) {
 			dst, FRectWH(bgWidth, bgHeight), color.NRGBA{0, 0, 0, 150},
 		)
 
-		// draw list texts
+		// draw texts
 		offsetY := float64(0)
 
+		{ // draw help texts
+			op := &DrawTextOptions{}
+
+			op.GeoM.Scale(textScale, textScale)
+			op.LineSpacing = lineSpacing
+
+			DrawText(dst, helpText, ClearFace, op)
+			offsetY += lineSpacing * 3 * textScale
+		}
+
+		// draw table entries
 		for i := 0; i < indexLimit; i++ {
 			var text string
 			if re.ShowingTable == 0 { // showing color picker

@@ -4,24 +4,12 @@ import (
 	"encoding/json"
 )
 
-type BezierCurveData struct {
-	Points [4]FPoint
-}
-
-var DefaultBezierCurveData BezierCurveData = BezierCurveData{
-	Points: [4]FPoint{
-		FPt(0, 0),
-		FPt(0.3, 0),
-		FPt(0.7, 1),
-		FPt(1, 1),
-	},
-}
-
 type BezierTableIndex int
 
 const (
-	BezierTest1 BezierTableIndex = iota
-	BezierTest2 BezierTableIndex = iota
+	BezierBoardHideTile BezierTableIndex = iota
+	BezierBoardHideTileAlpha
+	BezierBoardHideButton
 
 	BezierTableSize
 )
@@ -73,4 +61,17 @@ func BezierTableFromJson(tableJson []byte) ([BezierTableSize]BezierCurveData, er
 	}
 
 	return bezierTable, nil
+}
+
+type BezierCurveData struct {
+	Points [4]FPoint
+}
+
+var DefaultBezierCurveData BezierCurveData = BezierCurveData{
+	Points: [4]FPoint{
+		FPt(0, 0),
+		FPt(0.3, 0),
+		FPt(0.7, 1),
+		FPt(1, 1),
+	},
 }

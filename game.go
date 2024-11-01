@@ -390,20 +390,16 @@ const (
 	AnimationTagWin
 	AnimationTagDefeat
 	AnimationTagRetryButtonReveal
+	AnimationTagHideBoard
 )
 
-type TileAnimation struct {
-	Update func(x, y int, style TileStyle) TileStyle
-	Skip   func(x, y int, style TileStyle) TileStyle
-	Done   func(x, y int, style TileStyle) bool
-
-	Tag AnimationTag
-}
-
-type GameAnimation struct {
+type CallbackAnimation struct {
 	Update func()
 	Skip   func()
 	Done   func() bool
+
+	// optional
+	AfterDone func()
 
 	Tag AnimationTag
 }
@@ -420,9 +416,9 @@ type Game struct {
 	BaseTileStyles   [][]TileStyle
 	RenderTileStyles [][]TileStyle
 
-	TileAnimations [][]CircularQueue[TileAnimation]
+	TileAnimations [][]CircularQueue[CallbackAnimation]
 
-	GameAnimations CircularQueue[GameAnimation]
+	GameAnimations CircularQueue[CallbackAnimation]
 
 	TileHighLightTimer Timer
 	TileHighLightX     int
@@ -432,12 +428,11 @@ type Game struct {
 	NumberClickX     int
 	NumberClickY     int
 
-	RetryButton     *RetryButton
-	DrawRetryButton bool
-
-	ResetAnimTimer        Timer
-	ResetAnimTippingPoint float64 // constant
-	ResetAnimTimerStarted bool
+	RetryButton        *RetryButton
+	DrawRetryButton    bool
+	RetryButtonScale   float64
+	RetryButtonOffsetX float64
+	RetryButtonOffsetY float64
 
 	GameState GameState
 
@@ -477,15 +472,13 @@ func NewGame() *Game {
 
 	g.RetryButton = NewRetryButton()
 	g.RetryButton.ActOnRelease = true
+	g.RetryButtonScale = 1
 
 	g.RetryButton.OnClick = func() {
-		g.ResetAnimTimerStarted = true
+		g.StartResetBoardAnimation()
 	}
 
-	g.ResetAnimTimer.Duration = time.Millisecond * 400
-	g.ResetAnimTippingPoint = 0.3
-
-	g.GameAnimations = NewCircularQueue[GameAnimation](10)
+	g.GameAnimations = NewCircularQueue[CallbackAnimation](10)
 
 	g.ResetBoard(g.BoardTileCount[g.Difficulty].X, g.BoardTileCount[g.Difficulty].Y)
 
@@ -528,17 +521,13 @@ func (g *Game) ResetBoard(width, height int) {
 		}
 	}
 
-	g.TileAnimations = New2DArray[CircularQueue[TileAnimation]](width, height)
+	g.TileAnimations = New2DArray[CircularQueue[CallbackAnimation]](width, height)
 	for x := range width {
 		for y := range height {
 			// TODO : do we need this much queued animation?
-			g.TileAnimations[x][y] = NewCircularQueue[TileAnimation](5)
+			g.TileAnimations[x][y] = NewCircularQueue[CallbackAnimation](5)
 		}
 	}
-
-	g.ResetAnimTimer.Current = 0
-
-	g.ResetAnimTimerStarted = false
 }
 
 func (g *Game) Update() error {
@@ -740,6 +729,9 @@ func (g *Game) Update() error {
 		anim.Update()
 
 		if anim.Done() {
+			if anim.AfterDone != nil {
+				anim.AfterDone()
+			}
 			g.GameAnimations.Dequeue()
 		}
 	}
@@ -749,9 +741,12 @@ func (g *Game) Update() error {
 		for y := range g.Board.Height {
 			if !g.TileAnimations[x][y].IsEmpty() {
 				anim := g.TileAnimations[x][y].At(0)
-				g.BaseTileStyles[x][y] = anim.Update(x, y, g.BaseTileStyles[x][y])
+				anim.Update()
 
-				if anim.Done(x, y, g.BaseTileStyles[x][y]) {
+				if anim.Done() {
+					if anim.AfterDone != nil {
+						anim.AfterDone()
+					}
 					g.TileAnimations[x][y].Dequeue()
 				}
 			}
@@ -837,18 +832,8 @@ func (g *Game) Update() error {
 	// ===================================
 	// update RetryButton
 	// ===================================
+	g.RetryButton.Rect = g.TransformedRetryButtonRect()
 	g.RetryButton.Update()
-
-	// ===================================
-	// update restart animation
-	// ===================================
-	if g.ResetAnimTimerStarted {
-		g.ResetAnimTimer.TickUp()
-	}
-	if g.ResetAnimTimer.Current >= g.ResetAnimTimer.Duration {
-		g.ResetBoard(g.BoardTileCount[g.Difficulty].X, g.BoardTileCount[g.Difficulty].Y)
-		g.GameState = GameStatePlaying
-	}
 
 	// ===================================
 	// update DifficultySelectUI
@@ -1218,15 +1203,24 @@ func (g *Game) RetryButtonRect() FRectangle {
 	whMin := min(boardRect.Dx(), boardRect.Dy())
 	rect := FRectWH(whMin*0.25, whMin*0.25)
 	center := FRectangleCenter(boardRect)
-	return CenterFRectangle(rect, center.X, center.Y)
+	rect = CenterFRectangle(rect, center.X, center.Y)
+
+	return rect
+}
+
+func (g *Game) TransformedRetryButtonRect() FRectangle {
+	rect := g.RetryButtonRect()
+	rect = FRectScaleCentered(rect, g.RetryButtonScale)
+	rect = rect.Add(FPt(g.RetryButtonOffsetX, g.RetryButtonOffsetY))
+	return rect
 }
 
 func (g *Game) StartRevealAnimation(revealsBefore, revealsAfter [][]bool, originX, originy int) {
 	g.SkipAllTileAnimations()
 
-	fw, fh := f64(g.Board.Width), f64(g.Board.Height)
+	fw, fh := f64(g.Board.Width-1), f64(g.Board.Height-1)
 
-	originF := FPt(f64(originX), f64(originy))
+	originP := FPt(f64(originX), f64(originy))
 
 	maxDist := math.Sqrt(fw*fw + fh*fh)
 
@@ -1237,7 +1231,7 @@ func (g *Game) StartRevealAnimation(revealsBefore, revealsAfter [][]bool, origin
 		for y := range g.Board.Height {
 			if !revealsBefore[x][y] && revealsAfter[x][y] {
 				pos := FPt(f64(x), f64(y))
-				dist := pos.Sub(originF).Length()
+				dist := pos.Sub(originP).Length()
 				d := time.Duration(f64(maxDuration) * (dist / maxDist))
 
 				var timer Timer
@@ -1255,10 +1249,11 @@ func (g *Game) StartRevealAnimation(revealsBefore, revealsAfter [][]bool, origin
 					fgColor = ColorTableGetNumber(count)
 				}
 
-				var anim TileAnimation
+				var anim CallbackAnimation
 				anim.Tag = AnimationTagTileReveal
 
-				anim.Update = func(x, y int, style TileStyle) TileStyle {
+				anim.Update = func() {
+					style := g.BaseTileStyles[x][y]
 					timer.TickUp()
 
 					style.TileFillColor = tileFillColor
@@ -1285,15 +1280,15 @@ func (g *Game) StartRevealAnimation(revealsBefore, revealsAfter [][]bool, origin
 						style.DrawFg = false
 					}
 
-					return style
+					g.BaseTileStyles[x][y] = style
 				}
 
-				anim.Skip = func(x, y int, style TileStyle) TileStyle {
+				anim.Skip = func() {
 					timer.Current = timer.Duration
-					return anim.Update(x, y, style)
+					anim.Update()
 				}
 
-				anim.Done = func(x, y int, style TileStyle) bool {
+				anim.Done = func() bool {
 					return timer.Current >= timer.Duration
 				}
 
@@ -1353,21 +1348,22 @@ func (g *Game) StartDefeatAnimation(originX, originY int) {
 		defeatDuration = max(defeatDuration, timer.Duration-timer.Current)
 
 		// add new animation
-		var anim TileAnimation
+		var anim CallbackAnimation
 		anim.Tag = AnimationTagDefeat
 
-		anim.Update = func(x, y int, style TileStyle) TileStyle {
+		anim.Update = func() {
+			style := g.BaseTileStyles[p.X][p.Y]
 			timer.TickUp()
 			style.BgBombAnim = timer.Normalize()
-			return style
+			g.BaseTileStyles[p.X][p.Y] = style
 		}
 
-		anim.Skip = func(x, y int, style TileStyle) TileStyle {
+		anim.Skip = func() {
 			timer.Current = timer.Duration
-			return anim.Update(x, y, style)
+			anim.Update()
 		}
 
-		anim.Done = func(x, y int, style TileStyle) bool {
+		anim.Done = func() bool {
 			return timer.Current >= timer.Duration
 		}
 
@@ -1387,7 +1383,7 @@ func (g *Game) StartWinAnimation(originX, originY int) {
 
 	fw, fh := f64(g.Board.Width), f64(g.Board.Height)
 
-	originF := FPt(f64(originX), f64(originY))
+	originP := FPt(f64(originX), f64(originY))
 
 	maxDist := math.Sqrt(fw*fw + fh*fh)
 
@@ -1400,7 +1396,7 @@ func (g *Game) StartWinAnimation(originX, originY int) {
 	for x := range g.Board.Width {
 		for y := range g.Board.Height {
 			pos := FPt(f64(x), f64(y))
-			dist := pos.Sub(originF).Length()
+			dist := pos.Sub(originP).Length()
 			d := time.Duration(f64(maxDuration) * (dist / maxDist))
 
 			var timer Timer
@@ -1411,12 +1407,13 @@ func (g *Game) StartWinAnimation(originX, originY int) {
 			winDuration = max(winDuration, timer.Duration-timer.Current)
 
 			// add new animation
-			var anim TileAnimation
+			var anim CallbackAnimation
 			anim.Tag = AnimationTagWin
 
 			var ogFgColor color.Color
 
-			anim.Update = func(x, y int, style TileStyle) TileStyle {
+			anim.Update = func() {
+				style := g.BaseTileStyles[x][y]
 				timer.TickUp()
 
 				scaleT := timer.NormalizeUnclamped() * 0.8
@@ -1444,16 +1441,25 @@ func (g *Game) StartWinAnimation(originX, originY int) {
 
 				style.BgAlpha = 1 - colorT
 
-				return style
+				g.BaseTileStyles[x][y] = style
 			}
 
-			anim.Skip = func(x, y int, style TileStyle) TileStyle {
+			anim.Skip = func() {
 				timer.Current = timer.Duration
-				return anim.Update(x, y, style)
+				anim.Update()
 			}
 
-			anim.Done = func(x, y int, style TileStyle) bool {
+			anim.Done = func() bool {
 				return timer.Current >= timer.Duration
+			}
+
+			anim.AfterDone = func() {
+				style := g.BaseTileStyles[x][y]
+				if !g.Board.Revealed[x][y] {
+					style.DrawFg = false
+				}
+				style.DrawBg = false
+				g.BaseTileStyles[x][y] = style
 			}
 
 			g.TileAnimations[x][y].Enqueue(anim)
@@ -1465,7 +1471,7 @@ func (g *Game) StartWinAnimation(originX, originY int) {
 	winAnimTimer.Duration = winDuration + time.Millisecond*100
 	winAnimTimer.Current = 0
 
-	var anim GameAnimation
+	var anim CallbackAnimation
 	anim.Tag = AnimationTagWin
 
 	anim.Update = func() {
@@ -1528,10 +1534,11 @@ func (g *Game) QueueRetryButtonAnimation() {
 		timerStart := -time.Duration(rand.Int64N(i64(time.Millisecond * 200)))
 		timer.Current = timerStart
 
-		var anim TileAnimation
+		var anim CallbackAnimation
 		anim.Tag = AnimationTagRetryButtonReveal
 
-		anim.Update = func(x, y int, style TileStyle) TileStyle {
+		anim.Update = func() {
+			style := g.BaseTileStyles[p.X][p.Y]
 			timer.TickUp()
 
 			t := timer.Normalize()
@@ -1557,16 +1564,24 @@ func (g *Game) QueueRetryButtonAnimation() {
 			style.BgScale = (1 - bgT)
 			style.BgOffsetY = bgT * 3
 
-			return style
+			g.BaseTileStyles[p.X][p.Y] = style
 		}
 
-		anim.Skip = func(x, y int, style TileStyle) TileStyle {
+		anim.Skip = func() {
 			timer.Current = timer.Duration
-			return anim.Update(x, y, style)
+			anim.Update()
 		}
 
-		anim.Done = func(x, y int, style TileStyle) bool {
+		anim.Done = func() bool {
 			return timer.Current >= timer.Duration
+		}
+
+		anim.AfterDone = func() {
+			style := g.BaseTileStyles[p.X][p.Y]
+			style.DrawBg = false
+			style.DrawTile = false
+			style.DrawFg = false
+			g.BaseTileStyles[p.X][p.Y] = style
 		}
 
 		g.TileAnimations[p.X][p.Y].Enqueue(anim)
@@ -1581,22 +1596,19 @@ func (g *Game) QueueRetryButtonAnimation() {
 		// give a little delay
 		timer.Current = -time.Duration(f64(maxDuration) * 0.8)
 
-		var anim GameAnimation
+		var anim CallbackAnimation
 		anim.Tag = AnimationTagRetryButtonReveal
 
 		anim.Update = func() {
 			g.DrawRetryButton = true
 			timer.TickUp()
-			rect := g.RetryButtonRect()
+
 			t := timer.Normalize()
-			scale := EaseOutElastic(t)
 
-			rect = FRectScaleCentered(rect, scale)
-
-			g.RetryButton.Rect = rect
+			g.RetryButtonScale = EaseOutElastic(t)
 
 			g.RetryButton.Disabled = true
-			g.RetryButton.Disabled = !(scale > 0.5)
+			g.RetryButton.Disabled = !(g.RetryButtonScale > 0.5)
 		}
 
 		anim.Skip = func() {
@@ -1612,6 +1624,130 @@ func (g *Game) QueueRetryButtonAnimation() {
 	}
 }
 
+func (g *Game) StartResetBoardAnimation() {
+	// TODO: reset board
+	fw, fh := f64(g.Board.Width), f64(g.Board.Height)
+
+	centerP := FPt(f64(g.Board.Width-1)*0.5, f64(g.Board.Height-1)*0.5)
+
+	maxDist := math.Sqrt(fw*0.5*fw*0.5 + fh*0.5*fh*0.5)
+
+	const maxDuration = time.Millisecond * 400
+	const minDuration = time.Millisecond * 120
+
+	var tileAnimationTotal time.Duration
+
+	for x := range g.Board.Width {
+		for y := range g.Board.Height {
+			pos := FPt(f64(x), f64(y))
+			dist := pos.Sub(centerP).Length()
+			d := time.Duration(Lerp(f64(minDuration), f64(maxDuration), 1-dist/maxDist))
+
+			var timer Timer
+			timer.Duration = d
+
+			var anim CallbackAnimation
+			anim.Tag = AnimationTagHideBoard
+
+			anim.Update = func() {
+				style := g.BaseTileStyles[x][y]
+
+				timer.TickUp()
+
+				t := timer.Normalize()
+
+				tileCurve := TheBezierTable[BezierBoardHideTile]
+				alphaCurve := TheBezierTable[BezierBoardHideTileAlpha]
+
+				tileT := BezierCurveDataAsGraph(tileCurve, t)
+				alphaT := BezierCurveDataAsGraph(alphaCurve, t)
+
+				style.BgOffsetY = Lerp(0, 30, tileT)
+				style.TileOffsetY = Lerp(0, 30, tileT)
+
+				style.BgAlpha = Clamp(alphaT, 0, 1)
+				style.TileAlpha = Clamp(alphaT, 0, 1)
+				style.FgAlpha = Clamp(alphaT, 0, 1)
+
+				sizeT := 1 - tileT
+
+				style.TileScale = sizeT
+				style.BgScale = Clamp(sizeT, 0, 1)
+				style.BgScale *= style.BgScale
+
+				g.BaseTileStyles[x][y] = style
+			}
+
+			anim.Skip = func() {
+				timer.Current = timer.Duration
+				anim.Update()
+			}
+
+			anim.Done = func() bool {
+				return timer.Current >= timer.Duration
+			}
+
+			anim.AfterDone = func() {
+				style := g.BaseTileStyles[x][y]
+				style.DrawBg = false
+				style.DrawTile = false
+				style.DrawFg = false
+				g.BaseTileStyles[x][y] = style
+			}
+
+			g.TileAnimations[x][y].Enqueue(anim)
+
+			tileAnimationTotal = max(tileAnimationTotal, timer.Duration-timer.Current)
+		}
+	}
+
+	// queue game animation
+	{
+		var buttonTimer Timer
+		buttonTimer.Duration = maxDuration * 6 / 10
+
+		var resetAnimTimer Timer
+		resetAnimTimer.Duration = tileAnimationTotal + time.Millisecond*200
+
+		var anim CallbackAnimation
+		anim.Tag = AnimationTagHideBoard
+
+		anim.Update = func() {
+			g.RetryButton.Disabled = true
+
+			buttonTimer.TickUp()
+			resetAnimTimer.TickUp()
+
+			t := buttonTimer.Normalize()
+
+			curve := TheBezierTable[BezierBoardHideButton]
+			curveT := BezierCurveDataAsGraph(curve, t)
+
+			g.RetryButtonScale = 1 - curveT
+			g.RetryButtonScale = max(g.RetryButtonScale, 0)
+		}
+
+		anim.Skip = func() {
+			buttonTimer.Current = buttonTimer.Duration
+			resetAnimTimer.Current = resetAnimTimer.Duration
+			anim.Update()
+		}
+
+		anim.Done = func() bool {
+			return buttonTimer.Current >= buttonTimer.Duration && resetAnimTimer.Current >= resetAnimTimer.Duration
+		}
+
+		anim.AfterDone = func() {
+			g.DrawRetryButton = true
+			g.ResetBoard(g.BoardTileCount[g.Difficulty].X, g.BoardTileCount[g.Difficulty].Y)
+			// TODO : move this to board reveal animation if we implement one
+			g.GameState = GameStatePlaying
+		}
+
+		g.GameAnimations.Enqueue(anim)
+	}
+}
+
 func (g *Game) SkipTileAnimationAt(x, y int) {
 	if !g.Board.IsPosInBoard(x, y) {
 		return
@@ -1619,7 +1755,10 @@ func (g *Game) SkipTileAnimationAt(x, y int) {
 
 	for !g.TileAnimations[x][y].IsEmpty() {
 		anim := g.TileAnimations[x][y].Dequeue()
-		g.BaseTileStyles[x][y] = anim.Skip(x, y, g.BaseTileStyles[x][y])
+		anim.Skip()
+		if anim.AfterDone != nil {
+			anim.AfterDone()
+		}
 	}
 }
 
@@ -1638,7 +1777,12 @@ func (g *Game) SkipAllAnimationsUntilTag(tag AnimationTag) {
 			for !g.TileAnimations[x][y].IsEmpty() {
 				tileAnim := g.TileAnimations[x][y].At(0)
 				if tileAnim.Tag != tag {
-					g.BaseTileStyles[x][y] = tileAnim.Skip(x, y, g.BaseTileStyles[x][y])
+					tileAnim.Skip()
+
+					if tileAnim.AfterDone != nil {
+						tileAnim.AfterDone()
+					}
+
 					g.TileAnimations[x][y].Dequeue()
 				} else {
 					break TAG_LOOP
@@ -1651,6 +1795,11 @@ func (g *Game) SkipAllAnimationsUntilTag(tag AnimationTag) {
 		gameAnim := g.GameAnimations.At(0)
 		if gameAnim.Tag != tag {
 			gameAnim.Skip()
+
+			if gameAnim.AfterDone != nil {
+				gameAnim.AfterDone()
+			}
+
 			g.GameAnimations.Dequeue()
 		} else {
 			break
