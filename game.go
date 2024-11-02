@@ -456,10 +456,10 @@ func NewGame() *Game {
 	g := new(Game)
 
 	g.MineCount = [DifficultySize]int{
-		10, 40, 100,
+		10, 30, 70,
 	}
 	g.BoardTileCount = [DifficultySize]image.Point{
-		image.Pt(10, 9), image.Pt(15, 13), image.Pt(24, 20),
+		image.Pt(10, 9), image.Pt(15, 13), image.Pt(20, 20),
 	}
 
 	g.TileImage = eb.NewImage(int(ScreenWidth), int(ScreenHeight))

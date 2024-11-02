@@ -60,9 +60,11 @@ func (board *Board) PlaceMines(count, exceptX, exceptY int) {
 		}
 	}
 
-	rand.Shuffle(len(minePlaces), func(i, j int) {
-		minePlaces[i], minePlaces[j] = minePlaces[j], minePlaces[i]
-	})
+	for range 4 {
+		rand.Shuffle(len(minePlaces), func(i, j int) {
+			minePlaces[i], minePlaces[j] = minePlaces[j], minePlaces[i]
+		})
+	}
 
 	for i := 0; i < count; i++ {
 		board.Mines[minePlaces[i][0]][minePlaces[i][1]] = true
