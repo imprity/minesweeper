@@ -812,19 +812,9 @@ func (g *Game) Update() error {
 		}
 	}
 
-	// skipping defeat animation
-	if prevState == GameStateLost {
-		if justPressedAny {
-			g.SkipAllAnimationsUntilTag(AnimationTagRetryButtonReveal)
-		}
-	}
-
-	// ============================
-	// update win animation
-	// ============================
-
-	// skipping defeat animation
-	if prevState == GameStateWon {
+	// skipping animations
+	if prevState == GameStateLost || prevState == GameStateWon {
+		// all animations are skippable except AnimationTagRetryButtonReveal
 		if justPressedAny {
 			g.SkipAllAnimationsUntilTag(AnimationTagRetryButtonReveal)
 		}
@@ -860,7 +850,7 @@ func (g *Game) Update() error {
 	}
 
 	// ==========================
-	// color table picker
+	// update ResourceEditor
 	// ==========================
 	if IsKeyJustPressed(ShowColorPickerKey) {
 		g.ResourceEditor.DoShow = !g.ResourceEditor.DoShow
@@ -1840,109 +1830,6 @@ func (g *Game) SkipAllAnimationsUntilTag(tag AnimationTag) {
 	}
 }
 
-func (g *Game) SetDebugBoardForDecoration() {
-	g.ResetBoard(15, 15)
-
-	g.BoardTouched = true
-
-	// . : unrevealed
-	// @ : revealed
-	// * : mine
-	// + : flagged
-	newBoard := [][]rune{
-		[]rune("....@*@*@*"),
-		[]rune("......@.@*"),
-		[]rune("***+****.."),
-		[]rune("*@+@*@*..."),
-		[]rune("++**.*...."),
-	}
-
-	newBoardHeight := len(newBoard)
-	newBoardWidth := len(newBoard[0])
-
-	iter := NewBoardIterator(0, 0, newBoardWidth-1, newBoardHeight-1)
-	for iter.HasNext() {
-		x, y := iter.GetNext()
-		if g.Board.IsPosInBoard(x, y) {
-			char := newBoard[y][x] //yeah y and x is reversed
-
-			switch char {
-			case '@':
-				g.Board.Revealed[x][y] = true
-			case '*':
-				g.Board.Mines[x][y] = true
-			case '+':
-				g.Board.Mines[x][y] = true
-				g.Board.Flags[x][y] = true
-			}
-		}
-	}
-
-	iter = NewBoardIterator(0, 0, g.Board.Width-1, g.Board.Height-1)
-	for iter.HasNext() {
-		x, y := iter.GetNext()
-		if x < newBoardWidth+1 && y < newBoardHeight+1 {
-			continue
-		}
-
-		if rand.Int64N(100) < 30 {
-			g.Board.Mines[x][y] = true
-		}
-	}
-
-	iter.Reset()
-
-	for iter.HasNext() {
-		x, y := iter.GetNext()
-
-		if !g.Board.Mines[x][y] {
-			if rand.Int64N(100) < 30 {
-				// flag the surrounding
-				innerIter := NewBoardIterator(x-1, y-1, x+1, y+1)
-				for innerIter.HasNext() {
-					inX, inY := innerIter.GetNext()
-					if g.Board.IsPosInBoard(inX, inY) && g.Board.Mines[inX][inY] {
-						g.Board.Flags[inX][inY] = true
-					}
-				}
-
-				g.Board.SpreadSafeArea(x, y)
-			}
-		}
-	}
-}
-
-func (g *Game) SetBoardForInstantWin() {
-	if !g.BoardTouched {
-		g.Board.PlaceMines(g.MineCount[g.Difficulty], g.Board.Width-1, g.Board.Height-1)
-	}
-	g.BoardTouched = true
-
-	// count how many tiles we have to reveal
-	tilesToReveal := 0
-	for x := range g.Board.Width {
-		for y := range g.Board.Height {
-			if !g.Board.Mines[x][y] && !g.Board.Revealed[x][y] {
-				tilesToReveal++
-			}
-		}
-	}
-
-	// reveal that many tiles EXCEPT ONE
-REVEAL_LOOP:
-	for x := range g.Board.Width {
-		for y := range g.Board.Height {
-			if tilesToReveal <= 1 {
-				break REVEAL_LOOP
-			}
-			if !g.Board.Mines[x][y] && !g.Board.Revealed[x][y] {
-				g.Board.Revealed[x][y] = true
-				tilesToReveal--
-			}
-		}
-	}
-}
-
 func GetNumberTile(number int) SubView {
 	if !(1 <= number && number <= 8) {
 		ErrorLogger.Fatalf("%d is not a valid number", number)
@@ -2057,4 +1944,111 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
 		g.TileImage = eb.NewImage(outsideWidth, outsideHeight)
 	}
 	return outsideWidth, outsideHeight
+}
+
+// =====================
+// debugging functions
+// =====================
+
+func (g *Game) SetDebugBoardForDecoration() {
+	g.ResetBoard(15, 15)
+
+	g.BoardTouched = true
+
+	// . : unrevealed
+	// @ : revealed
+	// * : mine
+	// + : flagged
+	newBoard := [][]rune{
+		[]rune("....@*@*@*"),
+		[]rune("......@.@*"),
+		[]rune("***+****.."),
+		[]rune("*@+@*@*..."),
+		[]rune("++**.*...."),
+	}
+
+	newBoardHeight := len(newBoard)
+	newBoardWidth := len(newBoard[0])
+
+	iter := NewBoardIterator(0, 0, newBoardWidth-1, newBoardHeight-1)
+	for iter.HasNext() {
+		x, y := iter.GetNext()
+		if g.Board.IsPosInBoard(x, y) {
+			char := newBoard[y][x] //yeah y and x is reversed
+
+			switch char {
+			case '@':
+				g.Board.Revealed[x][y] = true
+			case '*':
+				g.Board.Mines[x][y] = true
+			case '+':
+				g.Board.Mines[x][y] = true
+				g.Board.Flags[x][y] = true
+			}
+		}
+	}
+
+	iter = NewBoardIterator(0, 0, g.Board.Width-1, g.Board.Height-1)
+	for iter.HasNext() {
+		x, y := iter.GetNext()
+		if x < newBoardWidth+1 && y < newBoardHeight+1 {
+			continue
+		}
+
+		if rand.Int64N(100) < 30 {
+			g.Board.Mines[x][y] = true
+		}
+	}
+
+	iter.Reset()
+
+	for iter.HasNext() {
+		x, y := iter.GetNext()
+
+		if !g.Board.Mines[x][y] {
+			if rand.Int64N(100) < 30 {
+				// flag the surrounding
+				innerIter := NewBoardIterator(x-1, y-1, x+1, y+1)
+				for innerIter.HasNext() {
+					inX, inY := innerIter.GetNext()
+					if g.Board.IsPosInBoard(inX, inY) && g.Board.Mines[inX][inY] {
+						g.Board.Flags[inX][inY] = true
+					}
+				}
+
+				g.Board.SpreadSafeArea(x, y)
+			}
+		}
+	}
+}
+
+func (g *Game) SetBoardForInstantWin() {
+	if !g.BoardTouched {
+		g.Board.PlaceMines(g.MineCount[g.Difficulty], g.Board.Width-1, g.Board.Height-1)
+	}
+	g.BoardTouched = true
+
+	// count how many tiles we have to reveal
+	tilesToReveal := 0
+	for x := range g.Board.Width {
+		for y := range g.Board.Height {
+			if !g.Board.Mines[x][y] && !g.Board.Revealed[x][y] {
+				tilesToReveal++
+			}
+		}
+	}
+
+	// reveal that many tiles EXCEPT ONE
+REVEAL_LOOP:
+	for x := range g.Board.Width {
+		for y := range g.Board.Height {
+			if tilesToReveal <= 1 {
+				break REVEAL_LOOP
+			}
+			if !g.Board.Mines[x][y] && !g.Board.Revealed[x][y] {
+				g.Board.Revealed[x][y] = true
+				tilesToReveal--
+			}
+		}
+	}
 }
