@@ -458,6 +458,13 @@ func BezierCurveNewton(p0, p1, p2, p3, n float64) float64 {
 }
 
 func BezierCurveDataAsGraph(data BezierCurveData, x float64) float64 {
+	if x < data.Points[0].X {
+		return data.Points[0].Y
+	}
+	if x > data.Points[3].X {
+		return data.Points[3].Y
+	}
+
 	t := BezierCurveNewton(data.Points[0].X, data.Points[1].X, data.Points[2].X, data.Points[3].X, x)
 	y := BezierCurve(data.Points[0].Y, data.Points[1].Y, data.Points[2].Y, data.Points[3].Y, t)
 

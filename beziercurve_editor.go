@@ -148,13 +148,13 @@ func (be *BezierEditor) Update() error {
 	be.SnapToOriginP2.Update()
 
 	// clamp control points
-	be.Points[0].X = 0
-	be.Points[3].X = 1
+	be.Points[0].X = Clamp(be.Points[0].X, 0, 1)
+	be.Points[3].X = Clamp(be.Points[3].X, 0, 1)
 	be.Points[0].Y = Clamp(be.Points[0].Y, -1, 1)
 	be.Points[3].Y = Clamp(be.Points[3].Y, -1, 1)
 
-	be.Points[1].X = Clamp(be.Points[1].X, 0, 1.0/BezierEditorControlPointScale)
-	be.Points[2].X = Clamp(be.Points[2].X, 1-1.0/BezierEditorControlPointScale, 1)
+	be.Points[1].X = Clamp(be.Points[1].X, be.Points[0].X+0.0001, 1)
+	be.Points[2].X = Clamp(be.Points[2].X, 0, be.Points[3].X-0.0001)
 
 	delta0 := be.Points[0].Sub(prevP0)
 	delta3 := be.Points[3].Sub(prevP3)
@@ -168,6 +168,16 @@ func (be *BezierEditor) Update() error {
 }
 
 func (be *BezierEditor) Draw(dst *eb.Image) {
+	data := be.GetBezierCurveData()
+
+	// screen sps
+	sps := [4]FPoint{}
+	for i, p := range be.Points {
+		sps[i] = be.ControlPosToScreenPos(p)
+	}
+
+	curveRect := be.CurveRect()
+
 	// =========================
 	// draw background
 	// =========================
@@ -177,38 +187,43 @@ func (be *BezierEditor) Draw(dst *eb.Image) {
 	// draw CurveRect
 	// =========================
 	{
-		rect := be.CurveRect()
-		StrokeRect(dst, rect, 2, color.NRGBA{255, 255, 255, 100})
-		center := FRectangleCenter(rect)
+		StrokeRect(dst, curveRect, 2, color.NRGBA{255, 255, 255, 100})
+		center := FRectangleCenter(curveRect)
 		StrokeLine(
 			dst,
-			rect.Min.X, center.Y,
-			rect.Max.X, center.Y,
+			curveRect.Min.X, center.Y,
+			curveRect.Max.X, center.Y,
 			2,
 			color.NRGBA{255, 255, 255, 100},
 		)
 	}
 
-	cps := [4]FPoint{}
-
-	cps[0], cps[3] = be.Points[0], be.Points[3]
-
-	cps[1] = be.Points[1].Sub(be.Points[0]).Scale(BezierEditorControlPointScale).Add(be.Points[0])
-	cps[2] = be.Points[2].Sub(be.Points[3]).Scale(BezierEditorControlPointScale).Add(be.Points[3])
-
 	// =========================
 	// draw BezierCurve
 	// =========================
 	{
+		strokeColor := color.NRGBA{255, 0, 0, 255}
+		const strokeWidth = 3.8
+
+		firstPoint := be.ControlPosToScreenPos(data.Points[0])
+
+		StrokeLine(
+			dst,
+			curveRect.Min.X, firstPoint.Y,
+			firstPoint.X, firstPoint.Y,
+			strokeWidth,
+			strokeColor,
+		)
+
 		t := f64(0)
 
 		for t < 1 {
-			p0 := BezierCurveFPt(cps[0], cps[1], cps[2], cps[3], t)
+			p0 := BezierCurveFPt(data.Points[0], data.Points[1], data.Points[2], data.Points[3], t)
 			t += 0.02
 			if t > 1 {
 				t = 1
 			}
-			p1 := BezierCurveFPt(cps[0], cps[1], cps[2], cps[3], t)
+			p1 := BezierCurveFPt(data.Points[0], data.Points[1], data.Points[2], data.Points[3], t)
 
 			p0 = be.ControlPosToScreenPos(p0)
 			p1 = be.ControlPosToScreenPos(p1)
@@ -217,32 +232,43 @@ func (be *BezierEditor) Draw(dst *eb.Image) {
 				dst,
 				p0.X, p0.Y,
 				p1.X, p1.Y,
-				4,
-				color.NRGBA{255, 0, 0, 255},
+				strokeWidth,
+				strokeColor,
 			)
 		}
+
+		lastPoint := be.ControlPosToScreenPos(data.Points[3])
+
+		StrokeLine(
+			dst,
+			lastPoint.X, lastPoint.Y,
+			curveRect.Max.X, lastPoint.Y,
+			strokeWidth,
+			strokeColor,
+		)
 	}
 
 	// =========================
 	// draw using newton
 	// =========================
 	{
-		t := f64(0)
+		strokeColor := color.NRGBA{0, 0, 255, 255}
+		const strokeWidth = 4
 
-		for t < 1 {
+		x := f64(0)
+
+		for x < 1 {
 			var p0 FPoint
 			var p1 FPoint
 
-			p0.X = Lerp(cps[0].X, cps[3].X, t)
-			newtonT := BezierCurveNewton(cps[0].X, cps[1].X, cps[2].X, cps[3].X, p0.X)
-			p0.Y = BezierCurve(cps[0].Y, cps[1].Y, cps[2].Y, cps[3].Y, newtonT)
-			t += 0.01
-			if t > 1 {
-				t = 1
+			p0.X = x
+			p0.Y = BezierCurveDataAsGraph(data, x)
+			x += 0.01
+			if x > 1 {
+				x = 1
 			}
-			p1.X = Lerp(cps[0].X, cps[3].X, t)
-			newtonT = BezierCurveNewton(cps[0].X, cps[1].X, cps[2].X, cps[3].X, p1.X)
-			p1.Y = BezierCurve(cps[0].Y, cps[1].Y, cps[2].Y, cps[3].Y, newtonT)
+			p1.X = x
+			p1.Y = BezierCurveDataAsGraph(data, x)
 
 			p0 = be.ControlPosToScreenPos(p0)
 			p1 = be.ControlPosToScreenPos(p1)
@@ -251,8 +277,8 @@ func (be *BezierEditor) Draw(dst *eb.Image) {
 				dst,
 				p0.X, p0.Y,
 				p1.X, p1.Y,
-				4,
-				color.NRGBA{0, 0, 255, 255},
+				strokeWidth,
+				strokeColor,
 			)
 		}
 	}
@@ -261,39 +287,54 @@ func (be *BezierEditor) Draw(dst *eb.Image) {
 	// draw control points
 	// =========================
 	{
-		sps := [4]FPoint{} // screen sps
+		// draw bars
+		StrokeLine(
+			dst,
+			sps[0].X, curveRect.Min.Y,
+			sps[0].X, curveRect.Max.Y,
+			1,
+			color.NRGBA{255, 255, 255, 100},
+		)
 
-		for i, p := range be.Points {
-			sps[i] = be.ControlPosToScreenPos(p)
-		}
+		StrokeLine(
+			dst,
+			sps[3].X, curveRect.Min.Y,
+			sps[3].X, curveRect.Max.Y,
+			1,
+			color.NRGBA{255, 255, 255, 100},
+		)
 
-		DrawFilledCircle(dst, sps[0].X, sps[0].Y, 7, color.NRGBA{255, 255, 255, 255})
-		StrokeCircle(dst, sps[0].X, sps[0].Y, 7, 2, color.NRGBA{255, 0, 0, 255})
-
-		DrawFilledCircle(dst, sps[3].X, sps[3].Y, 7, color.NRGBA{255, 255, 255, 255})
-		StrokeCircle(dst, sps[3].X, sps[3].Y, 7, 2, color.NRGBA{255, 0, 0, 255})
+		circleFill := color.NRGBA{0, 0, 0, 255}
+		circleStroke := color.NRGBA{255, 255, 255, 255}
 
 		StrokeLine(
 			dst,
 			sps[0].X, sps[0].Y,
 			sps[1].X, sps[1].Y,
-			2,
-			color.NRGBA{0, 255, 0, 255},
+			1,
+			color.NRGBA{255, 255, 255, 255},
 		)
 
 		StrokeLine(
 			dst,
 			sps[2].X, sps[2].Y,
 			sps[3].X, sps[3].Y,
-			2,
-			color.NRGBA{0, 255, 0, 255},
+			1,
+			color.NRGBA{255, 255, 255, 255},
 		)
 
-		DrawFilledCircle(dst, sps[1].X, sps[1].Y, 7, color.NRGBA{255, 255, 255, 255})
-		StrokeCircle(dst, sps[1].X, sps[1].Y, 7, 2, color.NRGBA{255, 1, 1, 255})
+		// draw circles
+		DrawFilledCircle(dst, sps[0].X, sps[0].Y, 7, circleFill)
+		StrokeCircle(dst, sps[0].X, sps[0].Y, 7, 2, circleStroke)
 
-		DrawFilledCircle(dst, sps[2].X, sps[2].Y, 7, color.NRGBA{255, 255, 255, 255})
-		StrokeCircle(dst, sps[2].X, sps[2].Y, 7, 2, color.NRGBA{255, 0, 0, 255})
+		DrawFilledCircle(dst, sps[3].X, sps[3].Y, 7, circleFill)
+		StrokeCircle(dst, sps[3].X, sps[3].Y, 7, 2, circleStroke)
+
+		DrawFilledCircle(dst, sps[1].X, sps[1].Y, 7, circleFill)
+		StrokeCircle(dst, sps[1].X, sps[1].Y, 7, 2, circleStroke)
+
+		DrawFilledCircle(dst, sps[2].X, sps[2].Y, 7, circleFill)
+		StrokeCircle(dst, sps[2].X, sps[2].Y, 7, 2, circleStroke)
 	}
 
 	be.SnapTo0ButtonP0.Draw(dst)
