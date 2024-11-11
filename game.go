@@ -546,8 +546,8 @@ func (g *Game) Update() error {
 
 	// =======================================
 	prevState := g.GameState
+	g.Board.SaveTo(g.PrevBoard)
 	// =======================================
-	_ = prevState // might be handy later
 
 	// =================================
 	// handle board interaction
@@ -558,8 +558,6 @@ func (g *Game) Update() error {
 	// =======================================
 
 	if g.GameState == GameStatePlaying && boardX >= 0 && boardY >= 0 && justPressedAny {
-
-		g.Board.SaveTo(g.PrevBoard)
 
 		if g.Board.Revealed[boardX][boardY] { // interaction on revealed tile
 			if (justPressedL && pressedR) || (justPressedR && pressedL) || (justPressedM) { // handle step interaction
@@ -639,12 +637,6 @@ func (g *Game) Update() error {
 			} else if justPressedR { // flagging
 				g.Board.Flags[boardX][boardY] = !g.Board.Flags[boardX][boardY]
 			}
-
-			// TEST TEST TEST TEST TEST TEST
-			if justPressedM {
-				g.Board.Revealed[boardX][boardY] = true
-			}
-			// TEST TEST TEST TEST TEST TEST
 		}
 
 		// ==============================
@@ -691,6 +683,17 @@ func (g *Game) Update() error {
 		g.SetBoardForInstantWin()
 		g.QueueRevealAnimation(
 			g.PrevBoard.Revealed, g.Board.Revealed, 0, 0)
+		stateChanged = true
+	}
+
+	// reveal the board if mouse button 4 is pressed
+	if g.GameState == GameStatePlaying &&
+		boardX >= 0 && boardY >= 0 &&
+		IsMouseButtonJustPressed(eb.MouseButton4) {
+
+		g.BoardTouched = true
+
+		g.Board.Revealed[boardX][boardY] = true
 		stateChanged = true
 	}
 
