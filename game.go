@@ -676,44 +676,60 @@ func (g *Game) Update() error {
 				}
 			}
 		}
+	}
 
-		// ==============================
-		// on state changes
-		// ==============================
-		if stateChanged {
-			// remove flags from the revealed tiles
-			for x := range g.Board.Width {
-				for y := range g.Board.Height {
-					if g.Board.Revealed[x][y] {
-						g.Board.Flags[x][y] = false
-					}
+	// ======================================
+	// changing board for debugging purpose
+	// ======================================
+	if IsKeyJustPressed(SetToDecoBoardKey) {
+		g.SetDebugBoardForDecoration()
+		g.QueueRevealAnimation(
+			g.PrevBoard.Revealed, g.Board.Revealed, 0, 0)
+		stateChanged = true
+	}
+	if IsKeyJustPressed(InstantWinKey) {
+		g.SetBoardForInstantWin()
+		g.QueueRevealAnimation(
+			g.PrevBoard.Revealed, g.Board.Revealed, 0, 0)
+		stateChanged = true
+	}
+
+	// ==============================
+	// on state changes
+	// ==============================
+	if stateChanged {
+		// remove flags from the revealed tiles
+		for x := range g.Board.Width {
+			for y := range g.Board.Height {
+				if g.Board.Revealed[x][y] {
+					g.Board.Flags[x][y] = false
 				}
 			}
+		}
 
-			// check if user has won the game
-			if g.Board.IsAllSafeTileRevealed() {
-				g.GameState = GameStateWon
-			}
+		// check if user has won the game
+		if g.Board.IsAllSafeTileRevealed() {
+			g.GameState = GameStateWon
+		}
 
-			// check if we need to start board reveal animation
-		REVEAL_CHECK:
-			for x := range g.Board.Width {
-				for y := range g.Board.Height {
-					if g.Board.Revealed[x][y] && !g.PrevBoard.Revealed[x][y] {
-						g.QueueRevealAnimation(
-							g.PrevBoard.Revealed, g.Board.Revealed, boardX, boardY)
+		// check if we need to start board reveal animation
+	REVEAL_CHECK:
+		for x := range g.Board.Width {
+			for y := range g.Board.Height {
+				if g.Board.Revealed[x][y] && !g.PrevBoard.Revealed[x][y] {
+					g.QueueRevealAnimation(
+						g.PrevBoard.Revealed, g.Board.Revealed, boardX, boardY)
 
-						break REVEAL_CHECK
-					}
+					break REVEAL_CHECK
 				}
 			}
+		}
 
-			if prevState != g.GameState {
-				if g.GameState == GameStateLost {
-					g.QueueDefeatAnimation(boardX, boardY)
-				} else if g.GameState == GameStateWon {
-					g.QueueWinAnimation(boardX, boardY)
-				}
+		if prevState != g.GameState {
+			if g.GameState == GameStateLost {
+				g.QueueDefeatAnimation(boardX, boardY)
+			} else if g.GameState == GameStateWon {
+				g.QueueWinAnimation(boardX, boardY)
 			}
 		}
 	}
@@ -836,16 +852,6 @@ func (g *Game) Update() error {
 	// ==========================
 	if IsKeyJustPressed(ShowMinesKey) {
 		g.RevealMines = !g.RevealMines
-	}
-	if IsKeyJustPressed(SetToDecoBoardKey) {
-		g.SetDebugBoardForDecoration()
-		g.QueueRevealAnimation(
-			g.PrevBoard.Revealed, g.Board.Revealed, 0, 0)
-	}
-	if IsKeyJustPressed(InstantWinKey) {
-		g.SetBoardForInstantWin()
-		g.QueueRevealAnimation(
-			g.PrevBoard.Revealed, g.Board.Revealed, 0, 0)
 	}
 
 	// ==========================
