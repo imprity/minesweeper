@@ -391,6 +391,7 @@ const (
 	AnimationTagDefeat
 	AnimationTagRetryButtonReveal
 	AnimationTagHideBoard
+	AnimationTagShowBoard
 )
 
 type CallbackAnimation struct {
@@ -482,10 +483,22 @@ func NewGame() *Game {
 
 	g.ResetBoard(g.BoardTileCount[g.Difficulty].X, g.BoardTileCount[g.Difficulty].Y)
 
+	g.QueueShowBoardAnimation(
+		g.BoardTileCount[g.Difficulty].X/2,
+		g.BoardTileCount[g.Difficulty].Y/2,
+	)
+
 	g.DifficultySelectUI = NewDifficultySelectUI(g.BoardRect())
 	g.DifficultySelectUI.OnDifficultyChange = func(d Difficulty) {
+		prevDifficulty := g.Difficulty
 		g.Difficulty = d
 		g.ResetBoard(g.BoardTileCount[d].X, g.BoardTileCount[d].Y)
+
+		if g.Difficulty < prevDifficulty {
+			g.QueueShowBoardAnimation(0, 0)
+		} else {
+			g.QueueShowBoardAnimation(g.BoardTileCount[d].X-1, 0)
+		}
 	}
 
 	g.ResourceEditor = NewResourceEditor()
@@ -506,20 +519,6 @@ func (g *Game) ResetBoard(width, height int) {
 		}
 	}
 	g.RenderTileStyles = New2DArray[TileStyle](width, height)
-
-	// TODO: This is just a temporary code to set style's background
-	// I think we should make a board background reveal animation
-	for x := range width {
-		for y := range height {
-			g.BaseTileStyles[x][y].DrawBg = true
-
-			g.BaseTileStyles[x][y].BgFillColor = ColorTileNormal1
-			if IsOddTile(width, height, x, y) {
-				g.BaseTileStyles[x][y].BgFillColor = ColorTileNormal2
-			}
-			g.RenderTileStyles[x][y] = g.BaseTileStyles[x][y]
-		}
-	}
 
 	g.TileAnimations = New2DArray[CircularQueue[CallbackAnimation]](width, height)
 	for x := range width {
@@ -1206,6 +1205,43 @@ func (g *Game) TransformedRetryButtonRect() FRectangle {
 	return rect
 }
 
+func (g *Game) GetAnimationTargetTileStyle(x, y int) TileStyle {
+	style := NewTileStyle()
+
+	style.DrawBg = true
+	style.BgFillColor = ColorTileNormal1
+	if IsOddTile(g.Board.Width, g.Board.Height, x, y) {
+		style.BgFillColor = ColorTileNormal2
+	}
+
+	if g.Board.IsPosInBoard(x, y) {
+		if g.Board.Revealed[x][y] {
+			style.DrawTile = true
+
+			style.TileFillColor = ColorTileRevealed1
+			if IsOddTile(g.Board.Width, g.Board.Height, x, y) {
+				style.TileFillColor = ColorTileRevealed2
+			}
+			style.TileStrokeColor = ColorTileRevealedStroke
+
+			count := g.Board.GetNeighborMineCount(x, y)
+
+			if 1 <= count && count <= 8 {
+				style.DrawFg = true
+				style.FgType = TileFgTypeNumber
+				style.FgColor = ColorTableGetNumber(count)
+			}
+		}
+
+		if g.Board.Flags[x][y] {
+			style.FgType = TileFgTypeFlag
+			style.FgColor = ColorFlag
+		}
+	}
+
+	return style
+}
+
 func (g *Game) QueueRevealAnimation(revealsBefore, revealsAfter [][]bool, originX, originy int) {
 	g.SkipAllAnimations()
 
@@ -1230,15 +1266,7 @@ func (g *Game) QueueRevealAnimation(revealsBefore, revealsAfter [][]bool, origin
 				timer.Duration = max(d, minDuration)
 				timer.Current = 0
 
-				var tileFillColor color.Color = ColorTileRevealed1
-				if IsOddTile(g.Board.Width, g.Board.Height, x, y) {
-					tileFillColor = ColorTileRevealed2
-				}
-				var fgColor color.Color = color.NRGBA{0, 0, 0, 0}
-				count := g.Board.GetNeighborMineCount(x, y)
-				if 1 <= count && count <= 8 {
-					fgColor = ColorTableGetNumber(count)
-				}
+				targetStyle := g.GetAnimationTargetTileStyle(x, y)
 
 				var anim CallbackAnimation
 				anim.Tag = AnimationTagTileReveal
@@ -1247,20 +1275,13 @@ func (g *Game) QueueRevealAnimation(revealsBefore, revealsAfter [][]bool, origin
 					style := g.BaseTileStyles[x][y]
 					timer.TickUp()
 
-					style.TileFillColor = tileFillColor
-					style.TileStrokeColor = ColorTileRevealedStroke
-					style.FgColor = fgColor
-
 					t := timer.Normalize()
 					t = t * t
 
 					const limit = 0.4
 
 					if t > limit {
-						style.DrawTile = true
-						style.DrawFg = true
-						style.FgScale = 1.0
-						style.FgType = TileFgTypeNumber
+						style = targetStyle
 
 						t = ((t - limit) / (1 - limit))
 						t = Clamp(t, 0, 1)
@@ -1653,8 +1674,8 @@ func (g *Game) QueueResetBoardAnimation() {
 
 	maxDist := math.Sqrt(fw*0.5*fw*0.5 + fh*0.5*fh*0.5)
 
-	const maxDuration = time.Millisecond * 400
 	const minDuration = time.Millisecond * 120
+	const maxDuration = time.Millisecond * 400
 
 	var tileAnimationTotal time.Duration
 
@@ -1761,7 +1782,100 @@ func (g *Game) QueueResetBoardAnimation() {
 		anim.AfterDone = func() {
 			g.DrawRetryButton = true
 			g.ResetBoard(g.BoardTileCount[g.Difficulty].X, g.BoardTileCount[g.Difficulty].Y)
-			// TODO : move this to board reveal animation if we implement one
+			g.QueueShowBoardAnimation(
+				g.BoardTileCount[g.Difficulty].X/2,
+				g.BoardTileCount[g.Difficulty].Y/2,
+			)
+		}
+
+		g.GameAnimations.Enqueue(anim)
+	}
+}
+
+func (g *Game) QueueShowBoardAnimation(originX, originy int) {
+	g.SkipAllAnimations()
+
+	originP := FPt(f64(originX), f64(originy))
+
+	var maxDist float64
+
+	maxDist = max(maxDist, originP.Sub(FPt(0, 0)).Length())
+	maxDist = max(maxDist, originP.Sub(FPt(f64(g.Board.Width-1), 0)).Length())
+	maxDist = max(maxDist, originP.Sub(FPt(0, f64(g.Board.Height-1))).Length())
+	maxDist = max(maxDist, originP.Sub(FPt(f64(g.Board.Width-1), f64(g.Board.Height-1))).Length())
+
+	const minDuration = time.Millisecond * 80
+	const maxDuration = time.Millisecond * 200
+
+	var tileAnimationTotal time.Duration
+
+	for x := range g.Board.Width {
+		for y := range g.Board.Height {
+			pos := FPt(f64(x), f64(y))
+			dist := pos.Sub(originP).Length()
+			d := time.Duration(Lerp(f64(minDuration), f64(maxDuration), dist/maxDist))
+
+			var timer Timer
+			timer.Duration = d
+
+			var anim CallbackAnimation
+			anim.Tag = AnimationTagShowBoard
+
+			targetStyle := g.GetAnimationTargetTileStyle(x, y)
+
+			anim.Update = func() {
+				timer.TickUp()
+
+				t := timer.Normalize()
+
+				yOffsetT := BezierCurveDataAsGraph(TheBezierTable[BezierBoardShowTileYoffset], t)
+				alphaT := BezierCurveDataAsGraph(TheBezierTable[BezierBoardShowTileAlpha], t)
+				scaleT := BezierCurveDataAsGraph(TheBezierTable[BezierBoardShowTileScale], t)
+
+				targetStyle.BgOffsetY = yOffsetT * 50
+				targetStyle.BgAlpha = alphaT
+				targetStyle.BgScale = scaleT
+
+				g.BaseTileStyles[x][y] = targetStyle
+			}
+
+			anim.Skip = func() {
+				timer.Current = timer.Duration
+				anim.Update()
+			}
+
+			anim.Done = func() bool {
+				return timer.Current >= timer.Duration
+			}
+
+			g.TileAnimations[x][y].Enqueue(anim)
+
+			tileAnimationTotal = max(tileAnimationTotal, timer.Duration-timer.Current)
+		}
+	}
+
+	// queue game animation
+	{
+		var timer Timer
+		timer.Duration = tileAnimationTotal
+
+		var anim CallbackAnimation
+		anim.Tag = AnimationTagShowBoard
+
+		anim.Update = func() {
+			timer.TickUp()
+		}
+
+		anim.Skip = func() {
+			timer.Current = timer.Duration
+			anim.Update()
+		}
+
+		anim.Done = func() bool {
+			return timer.Current >= timer.Duration
+		}
+
+		anim.AfterDone = func() {
 			g.GameState = GameStatePlaying
 		}
 
@@ -1952,6 +2066,10 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
 
 func (g *Game) SetDebugBoardForDecoration() {
 	g.ResetBoard(15, 15)
+	g.QueueShowBoardAnimation(
+		g.BoardTileCount[g.Difficulty].X/2,
+		g.BoardTileCount[g.Difficulty].Y/2,
+	)
 
 	g.BoardTouched = true
 

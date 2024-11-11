@@ -11,6 +11,10 @@ const (
 	BezierBoardHideTileAlpha
 	BezierBoardHideButton
 
+	BezierBoardShowTileYoffset
+	BezierBoardShowTileAlpha
+	BezierBoardShowTileScale
+
 	BezierTableSize
 )
 

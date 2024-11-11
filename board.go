@@ -139,9 +139,9 @@ func (board *Board) SpreadSafeArea(posX int, posY int) {
 
 func (board *Board) GetNeighborMineCount(posX int, posY int) int {
 	var mineCount int = 0
-	for x := max(posX-1, 0); x < min(posX+2, board.Width); x++ {
-		for y := max(posY-1, 0); y < min(posY+2, board.Height); y++ {
-			if board.Mines[x][y] {
+	for x := posX - 1; x <= posX+1; x++ {
+		for y := posY - 1; y <= posY+1; y++ {
+			if board.IsPosInBoard(x, y) && board.Mines[x][y] {
 				mineCount += 1
 			}
 		}
