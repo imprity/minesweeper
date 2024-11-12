@@ -483,22 +483,12 @@ func NewGame() *Game {
 
 	g.ResetBoard(g.BoardTileCount[g.Difficulty].X, g.BoardTileCount[g.Difficulty].Y)
 
-	g.QueueShowBoardAnimation(
-		g.BoardTileCount[g.Difficulty].X/2,
-		g.BoardTileCount[g.Difficulty].Y/2,
-	)
-
 	g.DifficultySelectUI = NewDifficultySelectUI(g.BoardRect())
 	g.DifficultySelectUI.OnDifficultyChange = func(d Difficulty) {
 		prevDifficulty := g.Difficulty
+		_ = prevDifficulty
 		g.Difficulty = d
 		g.ResetBoard(g.BoardTileCount[d].X, g.BoardTileCount[d].Y)
-
-		if g.Difficulty < prevDifficulty {
-			g.QueueShowBoardAnimation(0, 0)
-		} else {
-			g.QueueShowBoardAnimation(g.BoardTileCount[d].X-1, 0)
-		}
 	}
 
 	g.ResourceEditor = NewResourceEditor()
@@ -506,18 +496,13 @@ func NewGame() *Game {
 	return g
 }
 
-func (g *Game) ResetBoard(width, height int) {
+func (g *Game) ResetBoardWithNoStyles(width, height int) {
 	g.BoardTouched = false
 
 	g.Board = NewBoard(width, height)
 	g.PrevBoard = NewBoard(width, height)
 
 	g.BaseTileStyles = New2DArray[TileStyle](width, height)
-	for x := range width {
-		for y := range height {
-			g.BaseTileStyles[x][y] = NewTileStyle()
-		}
-	}
 	g.RenderTileStyles = New2DArray[TileStyle](width, height)
 
 	g.TileAnimations = New2DArray[CircularQueue[CallbackAnimation]](width, height)
@@ -525,6 +510,25 @@ func (g *Game) ResetBoard(width, height int) {
 		for y := range height {
 			// TODO : do we need this much queued animation?
 			g.TileAnimations[x][y] = NewCircularQueue[CallbackAnimation](5)
+		}
+	}
+
+	for x := range width {
+		for y := range height {
+			g.BaseTileStyles[x][y] = NewTileStyle()
+			g.RenderTileStyles[x][y] = NewTileStyle()
+		}
+	}
+}
+
+func (g *Game) ResetBoard(width, height int) {
+	g.ResetBoardWithNoStyles(width, height)
+
+	for x := range width {
+		for y := range height {
+			targetStyle := g.GetAnimationTargetTileStyle(x, y)
+			g.BaseTileStyles[x][y] = targetStyle
+			g.RenderTileStyles[x][y] = targetStyle
 		}
 	}
 }
@@ -544,14 +548,14 @@ func (g *Game) Update() error {
 
 	boardX, boardY := g.MousePosToBoardPos(cursor)
 
+	// =================================
+	// handle board interaction
+	// =================================
+
 	// =======================================
 	prevState := g.GameState
 	g.Board.SaveTo(g.PrevBoard)
 	// =======================================
-
-	// =================================
-	// handle board interaction
-	// =================================
 
 	// =======================================
 	stateChanged := false
@@ -1790,7 +1794,7 @@ func (g *Game) QueueResetBoardAnimation() {
 
 		anim.AfterDone = func() {
 			g.DrawRetryButton = true
-			g.ResetBoard(g.BoardTileCount[g.Difficulty].X, g.BoardTileCount[g.Difficulty].Y)
+			g.ResetBoardWithNoStyles(g.BoardTileCount[g.Difficulty].X, g.BoardTileCount[g.Difficulty].Y)
 			g.QueueShowBoardAnimation(
 				g.BoardTileCount[g.Difficulty].X/2,
 				g.BoardTileCount[g.Difficulty].Y/2,
@@ -1891,6 +1895,62 @@ func (g *Game) QueueShowBoardAnimation(originX, originy int) {
 		g.GameAnimations.Enqueue(anim)
 	}
 }
+
+/*
+func (g *Game) QueueDifficultyChangeAnimation(difficultyUp bool) {
+	g.SkipAllAnimations()
+
+	const minDuration = time.Millisecond * 80
+	const maxDuration = time.Millisecond * 200
+
+	for x := range g.Board.Width {
+		for y := range g.Board.Height {
+			xt := f64(x) / f64(g.Board.Width)
+			if difficultyUp {
+				xt = 1 - xt
+			}
+
+			var timer Timer
+			timer.Duration = time.Duration(Lerp(f64(minDuration), f64(maxDuration), xt))
+
+			var anim CallbackAnimation
+			anim.Tag = AnimationTagDifficultyChange
+
+			randomOffset := rand.Float64() * 50
+
+			anim.Update = func() {
+				timer.TickUp()
+				targetStyle := g.GetAnimationTargetTileStyle(x, y)
+
+				t := timer.Normalize()
+
+				xOffsetT := BezierCurveDataAsGraph(TheBezierTable[BezierBoardDifficultyChangeTileXoffset], t)
+				if difficultyUp {
+					xOffsetT *= -1
+				}
+				targetStyle.BgOffsetX = xOffsetT * (50 + randomOffset)
+
+				g.BaseTileStyles[x][y] = targetStyle
+			}
+
+			anim.Skip = func() {
+				timer.Current = timer.Duration
+			}
+
+			anim.Done = func() bool {
+				return timer.Current >= timer.Duration
+			}
+
+			anim.AfterDone = func() {
+				targetStyle := g.GetAnimationTargetTileStyle(x, y)
+				g.BaseTileStyles[x][y] = targetStyle
+			}
+
+			g.TileAnimations[x][y].Enqueue(anim)
+		}
+	}
+}
+*/
 
 func (g *Game) SkipAllAnimations() {
 	for x := range g.Board.Width {

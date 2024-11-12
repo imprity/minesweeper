@@ -11,6 +11,7 @@ const (
 	BezierBoardHideTileAlpha
 	BezierBoardHideButton
 
+	// TODO : change names from Yoffset to OffsetY
 	BezierBoardShowTileYoffset
 	BezierBoardShowTileAlpha
 	BezierBoardShowTileScale
