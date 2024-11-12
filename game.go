@@ -526,7 +526,7 @@ func (g *Game) ResetBoard(width, height int) {
 
 	for x := range width {
 		for y := range height {
-			targetStyle := g.GetAnimationTargetTileStyle(x, y)
+			targetStyle := GetAnimationTargetTileStyle(g.Board, x, y)
 			g.BaseTileStyles[x][y] = targetStyle
 			g.RenderTileStyles[x][y] = targetStyle
 		}
@@ -877,12 +877,12 @@ func (g *Game) Draw(dst *eb.Image) {
 	dst.Fill(TheColorTable[ColorBg])
 
 	DrawBoard(
+		dst,
+
 		g.Board, g.BoardRect(),
 		g.RenderTileStyles,
 
 		g.GameState == GameStateWon, g.WaterRenderTarget, g.WaterAlpha, g.WaterFlowOffset,
-
-		dst,
 	)
 
 	if g.DrawRetryButton {
@@ -1045,6 +1045,8 @@ func ShouldDrawFgTile(style TileStyle) bool {
 }
 
 func DrawBoard(
+	dst *eb.Image,
+
 	board Board,
 	boardRect FRectangle,
 	tileStyles [][]TileStyle,
@@ -1054,8 +1056,6 @@ func DrawBoard(
 	waterRenderTarget *eb.Image,
 	waterAlpha float64,
 	waterFlowOffset time.Duration,
-
-	dst *eb.Image,
 ) {
 	// ============================
 	// draw background tiles
@@ -1201,6 +1201,33 @@ func DrawBoard(
 	)
 }
 
+func DrawDummyBgBoard(
+	dst *eb.Image,
+	boardWidth, boardHeight int,
+	boardRect FRectangle,
+	waterRenderTarget *eb.Image,
+) {
+	// TODO: this is fucking stupid. We are creating a dummy board only to throw it away
+	// each time we draw
+	dummyBoard := NewBoard(boardWidth, boardHeight)
+	dummyStyles := New2DArray[TileStyle](boardWidth, boardHeight)
+
+	for x := range boardWidth {
+		for y := range boardWidth {
+			dummyStyles[x][y] = GetAnimationTargetTileStyle(dummyBoard, x, y)
+		}
+	}
+
+	DrawBoard(
+		dst,
+
+		dummyBoard, boardRect,
+		dummyStyles,
+
+		false, waterRenderTarget, 0, 0,
+	)
+}
+
 func (g *Game) BoardRect() FRectangle {
 	var boardTileWidth, boardTileHeight int
 
@@ -1266,26 +1293,26 @@ func (g *Game) TransformedRetryButtonRect() FRectangle {
 	return rect
 }
 
-func (g *Game) GetAnimationTargetTileStyle(x, y int) TileStyle {
+func GetAnimationTargetTileStyle(board Board, x, y int) TileStyle {
 	style := NewTileStyle()
 
 	style.DrawBg = true
 	style.BgFillColor = ColorTileNormal1
-	if IsOddTile(g.Board.Width, g.Board.Height, x, y) {
+	if IsOddTile(board.Width, board.Height, x, y) {
 		style.BgFillColor = ColorTileNormal2
 	}
 
-	if g.Board.IsPosInBoard(x, y) {
-		if g.Board.Revealed[x][y] {
+	if board.IsPosInBoard(x, y) {
+		if board.Revealed[x][y] {
 			style.DrawTile = true
 
 			style.TileFillColor = ColorTileRevealed1
-			if IsOddTile(g.Board.Width, g.Board.Height, x, y) {
+			if IsOddTile(board.Width, board.Height, x, y) {
 				style.TileFillColor = ColorTileRevealed2
 			}
 			style.TileStrokeColor = ColorTileRevealedStroke
 
-			count := g.Board.GetNeighborMineCount(x, y)
+			count := board.GetNeighborMineCount(x, y)
 
 			if 1 <= count && count <= 8 {
 				style.DrawFg = true
@@ -1294,7 +1321,7 @@ func (g *Game) GetAnimationTargetTileStyle(x, y int) TileStyle {
 			}
 		}
 
-		if g.Board.Flags[x][y] {
+		if board.Flags[x][y] {
 			style.FgType = TileFgTypeFlag
 			style.FgColor = ColorFlag
 		}
@@ -1327,7 +1354,7 @@ func (g *Game) QueueRevealAnimation(revealsBefore, revealsAfter [][]bool, origin
 				timer.Duration = max(d, minDuration)
 				timer.Current = 0
 
-				targetStyle := g.GetAnimationTargetTileStyle(x, y)
+				targetStyle := GetAnimationTargetTileStyle(g.Board, x, y)
 
 				var anim CallbackAnimation
 				anim.Tag = AnimationTagTileReveal
@@ -1882,7 +1909,7 @@ func (g *Game) QueueShowBoardAnimation(originX, originy int) {
 			var anim CallbackAnimation
 			anim.Tag = AnimationTagShowBoard
 
-			targetStyle := g.GetAnimationTargetTileStyle(x, y)
+			targetStyle := GetAnimationTargetTileStyle(g.Board, x, y)
 
 			anim.Update = func() {
 				timer.TickUp()
