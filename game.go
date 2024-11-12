@@ -450,7 +450,7 @@ type Game struct {
 
 	ResourceEditor *ResourceEditor
 
-	TileImage *eb.Image
+	WaterRenderTarget *eb.Image
 }
 
 func NewGame() *Game {
@@ -463,7 +463,7 @@ func NewGame() *Game {
 		image.Pt(10, 9), image.Pt(15, 13), image.Pt(20, 20),
 	}
 
-	g.TileImage = eb.NewImage(int(ScreenWidth), int(ScreenHeight))
+	g.WaterRenderTarget = eb.NewImage(int(ScreenWidth), int(ScreenHeight))
 
 	g.TileHighLightTimer.Duration = time.Millisecond * 100
 	g.NumberClickTimer.Duration = time.Millisecond * 30
@@ -876,7 +876,14 @@ func (g *Game) Draw(dst *eb.Image) {
 	// background
 	dst.Fill(TheColorTable[ColorBg])
 
-	g.DrawBoard(dst)
+	DrawBoard(
+		g.Board, g.BoardRect(),
+		g.RenderTileStyles,
+
+		g.GameState == GameStateWon, g.WaterRenderTarget, g.WaterAlpha, g.WaterFlowOffset,
+
+		dst,
+	)
 
 	if g.DrawRetryButton {
 		g.RetryButton.Draw(dst)
@@ -887,15 +894,20 @@ func (g *Game) Draw(dst *eb.Image) {
 	g.ResourceEditor.Draw(dst)
 }
 
-func (g *Game) forEachBgTile(callback func(x, y int, style TileStyle, bgTileRect FRectangle)) {
-	iter := NewBoardIterator(0, 0, g.Board.Width-1, g.Board.Height-1)
+func forEachBgTile(
+	board Board,
+	boardRect FRectangle,
+	tileStyles [][]TileStyle,
+	callback func(x, y int, style TileStyle, bgTileRect FRectangle),
+) {
+	iter := NewBoardIterator(0, 0, board.Width-1, board.Height-1)
 
 	for iter.HasNext() {
 		x, y := iter.GetNext()
 
-		style := g.RenderTileStyles[x][y]
+		style := tileStyles[x][y]
 
-		ogTileRect := GetBoardTileRect(g.BoardRect(), g.Board.Width, g.Board.Height, x, y)
+		ogTileRect := GetBoardTileRect(boardRect, board.Width, board.Height, x, y)
 
 		// draw background tile
 		bgTileRect := ogTileRect
@@ -915,15 +927,20 @@ func isTileFirmlyPlaced(style TileStyle) bool {
 		style.TileAlpha > e
 }
 
-func (g *Game) forEachTile(callback func(x, y int, style TileStyle, strokeRect, fillRect FRectangle, radiusPx [4]float64)) {
-	iter := NewBoardIterator(0, 0, g.Board.Width-1, g.Board.Height-1)
+func forEachTile(
+	board Board,
+	boardRect FRectangle,
+	tileStyles [][]TileStyle,
+	callback func(x, y int, style TileStyle, strokeRect, fillRect FRectangle, radiusPx [4]float64),
+) {
+	iter := NewBoardIterator(0, 0, board.Width-1, board.Height-1)
 
 	for iter.HasNext() {
 		x, y := iter.GetNext()
 
-		style := g.RenderTileStyles[x][y]
+		style := tileStyles[x][y]
 
-		ogTileRect := GetBoardTileRect(g.BoardRect(), g.Board.Width, g.Board.Height, x, y)
+		ogTileRect := GetBoardTileRect(boardRect, board.Width, board.Height, x, y)
 
 		tileRect := ogTileRect
 
@@ -982,8 +999,8 @@ func (g *Game) forEachTile(callback func(x, y int, style TileStyle, strokeRect, 
 					rx -= 1
 				}
 
-				if 0 <= rx && rx < g.Board.Width && 0 <= ry && ry < g.Board.Height {
-					if isTileFirmlyPlaced(g.RenderTileStyles[rx][ry]) {
+				if 0 <= rx && rx < board.Width && 0 <= ry && ry < board.Height {
+					if isTileFirmlyPlaced(tileStyles[rx][ry]) {
 						tileRadiuses[i] = 0
 						tileRadiuses[(i+1)%4] = 0
 					}
@@ -995,11 +1012,20 @@ func (g *Game) forEachTile(callback func(x, y int, style TileStyle, strokeRect, 
 	}
 }
 
-func (g *Game) forEachFgTile(callback func(x, y int, style TileStyle, fgRect FRectangle)) {
-	g.forEachTile(func(x, y int, style TileStyle, strokeRect, fillRect FRectangle, radiusPx [4]float64) {
-		fgRect := fillRect
-		callback(x, y, style, fgRect)
-	})
+func forEachFgTile(
+	board Board,
+	boardRect FRectangle,
+	tileStyles [][]TileStyle,
+	callback func(x, y int, style TileStyle, fgRect FRectangle),
+) {
+	forEachTile(
+		board, boardRect, tileStyles,
+
+		func(x, y int, style TileStyle, strokeRect, fillRect FRectangle, radiusPx [4]float64) {
+			fgRect := fillRect
+			callback(x, y, style, fgRect)
+		},
+	)
 }
 
 func ShouldDrawBgTile(style TileStyle) bool {
@@ -1018,77 +1044,101 @@ func ShouldDrawFgTile(style TileStyle) bool {
 		style.FgAlpha > 0.001
 }
 
-func (g *Game) DrawBoard(dst *eb.Image) {
+func DrawBoard(
+	board Board,
+	boardRect FRectangle,
+	tileStyles [][]TileStyle,
+
+	// params for water effect
+	doWaterEffect bool,
+	waterRenderTarget *eb.Image,
+	waterAlpha float64,
+	waterFlowOffset time.Duration,
+
+	dst *eb.Image,
+) {
 	// ============================
 	// draw background tiles
 	// ============================
-	g.forEachBgTile(func(x, y int, style TileStyle, bgTileRect FRectangle) {
-		if ShouldDrawBgTile(style) {
-			DrawFilledRect(dst, bgTileRect, ColorFade(style.BgFillColor, style.BgAlpha))
+	forEachBgTile(
+		board, boardRect, tileStyles,
 
-			// draw highlight
-			if style.BgTileHightlight > 0 {
-				t := style.BgTileHightlight
-				c := TheColorTable[ColorTileHighLight]
-				DrawFilledRect(
-					dst,
-					bgTileRect,
-					ColorFade(color.NRGBA{c.R, c.G, c.B, uint8(f64(c.A) * t)}, style.BgAlpha),
-				)
+		func(x, y int, style TileStyle, bgTileRect FRectangle) {
+			if ShouldDrawBgTile(style) {
+				DrawFilledRect(dst, bgTileRect, ColorFade(style.BgFillColor, style.BgAlpha))
+
+				// draw highlight
+				if style.BgTileHightlight > 0 {
+					t := style.BgTileHightlight
+					c := TheColorTable[ColorTileHighLight]
+					DrawFilledRect(
+						dst,
+						bgTileRect,
+						ColorFade(color.NRGBA{c.R, c.G, c.B, uint8(f64(c.A) * t)}, style.BgAlpha),
+					)
+				}
+
+				// draw bomb animation
+				if style.BgBombAnim > 0 {
+					t := Clamp(style.BgBombAnim, 0, 1)
+
+					const outerMargin = 1
+					const innerMargin = 2
+
+					outerRect := bgTileRect.Inset(outerMargin)
+					outerRect = outerRect.Inset(min(outerRect.Dx(), outerRect.Dy()) * 0.5 * (1 - t))
+					innerRect := outerRect.Inset(innerMargin)
+
+					innerRect = innerRect.Add(FPt(0, innerMargin))
+
+					radius := Lerp(1, 0.1, t*t*t)
+
+					innerRadius := radius * min(innerRect.Dx(), innerRect.Dy()) * 0.5
+					outerRadius := radius * min(outerRect.Dx(), outerRect.Dy()) * 0.5
+
+					DrawFilledRoundRectFast(dst, outerRect, outerRadius, true, 5, ColorFade(ColorMineBg1, style.BgAlpha))
+					DrawFilledRoundRectFast(dst, innerRect, innerRadius, true, 5, ColorFade(ColorMineBg2, style.BgAlpha))
+
+					DrawSubViewInRect(dst, innerRect, 1, 0, 0, ColorFade(ColorMine, style.BgAlpha), GetMineTile())
+				}
 			}
-
-			// draw bomb animation
-			if style.BgBombAnim > 0 {
-				t := Clamp(style.BgBombAnim, 0, 1)
-
-				const outerMargin = 1
-				const innerMargin = 2
-
-				outerRect := bgTileRect.Inset(outerMargin)
-				outerRect = outerRect.Inset(min(outerRect.Dx(), outerRect.Dy()) * 0.5 * (1 - t))
-				innerRect := outerRect.Inset(innerMargin)
-
-				innerRect = innerRect.Add(FPt(0, innerMargin))
-
-				radius := Lerp(1, 0.1, t*t*t)
-
-				innerRadius := radius * min(innerRect.Dx(), innerRect.Dy()) * 0.5
-				outerRadius := radius * min(outerRect.Dx(), outerRect.Dy()) * 0.5
-
-				DrawFilledRoundRectFast(dst, outerRect, outerRadius, true, 5, ColorFade(ColorMineBg1, style.BgAlpha))
-				DrawFilledRoundRectFast(dst, innerRect, innerRadius, true, 5, ColorFade(ColorMineBg2, style.BgAlpha))
-
-				DrawSubViewInRect(dst, innerRect, 1, 0, 0, ColorFade(ColorMine, style.BgAlpha), GetMineTile())
-			}
-		}
-	})
+		},
+	)
 
 	// ============================
 	// draw tiles
 	// ============================
 	const segments = 5
 
-	g.TileImage.Clear()
+	waterRenderTarget.Clear()
 
-	g.forEachTile(func(x, y int, style TileStyle, strokeRect, fillRect FRectangle, radiusPx [4]float64) {
-		if ShouldDrawTile(style) {
-			strokeColor := ColorFade(style.TileStrokeColor, style.TileAlpha)
+	forEachTile(
+		board, boardRect, tileStyles,
 
-			DrawFilledRoundRectFastEx(g.TileImage, strokeRect, radiusPx, true, [4]int{segments, segments, segments, segments}, strokeColor)
-		}
-	})
+		func(x, y int, style TileStyle, strokeRect, fillRect FRectangle, radiusPx [4]float64) {
+			if ShouldDrawTile(style) {
+				strokeColor := ColorFade(style.TileStrokeColor, style.TileAlpha)
 
-	g.forEachTile(func(x, y int, style TileStyle, strokeRect, fillRect FRectangle, radiusPx [4]float64) {
-		if ShouldDrawTile(style) {
-			fillColor := ColorFade(style.TileFillColor, style.TileAlpha)
+				DrawFilledRoundRectFastEx(waterRenderTarget, strokeRect, radiusPx, true, [4]int{segments, segments, segments, segments}, strokeColor)
+			}
+		},
+	)
 
-			DrawFilledRoundRectFastEx(g.TileImage, fillRect, radiusPx, true, [4]int{segments, segments, segments, segments}, fillColor)
-		}
-	})
+	forEachTile(
+		board, boardRect, tileStyles,
+
+		func(x, y int, style TileStyle, strokeRect, fillRect FRectangle, radiusPx [4]float64) {
+			if ShouldDrawTile(style) {
+				fillColor := ColorFade(style.TileFillColor, style.TileAlpha)
+
+				DrawFilledRoundRectFastEx(waterRenderTarget, fillRect, radiusPx, true, [4]int{segments, segments, segments, segments}, fillColor)
+			}
+		},
+	)
 
 	// draw water effect
-	if g.GameState == GameStateWon {
-		rect := g.BoardRect()
+	if doWaterEffect {
+		rect := boardRect
 		rect = rect.Inset(-3)
 
 		colors := [4]color.Color{
@@ -1098,59 +1148,57 @@ func (g *Game) DrawBoard(dst *eb.Image) {
 			ColorWater4,
 		}
 
-		//t := EaseOutQuint(g.WinAnimTimer.Normalize())
-
 		for i, c := range colors {
 			nrgba := ColorToNRGBA(c)
-			colors[i] = color.NRGBA{nrgba.R, nrgba.G, nrgba.B, uint8(f64(nrgba.A) * g.WaterAlpha)}
+			colors[i] = color.NRGBA{nrgba.R, nrgba.G, nrgba.B, uint8(f64(nrgba.A) * waterAlpha)}
 		}
-
-		// waterT := EaseOutQuint(t)
 
 		BeginBlend(eb.BlendSourceAtop)
 		DrawWaterRect(
-			g.TileImage,
+			waterRenderTarget,
 			rect,
-			GlobalTimerNow()+g.WaterFlowOffset,
+			GlobalTimerNow()+waterFlowOffset,
 			colors,
 			FPt(0, 0),
 		)
 		EndBlend()
 	}
 
-	DebugPrint("WaterAlpha", fmt.Sprintf("%.2f", g.WaterAlpha))
+	// draw waterRenderTarget
+	DrawImage(dst, waterRenderTarget, nil)
 
-	// draw TileImage
-	DrawImage(dst, g.TileImage, nil)
+	forEachFgTile(
+		board, boardRect, tileStyles,
 
-	g.forEachFgTile(func(x, y int, style TileStyle, fgRect FRectangle) {
-		if ShouldDrawFgTile(style) {
-			fgColor := style.FgColor
+		func(x, y int, style TileStyle, fgRect FRectangle) {
+			if ShouldDrawFgTile(style) {
+				fgColor := style.FgColor
 
-			if style.FgType == TileFgTypeNumber {
-				count := g.Board.GetNeighborMineCount(x, y)
-				if 1 <= count && count <= 8 {
+				if style.FgType == TileFgTypeNumber {
+					count := board.GetNeighborMineCount(x, y)
+					if 1 <= count && count <= 8 {
+						DrawSubViewInRect(
+							dst,
+							fgRect,
+							style.FgScale,
+							style.FgOffsetX, style.FgOffsetY,
+							ColorFade(fgColor, style.FgAlpha),
+							GetNumberTile(count),
+						)
+					}
+				} else if style.FgType == TileFgTypeFlag {
 					DrawSubViewInRect(
 						dst,
 						fgRect,
 						style.FgScale,
 						style.FgOffsetX, style.FgOffsetY,
 						ColorFade(fgColor, style.FgAlpha),
-						GetNumberTile(count),
+						GetFlagTile(),
 					)
 				}
-			} else if style.FgType == TileFgTypeFlag {
-				DrawSubViewInRect(
-					dst,
-					fgRect,
-					style.FgScale,
-					style.FgOffsetX, style.FgOffsetY,
-					ColorFade(fgColor, style.FgAlpha),
-					GetFlagTile(),
-				)
 			}
-		}
-	})
+		},
+	)
 }
 
 func (g *Game) BoardRect() FRectangle {
@@ -2123,8 +2171,8 @@ func DrawWaterRect(
 }
 
 func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
-	if g.TileImage.Bounds().Dx() != outsideWidth || g.TileImage.Bounds().Dy() != outsideHeight {
-		g.TileImage = eb.NewImage(outsideWidth, outsideHeight)
+	if g.WaterRenderTarget.Bounds().Dx() != outsideWidth || g.WaterRenderTarget.Bounds().Dy() != outsideHeight {
+		g.WaterRenderTarget = eb.NewImage(outsideWidth, outsideHeight)
 	}
 	return outsideWidth, outsideHeight
 }
