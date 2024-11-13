@@ -10,7 +10,6 @@ import (
 	"time"
 
 	eb "github.com/hajimehoshi/ebiten/v2"
-	ebt "github.com/hajimehoshi/ebiten/v2/text/v2"
 )
 
 var _ = fmt.Printf
@@ -22,21 +21,6 @@ const (
 	GameStateWon
 	GameStateLost
 )
-
-type Difficulty int
-
-const (
-	DifficultyEasy Difficulty = iota
-	DifficultyMedium
-	DifficultyHard
-	DifficultySize
-)
-
-var DifficultyStrs = [DifficultySize]string{
-	"Easy",
-	"Medium",
-	"Hard",
-}
 
 type RetryButton struct {
 	BaseButton
@@ -118,205 +102,6 @@ func (rb *RetryButton) Draw(dst *eb.Image) {
 	op.ColorScale.ScaleWithColor(color.NRGBA{255, 255, 255, 255})
 
 	DrawImage(dst, RetryButtonImage, op)
-}
-
-type DifficultySelectUI struct {
-	DoShow bool
-
-	DifficultyButtonLeft  *ImageButton
-	DifficultyButtonRight *ImageButton
-
-	TopMenuShowAnimTimer Timer
-
-	TopUIMarginHorizontal float64 // constant
-	TopUIMarginTop        float64 // constant
-	TopUIMarginBottom     float64 // constant
-
-	TopUIButtonButtonRatio float64 // constant
-	TopUIButtonTextRatio   float64 // constant
-
-	Difficulty         Difficulty
-	OnDifficultyChange func(difficulty Difficulty)
-}
-
-func NewDifficultySelectUI(boardRect FRectangle) *DifficultySelectUI {
-	ds := new(DifficultySelectUI)
-
-	ds.TopMenuShowAnimTimer = Timer{
-		Duration: time.Millisecond * 200,
-	}
-	ds.TopMenuShowAnimTimer.Current = ds.TopMenuShowAnimTimer.Duration
-
-	ds.TopUIMarginHorizontal = 5
-	ds.TopUIMarginTop = 5
-	ds.TopUIMarginBottom = 5
-
-	ds.TopUIButtonButtonRatio = 0.2
-	ds.TopUIButtonTextRatio = 0.5
-
-	// ==============================
-	// create difficulty buttons
-	// ==============================
-	{
-		leftRect := ds.GetDifficultyButtonRect(boardRect, false)
-		rightRect := ds.GetDifficultyButtonRect(boardRect, true)
-
-		// DifficultyButtonLeft
-		ds.DifficultyButtonLeft = NewImageButton()
-
-		ds.DifficultyButtonLeft.Rect = leftRect
-		ds.DifficultyButtonLeft.OnClick = func() {
-			prevDifficulty := ds.Difficulty
-			ds.Difficulty = max(ds.Difficulty-1, 0)
-			if ds.OnDifficultyChange != nil && prevDifficulty != ds.Difficulty {
-				ds.OnDifficultyChange(ds.Difficulty)
-			}
-		}
-
-		ds.DifficultyButtonLeft.Image = SpriteSubView(TileSprite, 11)
-		ds.DifficultyButtonLeft.ImageOnHover = SpriteSubView(TileSprite, 11)
-		ds.DifficultyButtonLeft.ImageOnDown = SpriteSubView(TileSprite, 13)
-
-		ds.DifficultyButtonLeft.ImageColor = ColorTopUIButton
-		ds.DifficultyButtonLeft.ImageColorOnHover = ColorTopUIButtonOnHover
-		ds.DifficultyButtonLeft.ImageColorOnDown = ColorTopUIButtonOnDown
-
-		// DifficultyButtonRight
-		ds.DifficultyButtonRight = NewImageButton()
-
-		ds.DifficultyButtonRight.Rect = rightRect
-		ds.DifficultyButtonRight.OnClick = func() {
-			prevDifficulty := ds.Difficulty
-			ds.Difficulty = min(ds.Difficulty+1, DifficultySize-1)
-			if ds.OnDifficultyChange != nil && prevDifficulty != ds.Difficulty {
-				ds.OnDifficultyChange(ds.Difficulty)
-			}
-		}
-
-		ds.DifficultyButtonRight.Image = SpriteSubView(TileSprite, 12)
-		ds.DifficultyButtonRight.ImageOnHover = SpriteSubView(TileSprite, 12)
-		ds.DifficultyButtonRight.ImageOnDown = SpriteSubView(TileSprite, 14)
-
-		ds.DifficultyButtonRight.ImageColor = ColorTopUIButton
-		ds.DifficultyButtonRight.ImageColorOnHover = ColorTopUIButtonOnHover
-		ds.DifficultyButtonRight.ImageColorOnDown = ColorTopUIButtonOnDown
-	}
-
-	return ds
-}
-
-func (ds *DifficultySelectUI) GetTopUIRect(boardRect FRectangle) FRectangle {
-	return FRect(
-		boardRect.Min.X+ds.TopUIMarginHorizontal,
-		ds.TopUIMarginTop,
-		boardRect.Max.X-ds.TopUIMarginHorizontal,
-		boardRect.Min.Y-ds.TopUIMarginBottom,
-	)
-}
-
-func (ds *DifficultySelectUI) GetDifficultyButtonRect(boardRect FRectangle, forRight bool) FRectangle {
-	parentRect := ds.GetTopUIRect(boardRect)
-	width := parentRect.Dx() * ds.TopUIButtonButtonRatio
-
-	if forRight {
-		return FRect(
-			parentRect.Max.X-width, parentRect.Min.Y,
-			parentRect.Max.X, parentRect.Max.Y,
-		)
-	} else {
-		return FRect(
-			parentRect.Min.X, parentRect.Min.Y,
-			parentRect.Min.X+width, parentRect.Max.Y,
-		)
-	}
-}
-
-func (ds *DifficultySelectUI) GetDifficultyTextRect(boardRect FRectangle) FRectangle {
-	parentRect := ds.GetTopUIRect(boardRect)
-	width := parentRect.Dx() * ds.TopUIButtonTextRatio
-
-	rect := FRectWH(width, parentRect.Dy())
-
-	pCenter := FRectangleCenter(parentRect)
-	rect = CenterFRectangle(rect, pCenter.X, pCenter.Y)
-
-	return rect
-}
-
-func (ds *DifficultySelectUI) Update(boardRect FRectangle) {
-	if ds.DoShow {
-		ds.TopMenuShowAnimTimer.TickUp()
-	} else {
-		ds.TopMenuShowAnimTimer.TickDown()
-	}
-	ds.TopMenuShowAnimTimer.ClampCurrent()
-
-	ds.DifficultyButtonLeft.Disabled = !ds.DoShow
-	ds.DifficultyButtonRight.Disabled = !ds.DoShow
-
-	// update button rect
-	{
-		lRect := ds.GetDifficultyButtonRect(boardRect, false)
-		rRect := ds.GetDifficultyButtonRect(boardRect, true)
-
-		t := ds.TopMenuShowAnimTimer.Normalize()
-
-		lRectY := Lerp(-lRect.Dy()-10, lRect.Min.Y, t)
-		rRectY := Lerp(-rRect.Dy()-10, rRect.Min.Y, t)
-
-		lRect = FRectMoveTo(lRect, lRect.Min.X, lRectY)
-		rRect = FRectMoveTo(rRect, rRect.Min.X, rRectY)
-
-		ds.DifficultyButtonLeft.Rect = lRect
-		ds.DifficultyButtonRight.Rect = rRect
-	}
-
-	ds.DifficultyButtonLeft.Update()
-	ds.DifficultyButtonRight.Update()
-	// ==========================
-}
-
-func (ds *DifficultySelectUI) DrawDifficultyText(dst *eb.Image, boardRect FRectangle) {
-	var maxW, maxH float64
-	var textW, textH float64
-
-	// TODO : cache this if you can
-	for d := Difficulty(0); d < DifficultySize; d++ {
-		str := DifficultyStrs[d]
-		w, h := ebt.Measure(str, DecoFace, FontLineSpacing(DecoFace))
-		maxW = max(w, maxW)
-		maxH = max(h, maxH)
-
-		if d == ds.Difficulty {
-			textW, textH = w, h
-		}
-	}
-
-	rect := ds.GetDifficultyTextRect(boardRect)
-
-	t := ds.TopMenuShowAnimTimer.Normalize()
-
-	rectY := Lerp(-rect.Dy()-10, rect.Min.Y, t)
-	rect = FRectMoveTo(rect, rect.Min.X, rectY)
-
-	scale := min(rect.Dx()/maxW, rect.Dy()/maxH)
-
-	rectCenter := FRectangleCenter(rect)
-
-	op := &DrawTextOptions{}
-	op.GeoM.Concat(TransformToCenter(textW, textH, scale, scale, 0))
-	op.GeoM.Translate(rectCenter.X, rectCenter.Y)
-
-	op.ColorScale.ScaleWithColor(TheColorTable[ColorTopUITitle])
-
-	DrawText(dst, DifficultyStrs[ds.Difficulty], DecoFace, op)
-}
-
-func (ds *DifficultySelectUI) Draw(dst *eb.Image, boardRect FRectangle) {
-	ds.DifficultyButtonLeft.Draw(dst)
-	ds.DifficultyButtonRight.Draw(dst)
-
-	ds.DrawDifficultyText(dst, boardRect)
 }
 
 type TileFgType int
@@ -406,13 +191,14 @@ type CallbackAnimation struct {
 }
 
 type Game struct {
+	Rect FRectangle
+
 	Board     Board
 	PrevBoard Board
 
-	MineCount      [DifficultySize]int         // constant
-	BoardTileCount [DifficultySize]image.Point // constant
+	MineCount int
 
-	BoardTouched bool
+	PlacedMinesOnBoard bool
 
 	BaseTileStyles   [][]TileStyle
 	RenderTileStyles [][]TileStyle
@@ -429,7 +215,10 @@ type Game struct {
 	NumberClickX     int
 	NumberClickY     int
 
-	RetryButton        *RetryButton
+	RetryButton *RetryButton
+
+	RetryButtonSize float64
+
 	DrawRetryButton    bool
 	RetryButtonScale   float64
 	RetryButtonOffsetX float64
@@ -437,38 +226,23 @@ type Game struct {
 
 	GameState GameState
 
-	Difficulty Difficulty
-
-	DifficultySelectUI *DifficultySelectUI
-
-	BoardSizeRatio float64 // constant, relative to min(ScreenWidth, ScreenHeight)
-
 	RevealMines bool
 
 	WaterAlpha      float64
 	WaterFlowOffset time.Duration
 
-	ResourceEditor *ResourceEditor
-
 	WaterRenderTarget *eb.Image
 }
 
-func NewGame() *Game {
+func NewGame(boardWidth, boardHeight, mineCount int) *Game {
 	g := new(Game)
 
-	g.MineCount = [DifficultySize]int{
-		10, 30, 70,
-	}
-	g.BoardTileCount = [DifficultySize]image.Point{
-		image.Pt(10, 9), image.Pt(15, 13), image.Pt(20, 20),
-	}
+	g.MineCount = mineCount
 
 	g.WaterRenderTarget = eb.NewImage(int(ScreenWidth), int(ScreenHeight))
 
 	g.TileHighLightTimer.Duration = time.Millisecond * 100
 	g.NumberClickTimer.Duration = time.Millisecond * 30
-
-	g.BoardSizeRatio = 0.85
 
 	g.RetryButton = NewRetryButton()
 	g.RetryButton.Disabled = true
@@ -481,26 +255,24 @@ func NewGame() *Game {
 
 	g.GameAnimations = NewCircularQueue[CallbackAnimation](10)
 
-	g.ResetBoard(g.BoardTileCount[g.Difficulty].X, g.BoardTileCount[g.Difficulty].Y)
-
-	g.DifficultySelectUI = NewDifficultySelectUI(g.BoardRect())
-	g.DifficultySelectUI.OnDifficultyChange = func(d Difficulty) {
-		prevDifficulty := g.Difficulty
-		_ = prevDifficulty
-		g.Difficulty = d
-		g.ResetBoard(g.BoardTileCount[d].X, g.BoardTileCount[d].Y)
-	}
-
-	g.ResourceEditor = NewResourceEditor()
+	g.ResetBoard(boardWidth, boardHeight)
 
 	return g
 }
 
 func (g *Game) ResetBoardWithNoStyles(width, height int) {
-	g.BoardTouched = false
+	g.PlacedMinesOnBoard = false
+
+	g.GameState = GameStatePlaying
+	g.GameAnimations.Clear()
 
 	g.Board = NewBoard(width, height)
 	g.PrevBoard = NewBoard(width, height)
+
+	g.DrawRetryButton = false
+	g.RetryButtonScale = 1
+	g.RetryButtonOffsetX = 0
+	g.RetryButtonOffsetY = 0
 
 	g.BaseTileStyles = New2DArray[TileStyle](width, height)
 	g.RenderTileStyles = New2DArray[TileStyle](width, height)
@@ -533,7 +305,7 @@ func (g *Game) ResetBoard(width, height int) {
 	}
 }
 
-func (g *Game) Update() error {
+func (g *Game) Update() {
 	justPressedL := IsMouseButtonJustPressed(eb.MouseButtonLeft)
 	justPressedR := IsMouseButtonJustPressed(eb.MouseButtonRight)
 	pressedL := IsMouseButtonPressed(eb.MouseButtonLeft)
@@ -618,8 +390,8 @@ func (g *Game) Update() error {
 		} else { // interaction on not revealed tile
 			if justPressedL { // one tile stepping
 				if !g.Board.Flags[boardX][boardY] {
-					if !g.BoardTouched { // first time interaction
-						g.BoardTouched = true
+					if !g.PlacedMinesOnBoard { // first time interaction
+						g.PlacedMinesOnBoard = true
 
 						// remove flags that might have been placed
 						for x := range g.Board.Width {
@@ -628,7 +400,7 @@ func (g *Game) Update() error {
 							}
 						}
 
-						g.Board.PlaceMines(g.MineCount[g.Difficulty], boardX, boardY)
+						g.Board.PlaceMines(g.MineCount, boardX, boardY)
 						g.Board.SpreadSafeArea(boardX, boardY)
 					} else { // mine has been placed
 						if !g.Board.Mines[boardX][boardY] {
@@ -695,7 +467,7 @@ func (g *Game) Update() error {
 		boardX >= 0 && boardY >= 0 &&
 		IsMouseButtonJustPressed(eb.MouseButton4) {
 
-		g.BoardTouched = true
+		g.PlacedMinesOnBoard = true
 
 		g.Board.Revealed[boardX][boardY] = true
 		stateChanged = true
@@ -847,12 +619,9 @@ func (g *Game) Update() error {
 	// ===================================
 	g.RetryButton.Rect = g.TransformedRetryButtonRect()
 	g.RetryButton.Update()
-
-	// ===================================
-	// update DifficultySelectUI
-	// ===================================
-	g.DifficultySelectUI.DoShow = !g.BoardTouched
-	g.DifficultySelectUI.Update(g.MaxBoardRect())
+	if !g.DrawRetryButton {
+		g.RetryButton.Disabled = true
+	}
 
 	// ==========================
 	// debug mode
@@ -860,16 +629,6 @@ func (g *Game) Update() error {
 	if IsKeyJustPressed(ShowMinesKey) {
 		g.RevealMines = !g.RevealMines
 	}
-
-	// ==========================
-	// update ResourceEditor
-	// ==========================
-	if IsKeyJustPressed(ShowColorPickerKey) {
-		g.ResourceEditor.DoShow = !g.ResourceEditor.DoShow
-	}
-	g.ResourceEditor.Update()
-
-	return nil
 }
 
 func (g *Game) Draw(dst *eb.Image) {
@@ -879,7 +638,7 @@ func (g *Game) Draw(dst *eb.Image) {
 	DrawBoard(
 		dst,
 
-		g.Board, g.BoardRect(),
+		g.Board, g.Rect,
 		g.RenderTileStyles,
 
 		g.GameState == GameStateWon, g.WaterRenderTarget, g.WaterAlpha, g.WaterFlowOffset,
@@ -888,10 +647,6 @@ func (g *Game) Draw(dst *eb.Image) {
 	if g.DrawRetryButton {
 		g.RetryButton.Draw(dst)
 	}
-
-	g.DifficultySelectUI.Draw(dst, g.MaxBoardRect())
-
-	g.ResourceEditor.Draw(dst)
 }
 
 func forEachBgTile(
@@ -1228,36 +983,8 @@ func DrawDummyBgBoard(
 	)
 }
 
-func (g *Game) BoardRect() FRectangle {
-	var boardTileWidth, boardTileHeight int
-
-	boardTileWidth = g.BoardTileCount[g.Difficulty].X
-	boardTileHeight = g.BoardTileCount[g.Difficulty].Y
-
-	maxSize := min(ScreenWidth, ScreenHeight) * g.BoardSizeRatio
-
-	var boardWidth, boardHeight float64
-
-	if boardTileWidth > boardTileHeight {
-		boardWidth = maxSize
-		boardHeight = maxSize * f64(boardTileHeight) / f64(boardTileWidth)
-	} else {
-		boardHeight = maxSize
-		boardWidth = maxSize * f64(boardTileWidth) / f64(boardTileHeight)
-	}
-
-	boardRect := FRectWH(boardWidth, boardHeight)
-	return CenterFRectangle(boardRect, ScreenWidth*0.5, ScreenHeight*0.5)
-}
-
-func (g *Game) MaxBoardRect() FRectangle {
-	maxSize := min(ScreenWidth, ScreenHeight) * g.BoardSizeRatio
-	boardRect := FRectWH(maxSize, maxSize)
-	return CenterFRectangle(boardRect, ScreenWidth*0.5, ScreenHeight*0.5)
-}
-
 func (g *Game) MousePosToBoardPos(mousePos FPoint) (int, int) {
-	boardRect := g.BoardRect()
+	boardRect := g.Rect
 
 	// if mouse is outside the board return -1
 	if !mousePos.In(boardRect) {
@@ -1277,9 +1004,8 @@ func (g *Game) MousePosToBoardPos(mousePos FPoint) (int, int) {
 }
 
 func (g *Game) RetryButtonRect() FRectangle {
-	boardRect := g.BoardRect()
-	whMin := min(boardRect.Dx(), boardRect.Dy())
-	rect := FRectWH(whMin*0.25, whMin*0.25)
+	boardRect := g.Rect
+	rect := FRectWH(g.RetryButtonSize, g.RetryButtonSize)
 	center := FRectangleCenter(boardRect)
 	rect = CenterFRectangle(rect, center.X, center.Y)
 
@@ -1631,16 +1357,13 @@ func (g *Game) QueueRetryButtonAnimation() {
 	g.SkipAllAnimations()
 
 	buttonRect := g.RetryButtonRect()
-	buttonRect = buttonRect.Inset(-10)
-
-	biggerRect := buttonRect.Inset(-30)
-	_ = biggerRect
+	buttonRect = buttonRect.Inset(-max(buttonRect.Dx(), buttonRect.Dy()) * 0.03)
 
 	toAnimate := make([]image.Point, 0)
 
 	for x := range g.Board.Width {
 		for y := range g.Board.Height {
-			tileRect := GetBoardTileRect(g.BoardRect(), g.Board.Width, g.Board.Height, x, y)
+			tileRect := GetBoardTileRect(g.Rect, g.Board.Width, g.Board.Height, x, y)
 
 			animate := false
 
@@ -1869,10 +1592,10 @@ func (g *Game) QueueResetBoardAnimation() {
 
 		anim.AfterDone = func() {
 			g.DrawRetryButton = true
-			g.ResetBoardWithNoStyles(g.BoardTileCount[g.Difficulty].X, g.BoardTileCount[g.Difficulty].Y)
+			g.ResetBoardWithNoStyles(g.Board.Width, g.Board.Height)
 			g.QueueShowBoardAnimation(
-				g.BoardTileCount[g.Difficulty].X/2,
-				g.BoardTileCount[g.Difficulty].Y/2,
+				g.Board.Width/2,
+				g.Board.Height/2,
 			)
 		}
 
@@ -1970,62 +1693,6 @@ func (g *Game) QueueShowBoardAnimation(originX, originy int) {
 		g.GameAnimations.Enqueue(anim)
 	}
 }
-
-/*
-func (g *Game) QueueDifficultyChangeAnimation(difficultyUp bool) {
-	g.SkipAllAnimations()
-
-	const minDuration = time.Millisecond * 80
-	const maxDuration = time.Millisecond * 200
-
-	for x := range g.Board.Width {
-		for y := range g.Board.Height {
-			xt := f64(x) / f64(g.Board.Width)
-			if difficultyUp {
-				xt = 1 - xt
-			}
-
-			var timer Timer
-			timer.Duration = time.Duration(Lerp(f64(minDuration), f64(maxDuration), xt))
-
-			var anim CallbackAnimation
-			anim.Tag = AnimationTagDifficultyChange
-
-			randomOffset := rand.Float64() * 50
-
-			anim.Update = func() {
-				timer.TickUp()
-				targetStyle := g.GetAnimationTargetTileStyle(x, y)
-
-				t := timer.Normalize()
-
-				xOffsetT := BezierCurveDataAsGraph(TheBezierTable[BezierBoardDifficultyChangeTileXoffset], t)
-				if difficultyUp {
-					xOffsetT *= -1
-				}
-				targetStyle.BgOffsetX = xOffsetT * (50 + randomOffset)
-
-				g.BaseTileStyles[x][y] = targetStyle
-			}
-
-			anim.Skip = func() {
-				timer.Current = timer.Duration
-			}
-
-			anim.Done = func() bool {
-				return timer.Current >= timer.Duration
-			}
-
-			anim.AfterDone = func() {
-				targetStyle := g.GetAnimationTargetTileStyle(x, y)
-				g.BaseTileStyles[x][y] = targetStyle
-			}
-
-			g.TileAnimations[x][y].Enqueue(anim)
-		}
-	}
-}
-*/
 
 func (g *Game) SkipAllAnimations() {
 	for x := range g.Board.Width {
@@ -2129,7 +1796,7 @@ func DrawSubViewInRect(
 	imgSize := ImageSizeFPt(view)
 	rectSize := rect.Size()
 
-	drawScale := min(rectSize.X, rectSize.Y) / max(imgSize.X, imgSize.Y) * scale
+	drawScale := min(rectSize.X/imgSize.X, rectSize.Y/imgSize.Y)
 
 	op := &DrawSubViewOptions{}
 	op.GeoM.Concat(TransformToCenter(imgSize.X, imgSize.Y, drawScale, drawScale, 0))
@@ -2149,7 +1816,7 @@ func (g *Game) DrawTile(
 	clr color.Color,
 	tile SubView,
 ) {
-	tileRect := GetBoardTileRect(g.BoardRect(), g.Board.Width, g.Board.Height, boardX, boardY)
+	tileRect := GetBoardTileRect(g.Rect, g.Board.Width, g.Board.Height, boardX, boardY)
 	DrawSubViewInRect(dst, tileRect, scale, offsetY, offsetY, clr, tile)
 }
 
@@ -2197,11 +1864,10 @@ func DrawWaterRect(
 	DrawRectShader(dst, imgRect.Dx(), imgRect.Dy(), WaterShader, op)
 }
 
-func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
+func (g *Game) Layout(outsideWidth, outsideHeight int) {
 	if g.WaterRenderTarget.Bounds().Dx() != outsideWidth || g.WaterRenderTarget.Bounds().Dy() != outsideHeight {
 		g.WaterRenderTarget = eb.NewImage(outsideWidth, outsideHeight)
 	}
-	return outsideWidth, outsideHeight
 }
 
 // =====================
@@ -2209,13 +1875,6 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
 // =====================
 
 func (g *Game) SetDebugBoardForDecoration() {
-	g.ResetBoard(15, 15)
-	g.QueueShowBoardAnimation(
-		g.BoardTileCount[g.Difficulty].X/2,
-		g.BoardTileCount[g.Difficulty].Y/2,
-	)
-
-	g.BoardTouched = true
 
 	// . : unrevealed
 	// @ : revealed
@@ -2231,6 +1890,14 @@ func (g *Game) SetDebugBoardForDecoration() {
 
 	newBoardHeight := len(newBoard)
 	newBoardWidth := len(newBoard[0])
+
+	g.ResetBoard(max(g.Board.Width, newBoardWidth), max(g.Board.Height, newBoardHeight))
+	g.QueueShowBoardAnimation(
+		(g.Board.Width-1)/2,
+		(g.Board.Height-1)/2,
+	)
+
+	g.PlacedMinesOnBoard = true
 
 	iter := NewBoardIterator(0, 0, newBoardWidth-1, newBoardHeight-1)
 	for iter.HasNext() {
@@ -2285,10 +1952,10 @@ func (g *Game) SetDebugBoardForDecoration() {
 }
 
 func (g *Game) SetBoardForInstantWin() {
-	if !g.BoardTouched {
-		g.Board.PlaceMines(g.MineCount[g.Difficulty], g.Board.Width-1, g.Board.Height-1)
+	if !g.PlacedMinesOnBoard {
+		g.Board.PlaceMines(g.MineCount, g.Board.Width-1, g.Board.Height-1)
 	}
-	g.BoardTouched = true
+	g.PlacedMinesOnBoard = true
 
 	// count how many tiles we have to reveal
 	tilesToReveal := 0
