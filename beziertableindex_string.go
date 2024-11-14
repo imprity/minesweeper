@@ -11,13 +11,13 @@ func _() {
 	_ = x[BezierBoardHideTile-0]
 	_ = x[BezierBoardHideTileAlpha-1]
 	_ = x[BezierBoardHideButton-2]
-	_ = x[BezierBoardShowTileYoffset-3]
+	_ = x[BezierBoardShowTileOffsetY-3]
 	_ = x[BezierBoardShowTileAlpha-4]
 	_ = x[BezierBoardShowTileScale-5]
 	_ = x[BezierTableSize-6]
 }
 
-const _BezierTableIndex_name = "BezierBoardHideTileBezierBoardHideTileAlphaBezierBoardHideButtonBezierBoardShowTileYoffsetBezierBoardShowTileAlphaBezierBoardShowTileScaleBezierTableSize"
+const _BezierTableIndex_name = "BezierBoardHideTileBezierBoardHideTileAlphaBezierBoardHideButtonBezierBoardShowTileOffsetYBezierBoardShowTileAlphaBezierBoardShowTileScaleBezierTableSize"
 
 var _BezierTableIndex_index = [...]uint8{0, 19, 43, 64, 90, 114, 138, 153}
 

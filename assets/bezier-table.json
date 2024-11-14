@@ -99,7 +99,7 @@
             }
         ]
     },
-    "BezierBoardShowTileYoffset": {
+    "BezierBoardShowTileOffsetY": {
         "Points": [
             {
                 "X": 0,

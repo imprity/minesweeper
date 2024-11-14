@@ -2,6 +2,7 @@ package main
 
 import (
 	"image"
+	"image/color"
 	"os"
 	"path/filepath"
 	"time"
@@ -19,6 +20,8 @@ func CursorFPt() FPoint {
 	return FPt(f64(mx), f64(my))
 }
 
+// make rectangle with left corner at 0, 0
+// centered at 0, 0
 func TransformToCenter(
 	width, height float64,
 	scaleX, scaleY float64,
@@ -32,18 +35,12 @@ func TransformToCenter(
 	return geom
 }
 
-func FitRectInRect(
-	srcRect FRectangle,
-	dstRect FRectangle,
-) eb.GeoM {
-	scaleX := dstRect.Dx() / srcRect.Dx()
-	scaleY := dstRect.Dy() / srcRect.Dy()
-
-	geom := eb.GeoM{}
-	geom.Scale(scaleX, scaleY)
-	geom.Translate(dstRect.Min.X, dstRect.Min.Y)
-
-	return geom
+// calculate scale to fit srcRect inside dstRect
+func GetScaleToFitRectInRect(
+	srcRectW, srcRectH float64,
+	dstRectW, dstRectH float64,
+) float64 {
+	return min(dstRectW/srcRectW, dstRectH/srcRectH)
 }
 
 func ImageSize(img image.Image) (int, int) {
@@ -110,4 +107,28 @@ func RelativePath(path string) (string, error) {
 	joined := filepath.Join(filepath.Dir(exePath), path)
 
 	return joined, nil
+}
+
+func DrawSubViewInRect(
+	dst *eb.Image,
+	rect FRectangle,
+	scale float64,
+	offsetX, offsetY float64,
+	clr color.Color,
+	view SubView,
+) {
+	imgSize := ImageSizeFPt(view)
+	rectSize := rect.Size()
+
+	//drawScale := min(rectSize.X/imgSize.X, rectSize.Y/imgSize.Y)
+	drawScale := GetScaleToFitRectInRect(imgSize.X, imgSize.Y, rectSize.X, rectSize.Y)
+
+	op := &DrawSubViewOptions{}
+	op.GeoM.Concat(TransformToCenter(imgSize.X, imgSize.Y, drawScale, drawScale, 0))
+	rectCenter := FRectangleCenter(rect)
+	op.GeoM.Translate(rectCenter.X, rectCenter.Y)
+	op.GeoM.Translate(offsetX, offsetY)
+	op.ColorScale.ScaleWithColor(clr)
+
+	DrawSubView(dst, view, op)
 }

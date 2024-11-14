@@ -1639,7 +1639,7 @@ func (g *Game) QueueShowBoardAnimation(originX, originy int) {
 
 				t := timer.Normalize()
 
-				yOffsetT := BezierCurveDataAsGraph(TheBezierTable[BezierBoardShowTileYoffset], t)
+				yOffsetT := BezierCurveDataAsGraph(TheBezierTable[BezierBoardShowTileOffsetY], t)
 				alphaT := BezierCurveDataAsGraph(TheBezierTable[BezierBoardShowTileAlpha], t)
 				scaleT := BezierCurveDataAsGraph(TheBezierTable[BezierBoardShowTileScale], t)
 
@@ -1783,29 +1783,6 @@ func GetBoardTileRect(
 		Min: FPt(f64(boardX)*tileWidth, f64(boardY)*tileHeight).Add(boardRect.Min),
 		Max: FPt(f64(boardX+1)*tileWidth, f64(boardY+1)*tileHeight).Add(boardRect.Min),
 	}
-}
-
-func DrawSubViewInRect(
-	dst *eb.Image,
-	rect FRectangle,
-	scale float64,
-	offsetX, offsetY float64,
-	clr color.Color,
-	view SubView,
-) {
-	imgSize := ImageSizeFPt(view)
-	rectSize := rect.Size()
-
-	drawScale := min(rectSize.X/imgSize.X, rectSize.Y/imgSize.Y)
-
-	op := &DrawSubViewOptions{}
-	op.GeoM.Concat(TransformToCenter(imgSize.X, imgSize.Y, drawScale, drawScale, 0))
-	rectCenter := FRectangleCenter(rect)
-	op.GeoM.Translate(rectCenter.X, rectCenter.Y)
-	op.GeoM.Translate(offsetX, offsetY)
-	op.ColorScale.ScaleWithColor(clr)
-
-	DrawSubView(dst, view, op)
 }
 
 func (g *Game) DrawTile(

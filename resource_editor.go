@@ -52,7 +52,6 @@ func (re *ResourceEditor) Update() {
 		re.ColorPicker.Rect = FRectMoveTo(re.ColorPicker.Rect, ScreenWidth-210, 10)
 		re.ColorPicker.Update()
 	} else if re.ShowingTable == 1 { // showing bezier table
-		// TODO: pick better rect
 		re.BezierEditor.Rect = FRectWH(350, 350)
 		re.BezierEditor.Rect = FRectMoveTo(re.BezierEditor.Rect, ScreenWidth-(350+25), 70)
 		re.BezierEditor.Update()
