@@ -61,7 +61,7 @@ func (re *ResourceEditor) Update() {
 	const repeatRate = 50 * time.Millisecond
 	changed := false
 
-	if HandleKeyRepeat(firstRate, repeatRate, ColorPickerUpKey) {
+	if HandleKeyRepeat(firstRate, repeatRate, ResourceEditorUpKey) {
 		if re.ShowingTable == 0 { // showing color picker
 			re.ColorTableIndex--
 			changed = true
@@ -70,7 +70,7 @@ func (re *ResourceEditor) Update() {
 			changed = true
 		}
 	}
-	if HandleKeyRepeat(firstRate, repeatRate, ColorPickerDownKey) {
+	if HandleKeyRepeat(firstRate, repeatRate, ResourceEditorDownKey) {
 		if re.ShowingTable == 0 { // showing color picker
 			re.ColorTableIndex++
 			changed = true

@@ -171,6 +171,8 @@ type AnimationTag int
 
 const (
 	AnimationTagNone AnimationTag = iota
+
+	// animations used by Game
 	AnimationTagTileReveal
 	AnimationTagWin
 	AnimationTagDefeat
@@ -188,6 +190,50 @@ type CallbackAnimation struct {
 	AfterDone func()
 
 	Tag AnimationTag
+}
+
+func AnimationQueueUpdate(queue *CircularQueue[CallbackAnimation]) {
+	if !queue.IsEmpty() {
+		anim := queue.At(0)
+		anim.Update()
+
+		if anim.Done() {
+			queue.Dequeue()
+
+			if anim.AfterDone != nil {
+				anim.AfterDone()
+			}
+		}
+	}
+}
+
+func AnimationQueueSkipAll(queue *CircularQueue[CallbackAnimation]) {
+	for !queue.IsEmpty() {
+		gameAnim := queue.Dequeue()
+
+		gameAnim.Skip()
+
+		if gameAnim.AfterDone != nil {
+			gameAnim.AfterDone()
+		}
+	}
+}
+
+func AnimationQueueSkipUntilTag(queue *CircularQueue[CallbackAnimation], tags ...AnimationTag) {
+	for !queue.IsEmpty() {
+		gameAnim := queue.At(0)
+		if !slices.Contains(tags, gameAnim.Tag) {
+			queue.Dequeue()
+
+			gameAnim.Skip()
+
+			if gameAnim.AfterDone != nil {
+				gameAnim.AfterDone()
+			}
+		} else {
+			break
+		}
+	}
 }
 
 type Game struct {
@@ -518,33 +564,12 @@ func (g *Game) Update() {
 	// ============================
 
 	// update GameAnimations
-	if !g.GameAnimations.IsEmpty() {
-		anim := g.GameAnimations.At(0)
-		anim.Update()
-
-		if anim.Done() {
-			g.GameAnimations.Dequeue()
-
-			if anim.AfterDone != nil {
-				anim.AfterDone()
-			}
-		}
-	}
+	AnimationQueueUpdate(&g.GameAnimations)
 
 	// update BaseTileStyles
 	for x := range g.Board.Width {
 		for y := range g.Board.Height {
-			if !g.TileAnimations[x][y].IsEmpty() {
-				anim := g.TileAnimations[x][y].At(0)
-				anim.Update()
-
-				if anim.Done() {
-					g.TileAnimations[x][y].Dequeue()
-					if anim.AfterDone != nil {
-						anim.AfterDone()
-					}
-				}
-			}
+			AnimationQueueUpdate(&g.TileAnimations[x][y])
 		}
 	}
 
@@ -865,7 +890,12 @@ func DrawBoard(
 	// ============================
 	const segments = 5
 
-	waterRenderTarget.Clear()
+	tilesRenderTarget := dst
+
+	if waterRenderTarget != nil && doWaterEffect {
+		waterRenderTarget.Clear()
+		tilesRenderTarget = waterRenderTarget
+	}
 
 	forEachTile(
 		board, boardRect, tileStyles,
@@ -874,7 +904,7 @@ func DrawBoard(
 			if ShouldDrawTile(style) {
 				strokeColor := ColorFade(style.TileStrokeColor, style.TileAlpha)
 
-				DrawFilledRoundRectFastEx(waterRenderTarget, strokeRect, radiusPx, true, [4]int{segments, segments, segments, segments}, strokeColor)
+				DrawFilledRoundRectFastEx(tilesRenderTarget, strokeRect, radiusPx, true, [4]int{segments, segments, segments, segments}, strokeColor)
 			}
 		},
 	)
@@ -886,13 +916,13 @@ func DrawBoard(
 			if ShouldDrawTile(style) {
 				fillColor := ColorFade(style.TileFillColor, style.TileAlpha)
 
-				DrawFilledRoundRectFastEx(waterRenderTarget, fillRect, radiusPx, true, [4]int{segments, segments, segments, segments}, fillColor)
+				DrawFilledRoundRectFastEx(tilesRenderTarget, fillRect, radiusPx, true, [4]int{segments, segments, segments, segments}, fillColor)
 			}
 		},
 	)
 
 	// draw water effect
-	if doWaterEffect {
+	if doWaterEffect && waterRenderTarget != nil {
 		rect := boardRect
 		rect = rect.Inset(-3)
 
@@ -917,10 +947,10 @@ func DrawBoard(
 			FPt(0, 0),
 		)
 		EndBlend()
-	}
 
-	// draw waterRenderTarget
-	DrawImage(dst, waterRenderTarget, nil)
+		// draw waterRenderTarget
+		DrawImage(dst, waterRenderTarget, nil)
+	}
 
 	forEachFgTile(
 		board, boardRect, tileStyles,
@@ -960,7 +990,6 @@ func DrawDummyBgBoard(
 	dst *eb.Image,
 	boardWidth, boardHeight int,
 	boardRect FRectangle,
-	waterRenderTarget *eb.Image,
 ) {
 	// TODO: this is fucking stupid. We are creating a dummy board only to throw it away
 	// each time we draw
@@ -968,7 +997,7 @@ func DrawDummyBgBoard(
 	dummyStyles := New2DArray[TileStyle](boardWidth, boardHeight)
 
 	for x := range boardWidth {
-		for y := range boardWidth {
+		for y := range boardHeight {
 			dummyStyles[x][y] = GetAnimationTargetTileStyle(dummyBoard, x, y)
 		}
 	}
@@ -979,7 +1008,7 @@ func DrawDummyBgBoard(
 		dummyBoard, boardRect,
 		dummyStyles,
 
-		false, waterRenderTarget, 0, 0,
+		false, nil, 0, 0,
 	)
 }
 
@@ -1697,62 +1726,21 @@ func (g *Game) QueueShowBoardAnimation(originX, originy int) {
 func (g *Game) SkipAllAnimations() {
 	for x := range g.Board.Width {
 		for y := range g.Board.Height {
-			for !g.TileAnimations[x][y].IsEmpty() {
-				anim := g.TileAnimations[x][y].Dequeue()
-				anim.Skip()
-				if anim.AfterDone != nil {
-					anim.AfterDone()
-				}
-			}
+			AnimationQueueSkipAll(&g.TileAnimations[x][y])
 		}
 	}
 
-	for !g.GameAnimations.IsEmpty() {
-		gameAnim := g.GameAnimations.Dequeue()
-
-		gameAnim.Skip()
-
-		if gameAnim.AfterDone != nil {
-			gameAnim.AfterDone()
-		}
-	}
+	AnimationQueueSkipAll(&g.GameAnimations)
 }
 
-func (g *Game) SkipAllAnimationsUntilTag(tag AnimationTag) {
+func (g *Game) SkipAllAnimationsUntilTag(tags ...AnimationTag) {
 	for x := range g.Board.Width {
 		for y := range g.Board.Height {
-		TAG_LOOP:
-			for !g.TileAnimations[x][y].IsEmpty() {
-				tileAnim := g.TileAnimations[x][y].At(0)
-				if tileAnim.Tag != tag {
-					g.TileAnimations[x][y].Dequeue()
-
-					tileAnim.Skip()
-
-					if tileAnim.AfterDone != nil {
-						tileAnim.AfterDone()
-					}
-				} else {
-					break TAG_LOOP
-				}
-			}
+			AnimationQueueSkipUntilTag(&g.TileAnimations[x][y], tags...)
 		}
 	}
 
-	for !g.GameAnimations.IsEmpty() {
-		gameAnim := g.GameAnimations.At(0)
-		if gameAnim.Tag != tag {
-			g.GameAnimations.Dequeue()
-
-			gameAnim.Skip()
-
-			if gameAnim.AfterDone != nil {
-				gameAnim.AfterDone()
-			}
-		} else {
-			break
-		}
-	}
+	AnimationQueueSkipUntilTag(&g.GameAnimations, tags...)
 }
 
 func GetNumberTile(number int) SubView {

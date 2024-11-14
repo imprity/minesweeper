@@ -15,7 +15,7 @@ const (
 	SetToDecoBoardKey = eb.KeyF7
 	InstantWinKey     = eb.KeyF8
 
-	ShowColorPickerKey = eb.KeyF3
-	ColorPickerUpKey   = eb.KeyW
-	ColorPickerDownKey = eb.KeyS
+	ShowResourceEditorKey = eb.KeyF3
+	ResourceEditorUpKey   = eb.KeyW
+	ResourceEditorDownKey = eb.KeyS
 )

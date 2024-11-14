@@ -384,6 +384,15 @@ func FRectScaleCentered(rect FRectangle, scale float64) FRectangle {
 	return CenterFRectangle(newRect, center.X, center.Y)
 }
 
+func FRectLerp(rectA, rectB FRectangle, t float64) FRectangle {
+	return FRect(
+		Lerp(rectA.Min.X, rectB.Min.X, t),
+		Lerp(rectA.Min.Y, rectB.Min.Y, t),
+		Lerp(rectA.Max.X, rectB.Max.X, t),
+		Lerp(rectA.Max.Y, rectB.Max.Y, t),
+	)
+}
+
 func Clamp[N constraints.Integer | constraints.Float](n, minN, maxN N) N {
 	n = min(n, maxN)
 	n = max(n, minN)
@@ -477,28 +486,36 @@ func BezierCurveDataAsGraph(data BezierCurveData, x float64) float64 {
 
 // copy pasted from https://easings.net/#
 
+func EaseInCirc(t float64) float64 {
+	return math.Pow(t, 2)
+}
+
 func EaseOutCirc(t float64) float64 {
 	return 1 - math.Pow(1-t, 2)
 }
 
-func EaseOutCubic(t float64) float64 {
-	return 1 - math.Pow(1-t, 3)
-}
-
-func EaseOutQuint(t float64) float64 {
-	return 1 - math.Pow(1-t, 5)
-}
-
-func EaseInCirc(t float64) float64 {
-	return math.Pow(t, 2)
+func EaseInOutCirc(t float64) float64 {
+	if t < 0.5 {
+		return (1 - math.Sqrt(1-math.Pow(2*t, 2))) / 2
+	} else {
+		return (math.Sqrt(1-math.Pow(-2*t+2, 2)) + 1) / 2
+	}
 }
 
 func EaseInCubic(t float64) float64 {
 	return math.Pow(t, 3)
 }
 
+func EaseOutCubic(t float64) float64 {
+	return 1 - math.Pow(1-t, 3)
+}
+
 func EaseInQuint(t float64) float64 {
 	return math.Pow(t, 5)
+}
+
+func EaseOutQuint(t float64) float64 {
+	return 1 - math.Pow(1-t, 5)
 }
 
 func EaseInElastic(t float64) float64 {

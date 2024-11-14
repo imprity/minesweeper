@@ -122,7 +122,7 @@ func main() {
 	eb.SetVsyncEnabled(true)
 	eb.SetWindowSize(int(ScreenWidth), int(ScreenHeight))
 	eb.SetWindowResizingMode(eb.WindowResizingModeEnabled)
-	eb.SetWindowTitle("test")
+	eb.SetWindowTitle("Minesweeper")
 
 	if err := eb.RunGame(app); err != nil {
 		panic(err)

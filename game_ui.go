@@ -2,13 +2,10 @@ package main
 
 import (
 	"image"
-	"image/color"
 
 	eb "github.com/hajimehoshi/ebiten/v2"
 	ebt "github.com/hajimehoshi/ebiten/v2/text/v2"
 )
-
-var _ = color.NRGBA{}
 
 type Difficulty int
 
@@ -61,10 +58,11 @@ func NewGameUI() *GameUI {
 		gu.MineCounts[DifficultyEasy],
 	)
 	gu.TopUI = NewTopUI()
-	gu.TopUI.OnDifficultyChange = func(d Difficulty) {
-		gu.Difficulty = d
-		gu.Game.MineCount = gu.MineCounts[d]
-		gu.Game.ResetBoard(gu.BoardTileCounts[d].X, gu.BoardTileCounts[d].Y)
+	gu.TopUI.OnDifficultyChange = func(newDifficulty Difficulty) {
+		gu.Difficulty = newDifficulty
+		gu.Game.MineCount = gu.MineCounts[newDifficulty]
+		gu.Game.ResetBoard(gu.BoardTileCounts[newDifficulty].X, gu.BoardTileCounts[newDifficulty].Y)
+		gu.Game.Rect = gu.BoardRect(newDifficulty)
 	}
 
 	gu.ResourceEditor = NewResourceEditor()
@@ -73,13 +71,14 @@ func NewGameUI() *GameUI {
 }
 
 func (gu *GameUI) Update() {
-	gu.Game.Rect = gu.BoardRect()
+	gu.Game.Rect = gu.BoardRect(gu.Difficulty)
 	gu.Game.RetryButtonSize = gu.BoardSize()
 	gu.TopUI.Rect = gu.TopUIRect()
+
 	gu.Game.Update()
 	gu.TopUI.Update()
 
-	if IsKeyJustPressed(ShowColorPickerKey) {
+	if IsKeyJustPressed(ShowResourceEditorKey) {
 		gu.ResourceEditor.DoShow = !gu.ResourceEditor.DoShow
 	}
 	gu.ResourceEditor.Update()
@@ -87,6 +86,7 @@ func (gu *GameUI) Update() {
 
 func (gu *GameUI) Draw(dst *eb.Image) {
 	gu.Game.Draw(dst)
+
 	gu.TopUI.Draw(dst)
 
 	gu.ResourceEditor.Draw(dst)
@@ -96,17 +96,17 @@ func (gu *GameUI) Layout(outsideWidth, outsideHeight int) {
 	gu.Game.Layout(outsideWidth, outsideHeight)
 }
 
-func (gu *GameUI) BoardRect() FRectangle {
+func (gu *GameUI) BoardRect(difficulty Difficulty) FRectangle {
 	parentRect := FRectWH(
 		ScreenWidth, ScreenHeight,
 	)
 
 	var boardTileWidth, boardTileHeight int
 
-	boardTileWidth = gu.BoardTileCounts[gu.Difficulty].X
-	boardTileHeight = gu.BoardTileCounts[gu.Difficulty].Y
+	boardTileWidth = gu.BoardTileCounts[difficulty].X
+	boardTileHeight = gu.BoardTileCounts[difficulty].Y
 
-	maxSize := min(parentRect.Dx(), parentRect.Dy()) * gu.BoardSizeRatios[gu.Difficulty]
+	maxSize := min(parentRect.Dx(), parentRect.Dy()) * gu.BoardSizeRatios[difficulty]
 
 	var boardWidth, boardHeight float64
 
