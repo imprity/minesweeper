@@ -16,7 +16,6 @@ import (
 )
 
 //go:embed dejavu-fonts-ttf-2.37/ttf/DejaVuSansMono.ttf
-//go:embed assets/COOPBL.TTF
 //go:embed assets
 var EmbeddedAssets embed.FS
 
@@ -178,7 +177,7 @@ func LoadAssets() {
 
 	// load fonts
 	{
-		decoFontFile := mustLoadData("assets/COOPBL.TTF")
+		decoFontFile := mustLoadData("assets/Sen-VariableFont_wght.ttf")
 		faceSource, err := ebt.NewGoTextFaceSource(bytes.NewReader(decoFontFile))
 		if err != nil {
 			ErrorLogger.Fatalf("failed to load font: %v", err)
@@ -187,6 +186,8 @@ func LoadAssets() {
 			Source: faceSource,
 			Size:   64,
 		}
+
+		DecoFace.SetVariation(ebt.MustParseTag("wght"), 700)
 	}
 	{
 		clearFontFile := mustLoadData("dejavu-fonts-ttf-2.37/ttf/DejaVuSansMono.ttf")

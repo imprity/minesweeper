@@ -178,14 +178,14 @@ type TopUI struct {
 func NewTopUI() *TopUI {
 	tu := new(TopUI)
 
-	tu.UIElementWidth = 5
+	tu.UIElementWidth = 4
 	tu.UIElementHeight = 1
 
-	tu.ButtonWidth = 0.15
-	tu.ButtonHeight = 0.8
+	tu.ButtonWidth = 0.2
+	tu.ButtonHeight = 0.6
 
-	tu.TextWidth = 0.55
-	tu.TextHeight = 0.75
+	tu.TextWidth = 0.6
+	tu.TextHeight = 0.9
 
 	// ==============================
 	// create difficulty buttons
