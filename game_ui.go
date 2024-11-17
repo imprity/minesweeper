@@ -1,7 +1,9 @@
 package main
 
 import (
+	"fmt"
 	"image"
+	"time"
 
 	eb "github.com/hajimehoshi/ebiten/v2"
 	ebt "github.com/hajimehoshi/ebiten/v2/text/v2"
@@ -157,19 +159,15 @@ func (gu *GameUI) TopUIRect() FRectangle {
 type TopUI struct {
 	Rect FRectangle
 
-	Disabled bool
+	FlagUI             *FlagUI
+	DifficultySelectUI *DifficultySelectUI
+	TimerUI            *TimerUI
 
-	DifficultyButtonLeft  *ImageButton
-	DifficultyButtonRight *ImageButton
+	UIScale float64
 
-	UIElementWidth  float64 // constant, ratio of ui elements
-	UIElementHeight float64 // constant, ratio of ui elements
-
-	ButtonWidth  float64 // constant, relative to UIWidth
-	ButtonHeight float64 // constant, relative to UIWidth
-
-	TextWidth  float64 // constant, relative to UIWidth
-	TextHeight float64 // constant, relative to UIWidth
+	FlagUIRect             FRectangle
+	DifficultySelectUIRect FRectangle
+	TimerUIRect            FRectangle
 
 	Difficulty         Difficulty
 	OnDifficultyChange func(difficulty Difficulty)
@@ -178,161 +176,440 @@ type TopUI struct {
 func NewTopUI() *TopUI {
 	tu := new(TopUI)
 
-	tu.UIElementWidth = 4
-	tu.UIElementHeight = 1
+	tu.FlagUI = NewFlagUI()
+	tu.DifficultySelectUI = NewDifficultySelectUI()
+	tu.TimerUI = NewTimerUI()
 
-	tu.ButtonWidth = 0.2
-	tu.ButtonHeight = 0.6
-
-	tu.TextWidth = 0.6
-	tu.TextHeight = 0.9
-
-	// ==============================
-	// create difficulty buttons
-	// ==============================
-	{
-		leftRect := tu.GetDifficultyButtonRect(false)
-		rightRect := tu.GetDifficultyButtonRect(true)
-
-		// DifficultyButtonLeft
-		tu.DifficultyButtonLeft = NewImageButton()
-
-		tu.DifficultyButtonLeft.Rect = leftRect
-		tu.DifficultyButtonLeft.OnClick = func() {
-			prevDifficulty := tu.Difficulty
-			tu.Difficulty = max(tu.Difficulty-1, 0)
-			if tu.OnDifficultyChange != nil && prevDifficulty != tu.Difficulty {
-				tu.OnDifficultyChange(tu.Difficulty)
-			}
+	tu.DifficultySelectUI.OnDifficultyChange = func(newDifficulty Difficulty) {
+		prevDifficulty := tu.Difficulty
+		if prevDifficulty != newDifficulty {
+			tu.Difficulty = newDifficulty
+			tu.OnDifficultyChange(newDifficulty)
 		}
-
-		tu.DifficultyButtonLeft.Image = SpriteSubView(TileSprite, 11)
-		tu.DifficultyButtonLeft.ImageOnHover = SpriteSubView(TileSprite, 11)
-		tu.DifficultyButtonLeft.ImageOnDown = SpriteSubView(TileSprite, 13)
-
-		tu.DifficultyButtonLeft.ImageColor = ColorTopUIButton
-		tu.DifficultyButtonLeft.ImageColorOnHover = ColorTopUIButtonOnHover
-		tu.DifficultyButtonLeft.ImageColorOnDown = ColorTopUIButtonOnDown
-
-		// DifficultyButtonRight
-		tu.DifficultyButtonRight = NewImageButton()
-
-		tu.DifficultyButtonRight.Rect = rightRect
-		tu.DifficultyButtonRight.OnClick = func() {
-			prevDifficulty := tu.Difficulty
-			tu.Difficulty = min(tu.Difficulty+1, DifficultySize-1)
-			if tu.OnDifficultyChange != nil && prevDifficulty != tu.Difficulty {
-				tu.OnDifficultyChange(tu.Difficulty)
-			}
-		}
-
-		tu.DifficultyButtonRight.Image = SpriteSubView(TileSprite, 12)
-		tu.DifficultyButtonRight.ImageOnHover = SpriteSubView(TileSprite, 12)
-		tu.DifficultyButtonRight.ImageOnDown = SpriteSubView(TileSprite, 14)
-
-		tu.DifficultyButtonRight.ImageColor = ColorTopUIButton
-		tu.DifficultyButtonRight.ImageColorOnHover = ColorTopUIButtonOnHover
-		tu.DifficultyButtonRight.ImageColorOnDown = ColorTopUIButtonOnDown
 	}
 
 	return tu
 }
 
 func (tu *TopUI) Update() {
-	tu.DifficultyButtonLeft.Disabled = tu.Disabled
-	tu.DifficultyButtonRight.Disabled = tu.Disabled
+	// TEST TEST TEST TEST TEST
+	tu.TimerUI.CurrentTime = GlobalTimerNow()
+	// TEST TEST TEST TEST TEST
 
-	// update button rect
-	tu.DifficultyButtonLeft.Rect = tu.GetDifficultyButtonRect(false)
-	tu.DifficultyButtonRight.Rect = tu.GetDifficultyButtonRect(true)
+	var totalIdealWidth float64
 
-	tu.DifficultyButtonLeft.Update()
-	tu.DifficultyButtonRight.Update()
-	// ==========================
+	const idealMargin = 10
+
+	idealFlagW := tu.FlagUI.GetIdealWidth()
+	idealDifficultyW := tu.DifficultySelectUI.GetIdealWidth()
+	idealTimerW := tu.TimerUI.GetIdealWidth()
+
+	totalIdealWidth = max(
+		idealDifficultyW*0.5+idealMargin+idealFlagW+idealMargin,
+		idealDifficultyW*0.5+idealMargin+idealTimerW+idealMargin,
+	) * 2
+
+	tu.UIScale = min(tu.Rect.Dx()/totalIdealWidth, tu.Rect.Dy()/TopUIElementIdealHeight)
+
+	flagW := idealFlagW * tu.UIScale
+	difficultyW := idealDifficultyW * tu.UIScale
+	timerW := idealTimerW * tu.UIScale
+
+	uiHeight := TopUIElementIdealHeight * tu.UIScale
+
+	// update rectangles
+	tu.FlagUIRect = FRectXYWH(
+		tu.Rect.Min.X+idealMargin*tu.UIScale, tu.Rect.Min.Y,
+		flagW, uiHeight,
+	)
+	tu.DifficultySelectUIRect = FRectXYWH(
+		tu.Rect.Min.X+tu.Rect.Dx()*0.5-difficultyW*0.5, tu.Rect.Min.Y,
+		difficultyW, uiHeight,
+	)
+	tu.TimerUIRect = FRectXYWH(
+		tu.Rect.Max.X-timerW-idealMargin*tu.UIScale, tu.Rect.Min.Y,
+		timerW, uiHeight,
+	)
+
+	tu.TimerUI.OnUpdate(tu.TimerUIRect, tu.UIScale)
+	tu.DifficultySelectUI.OnUpdate(tu.DifficultySelectUIRect, tu.UIScale)
+	tu.FlagUI.OnUpdate(tu.FlagUIRect, tu.UIScale)
 }
 
 func (tu *TopUI) Draw(dst *eb.Image) {
-	tu.DifficultyButtonLeft.Draw(dst)
-	tu.DifficultyButtonRight.Draw(dst)
-
-	tu.DrawDifficultyText(dst)
+	tu.TimerUI.OnDraw(dst, tu.TimerUIRect, tu.UIScale)
+	tu.DifficultySelectUI.OnDraw(dst, tu.DifficultySelectUIRect, tu.UIScale)
+	tu.FlagUI.OnDraw(dst, tu.FlagUIRect, tu.UIScale)
 }
 
-func (tu *TopUI) GetUIElementRect() FRectangle {
-	width := tu.UIElementWidth
-	height := tu.UIElementHeight
+const (
+	TopUIElementIdealHeight   = 100
+	TopUIElementIdealFontSize = 80
+	TopUIElementIdealTextY    = 48
+)
 
-	scale := min(tu.Rect.Dx()/width, tu.Rect.Dy()/height)
+type TopUIElement struct {
+	// given the ideal height, what width does this element would be?
+	GetIdealWidth func() float64
 
-	width *= scale
-	height *= scale
-
-	x := tu.Rect.Min.X + tu.Rect.Dx()*0.5 - width*0.5
-	y := tu.Rect.Max.Y - height
-
-	return FRectXYWH(x, y, width, height)
+	// actual update and draw function
+	OnUpdate func(actualRect FRectangle, scale float64)
+	OnDraw   func(dst *eb.Image, actualRect FRectangle, scale float64)
 }
 
-func (tu *TopUI) GetDifficultyButtonRect(forRight bool) FRectangle {
-	parentRect := tu.GetUIElementRect()
+type DifficultySelectUI struct {
+	TopUIElement
 
-	width := parentRect.Dx() * tu.ButtonWidth
-	height := parentRect.Dy() * tu.ButtonHeight
+	DifficultyButtonLeft  *ImageButton
+	DifficultyButtonRight *ImageButton
 
-	if forRight {
-		return FRectXYWH(
-			parentRect.Max.X-width, (parentRect.Min.Y+parentRect.Max.Y)*0.5-height*0.5,
-			width, height,
-		)
-	} else {
-		return FRectXYWH(
-			parentRect.Min.X, (parentRect.Min.Y+parentRect.Max.Y)*0.5-height*0.5,
-			width, height,
-		)
+	Difficulty         Difficulty
+	OnDifficultyChange func(difficulty Difficulty)
+}
+
+func NewDifficultySelectUI() *DifficultySelectUI {
+	ds := new(DifficultySelectUI)
+
+	// ==============================
+	// create difficulty buttons
+	// ==============================
+	{
+		// DifficultyButtonLeft
+		ds.DifficultyButtonLeft = NewImageButton()
+
+		ds.DifficultyButtonLeft.OnClick = func() {
+			prevDifficulty := ds.Difficulty
+			ds.Difficulty = max(ds.Difficulty-1, 0)
+			if ds.OnDifficultyChange != nil && prevDifficulty != ds.Difficulty {
+				ds.OnDifficultyChange(ds.Difficulty)
+			}
+		}
+
+		ds.DifficultyButtonLeft.Image = SpriteSubView(TileSprite, 11)
+		ds.DifficultyButtonLeft.ImageOnHover = SpriteSubView(TileSprite, 11)
+		ds.DifficultyButtonLeft.ImageOnDown = SpriteSubView(TileSprite, 13)
+
+		ds.DifficultyButtonLeft.ImageColor = ColorTopUIButton
+		ds.DifficultyButtonLeft.ImageColorOnHover = ColorTopUIButtonOnHover
+		ds.DifficultyButtonLeft.ImageColorOnDown = ColorTopUIButtonOnDown
+
+		// DifficultyButtonRight
+		ds.DifficultyButtonRight = NewImageButton()
+
+		ds.DifficultyButtonRight.OnClick = func() {
+			prevDifficulty := ds.Difficulty
+			ds.Difficulty = min(ds.Difficulty+1, DifficultySize-1)
+			if ds.OnDifficultyChange != nil && prevDifficulty != ds.Difficulty {
+				ds.OnDifficultyChange(ds.Difficulty)
+			}
+		}
+
+		ds.DifficultyButtonRight.Image = SpriteSubView(TileSprite, 12)
+		ds.DifficultyButtonRight.ImageOnHover = SpriteSubView(TileSprite, 12)
+		ds.DifficultyButtonRight.ImageOnDown = SpriteSubView(TileSprite, 14)
+
+		ds.DifficultyButtonRight.ImageColor = ColorTopUIButton
+		ds.DifficultyButtonRight.ImageColorOnHover = ColorTopUIButtonOnHover
+		ds.DifficultyButtonRight.ImageColorOnDown = ColorTopUIButtonOnDown
 	}
-}
 
-func (tu *TopUI) GetDifficultyTextRect() FRectangle {
-	parentRect := tu.GetUIElementRect()
+	var idealBtnRectLeft FRectangle
+	var idealBtnRectRight FRectangle
 
-	width := parentRect.Dx() * tu.TextWidth
-	height := parentRect.Dy() * tu.TextHeight
+	var idealMaxTextWidth float64
+	var idealTextWidths [DifficultySize]float64
+	var idealTextCenterX float64
 
-	rect := FRectWH(width, height)
+	var idealTextScale float64 = TopUIElementIdealFontSize / FontSize(BoldFace)
 
-	pCenter := FRectangleCenter(parentRect)
-	rect = CenterFRectangle(rect, pCenter.X, pCenter.Y)
-
-	return rect
-}
-
-func (tu *TopUI) DrawDifficultyText(dst *eb.Image) {
-	var maxW, maxH float64
-	var textW, textH float64
-
-	// TODO : cache this if you can
 	for d := Difficulty(0); d < DifficultySize; d++ {
 		str := DifficultyStrs[d]
-		w, h := ebt.Measure(str, DecoFace, FontLineSpacing(DecoFace))
-		maxW = max(w, maxW)
-		maxH = max(h, maxH)
-
-		if d == tu.Difficulty {
-			textW, textH = w, h
-		}
+		w, _ := ebt.Measure(str, BoldFace, FontLineSpacing(BoldFace))
+		w *= idealTextScale
+		idealTextWidths[d] = w
+		idealMaxTextWidth = max(w, idealMaxTextWidth)
 	}
 
-	rect := tu.GetDifficultyTextRect()
+	const idealMargin = 10
+	var idealBtnSize FPoint = FPt(70, 70)
 
-	scale := min(rect.Dx()/maxW, rect.Dy()/maxH)
+	var idealWidth float64 = idealBtnSize.X + idealMargin + idealMaxTextWidth + idealMargin + idealBtnSize.X
 
-	rectCenter := FRectangleCenter(rect)
+	ds.GetIdealWidth = func() float64 {
+		return idealWidth
+	}
 
-	op := &DrawTextOptions{}
-	op.GeoM.Concat(TransformToCenter(textW, textH, scale, scale, 0))
-	op.GeoM.Translate(rectCenter.X, rectCenter.Y)
+	idealBtnRectLeft = FRectXYWH(
+		0, TopUIElementIdealHeight*0.5-idealBtnSize.Y*0.5+2,
+		idealBtnSize.X, idealBtnSize.Y,
+	)
+	idealBtnRectRight = FRectXYWH(
+		idealWidth-idealBtnSize.X, TopUIElementIdealHeight*0.5-idealBtnSize.Y*0.5+2,
+		idealBtnSize.X, idealBtnSize.Y,
+	)
 
-	op.ColorScale.ScaleWithColor(TheColorTable[ColorTopUITitle])
+	idealTextCenterX = idealWidth * 0.5
 
-	DrawText(dst, DifficultyStrs[tu.Difficulty], DecoFace, op)
+	ds.OnUpdate = func(actualRect FRectangle, scale float64) {
+		btnRectLeft := FRectScale(idealBtnRectLeft, scale).Add(actualRect.Min)
+		btnRectRight := FRectScale(idealBtnRectRight, scale).Add(actualRect.Min)
+
+		ds.DifficultyButtonLeft.Rect = btnRectLeft
+		ds.DifficultyButtonRight.Rect = btnRectRight
+
+		ds.DifficultyButtonLeft.Update()
+		ds.DifficultyButtonRight.Update()
+	}
+
+	ds.OnDraw = func(dst *eb.Image, actualRect FRectangle, scale float64) {
+		ds.DifficultyButtonLeft.Draw(dst)
+		ds.DifficultyButtonRight.Draw(dst)
+
+		// draw text
+		textY := TopUIElementIdealTextY*scale + actualRect.Min.Y
+		textCenterX := idealTextCenterX*scale + actualRect.Min.X
+		textX := textCenterX - idealTextWidths[ds.Difficulty]*scale*0.5
+
+		op := &DrawTextOptions{}
+		op.GeoM.Concat(TextToYcenter(
+			BoldFace,
+			TopUIElementIdealFontSize*idealTextScale*scale,
+			textX, textY,
+		))
+		op.ColorScale.ScaleWithColor(ColorTopUITitle)
+
+		DrawText(dst, DifficultyStrs[ds.Difficulty], BoldFace, op)
+	}
+
+	return ds
+}
+
+type FlagUI struct {
+	TopUIElement
+
+	FlagCount int
+}
+
+func NewFlagUI() *FlagUI {
+	fu := new(FlagUI)
+
+	const idealFlagSize = 80
+
+	var idealFlagRect FRectangle = FRectXYWH(
+		0, 0,
+		idealFlagSize, idealFlagSize,
+	)
+
+	var idealTextScale float64 = TopUIElementIdealFontSize / FontSize(BoldFace)
+
+	const idealMargin = 10
+
+	var idealTextX float64 = idealFlagRect.Dx() + idealMargin
+
+	var idealMaxTextWidth float64
+	{
+		w, _ := ebt.Measure("000", BoldFace, FontLineSpacing(BoldFace))
+		w *= idealTextScale
+		idealMaxTextWidth = w
+	}
+
+	fu.GetIdealWidth = func() float64 {
+		return idealFlagRect.Dx() + idealMargin + idealMaxTextWidth
+	}
+
+	fu.OnUpdate = func(actualRect FRectangle, scale float64) {
+		// pass
+	}
+
+	fu.OnDraw = func(dst *eb.Image, actualRect FRectangle, scale float64) {
+		flagRect := FRectScale(idealFlagRect, scale).Add(actualRect.Min)
+
+		// draw flag icon
+		DrawSubViewInRect(
+			dst, flagRect, 1.45, 0, scale*1.2, ColorTopUITitle, GetFlagTile(),
+		)
+
+		textX := idealTextX*scale + actualRect.Min.X
+		textY := TopUIElementIdealTextY*scale + actualRect.Min.Y
+
+		text := fmt.Sprintf("%d", fu.FlagCount)
+
+		op := &DrawTextOptions{}
+		op.GeoM.Concat(TextToYcenterLimitWidth(
+			text,
+			BoldFace,
+			TopUIElementIdealFontSize*idealTextScale*scale,
+			textX, textY,
+			idealMaxTextWidth*scale,
+		))
+		op.ColorScale.ScaleWithColor(ColorTopUITitle)
+
+		DrawText(dst, text, BoldFace, op)
+	}
+
+	return fu
+}
+
+type TimerUI struct {
+	TopUIElement
+
+	CurrentTime time.Duration
+}
+
+func NewTimerUI() *TimerUI {
+	tu := new(TimerUI)
+
+	const idealTimerSize = 75
+
+	var idealTimerRect FRectangle = FRectXYWH(
+		0, TopUIElementIdealHeight*0.5-idealTimerSize*0.5,
+		idealTimerSize, idealTimerSize,
+	)
+
+	const idealMargin = 10
+
+	var idealTextX float64 = idealTimerRect.Dx() + idealMargin
+
+	var idealTextScaleNormal float64 = TopUIElementIdealFontSize * 0.8 / FontSize(RegularFace)
+
+	var idealMaxTextWidth float64
+	{
+		w, _ := ebt.Measure("00:00", RegularFace, FontLineSpacing(RegularFace))
+		w *= idealTextScaleNormal
+		idealMaxTextWidth = w
+	}
+
+	var idealTextScaleSmall float64
+	{
+		w, _ := ebt.Measure("00:00:00", RegularFace, FontLineSpacing(RegularFace))
+		w *= idealTextScaleNormal
+		idealTextScaleSmall = idealMaxTextWidth / w
+	}
+
+	tu.GetIdealWidth = func() float64 {
+		return idealTimerRect.Dx() + idealMargin + idealMaxTextWidth
+	}
+
+	tu.OnUpdate = func(actualRect FRectangle, scale float64) {
+		// pass
+	}
+
+	tu.OnDraw = func(dst *eb.Image, actualRect FRectangle, scale float64) {
+		timerRect := FRectScale(idealTimerRect, scale).Add(actualRect.Min)
+
+		// draw timer icon
+		DrawSubViewInRect(
+			dst, timerRect, 1.0, 0, 0, ColorTopUITitle, SpriteSubView(TileSprite, 15),
+		)
+
+		textX := idealTextX*scale + actualRect.Min.X
+		textY := TopUIElementIdealTextY*scale + actualRect.Min.Y
+
+		hours := tu.CurrentTime / time.Hour
+		minutes := (tu.CurrentTime % time.Hour) / time.Minute
+		seconds := (tu.CurrentTime % time.Minute) / time.Second
+
+		textScale := idealTextScaleNormal
+		if hours > 0 {
+			textScale = idealTextScaleSmall
+		}
+		textScale *= scale
+
+		var text string
+		if hours > 0 {
+			text = fmt.Sprintf(
+				"%02d:%02d:%02d",
+				hours, minutes, seconds,
+			)
+		} else {
+			text = fmt.Sprintf(
+				"%02d:%02d",
+				minutes, seconds,
+			)
+		}
+
+		op := &DrawTextOptions{}
+		op.GeoM.Concat(TextToYcenterLimitWidth(
+			text,
+			RegularFace,
+			TopUIElementIdealFontSize*textScale,
+			textX, textY,
+			idealMaxTextWidth*scale,
+		))
+		op.ColorScale.ScaleWithColor(ColorTopUITitle)
+
+		DrawText(dst, text, RegularFace, op)
+	}
+
+	return tu
+}
+
+func TextToBaseLine(
+	fontFace ebt.Face,
+	fontSize float64,
+	x, y float64,
+) eb.GeoM {
+	scale := fontSize / FontSize(fontFace)
+
+	newX := x
+	newY := y - fontFace.Metrics().HAscent*scale
+
+	var geom eb.GeoM
+	geom.Scale(scale, scale)
+	geom.Translate(newX, newY)
+
+	return geom
+}
+
+func TextToBaseLineLimitWidth(
+	text string,
+	fontFace ebt.Face,
+	fontSize float64,
+	x, y float64,
+	maxWidth float64,
+) eb.GeoM {
+	scale := fontSize / FontSize(fontFace)
+	w, _ := ebt.Measure(text, fontFace, FontLineSpacing(fontFace))
+	w *= scale
+
+	if w > maxWidth {
+		fontSize *= maxWidth / w
+	}
+
+	return TextToBaseLine(fontFace, fontSize, x, y)
+}
+
+func TextToYcenter(
+	fontFace ebt.Face,
+	fontSize float64,
+	x, y float64,
+) eb.GeoM {
+	scale := fontSize / FontSize(fontFace)
+
+	newX := x
+	newY := y - fontSize*0.5
+
+	var geom eb.GeoM
+	geom.Scale(scale, scale)
+	geom.Translate(newX, newY)
+
+	return geom
+}
+
+func TextToYcenterLimitWidth(
+	text string,
+	fontFace ebt.Face,
+	fontSize float64,
+	x, y float64,
+	maxWidth float64,
+) eb.GeoM {
+	scale := fontSize / FontSize(fontFace)
+	w, _ := ebt.Measure(text, fontFace, FontLineSpacing(fontFace))
+	w *= scale
+
+	if w > maxWidth {
+		fontSize *= maxWidth / w
+	}
+
+	return TextToYcenter(fontFace, fontSize, x, y)
 }

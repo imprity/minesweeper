@@ -31,12 +31,14 @@ func init() {
 
 type App struct {
 	ShowDebugConsole bool
-	GameUI           *GameUI
+	Scene            *GameUI
+	//Scene           *LayoutTest
 }
 
 func NewApp() *App {
 	a := new(App)
-	a.GameUI = NewGameUI()
+	a.Scene = NewGameUI()
+	//a.Scene = NewLayoutTest()
 	return a
 }
 
@@ -81,13 +83,13 @@ func (a *App) Update() error {
 		a.ShowDebugConsole = !a.ShowDebugConsole
 	}
 
-	a.GameUI.Update()
+	a.Scene.Update()
 
 	return nil
 }
 
 func (a *App) Draw(dst *eb.Image) {
-	a.GameUI.Draw(dst)
+	a.Scene.Draw(dst)
 
 	if a.ShowDebugConsole {
 		DrawDebugMsgs(dst)
@@ -98,7 +100,7 @@ func (a *App) Layout(outsideWidth, outsideHeight int) (int, int) {
 	ScreenWidth = f64(outsideWidth)
 	ScreenHeight = f64(outsideHeight)
 
-	a.GameUI.Layout(outsideWidth, outsideHeight)
+	a.Scene.Layout(outsideWidth, outsideHeight)
 
 	return outsideWidth, outsideHeight
 }

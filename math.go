@@ -378,6 +378,13 @@ func FRectMoveTo(rect FRectangle, x, y float64) FRectangle {
 	}
 }
 
+func FRectScale(rect FRectangle, scale float64) FRectangle {
+	return FRectangle{
+		Min: rect.Min.Scale(scale),
+		Max: rect.Max.Scale(scale),
+	}
+}
+
 func FRectScaleCentered(rect FRectangle, scale float64) FRectangle {
 	newRect := FRectWH(rect.Dx()*scale, rect.Dy()*scale)
 	center := FRectangleCenter(rect)
