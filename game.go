@@ -22,86 +22,49 @@ const (
 	GameStateLost
 )
 
-type RetryButton struct {
-	BaseButton
+type MouseState struct {
+	JustPressedL bool
+	JustPressedR bool
+	JustPressedM bool
 
-	ButtonHoverOffset float64
+	PressedL bool
+	PressedR bool
+	PressedM bool
+
+	CursorX float64
+	CursorY float64
+
+	BoardX int
+	BoardY int
 }
 
-func NewRetryButton() *RetryButton {
-	rb := new(RetryButton)
-
-	return rb
+func (ms *MouseState) PressedAny() bool {
+	return ms.PressedL || ms.PressedR || ms.PressedM
 }
 
-func (rb *RetryButton) Update() {
-	rb.BaseButton.Update()
-
-	if rb.State == ButtonStateHover {
-		rb.ButtonHoverOffset = Lerp(rb.ButtonHoverOffset, 1, 0.3)
-	} else if rb.State == ButtonStateDown {
-		rb.ButtonHoverOffset = 0
-	} else {
-		rb.ButtonHoverOffset = Lerp(rb.ButtonHoverOffset, 0, 0.3)
-	}
-
-	if rb.Disabled {
-		rb.ButtonHoverOffset = 0
-	}
+func (ms *MouseState) JustPressedAny() bool {
+	return ms.JustPressedL || ms.JustPressedR || ms.JustPressedM
 }
 
-func (rb *RetryButton) Draw(dst *eb.Image) {
-	bottomRect := FRectWH(rb.Rect.Dx(), rb.Rect.Dy()*0.95)
-	topRect := bottomRect
+func GetMouseState(board Board, boardRect FRectangle) MouseState {
+	var ms MouseState
 
-	topRect = FRectMoveTo(topRect, rb.Rect.Min.X, rb.Rect.Min.Y)
-	bottomRect = FRectMoveTo(bottomRect, rb.Rect.Min.X, rb.Rect.Max.Y-bottomRect.Dy())
+	ms.JustPressedL = IsMouseButtonJustPressed(eb.MouseButtonLeft)
+	ms.JustPressedR = IsMouseButtonJustPressed(eb.MouseButtonRight)
+	ms.JustPressedM = IsMouseButtonJustPressed(eb.MouseButtonMiddle)
 
-	if rb.State == ButtonStateDown {
-		topRect = FRectMoveTo(topRect, bottomRect.Min.X, bottomRect.Min.Y)
-	} else if rb.State == ButtonStateHover {
-		topRect = topRect.Add(FPt(0, -topRect.Dy()*0.025*rb.ButtonHoverOffset))
-	}
+	ms.PressedL = IsMouseButtonPressed(eb.MouseButtonLeft)
+	ms.PressedR = IsMouseButtonPressed(eb.MouseButtonRight)
+	ms.PressedM = IsMouseButtonPressed(eb.MouseButtonMiddle)
 
-	const segments = 6
-	const radius = 0.4
+	cursor := CursorFPt()
 
-	DrawFilledRoundRectFast(
-		dst,
-		bottomRect,
-		radius,
-		false,
-		segments,
-		color.NRGBA{0, 0, 0, 255},
-	)
+	ms.CursorX = cursor.X
+	ms.CursorY = cursor.Y
 
-	DrawFilledRoundRectFast(
-		dst,
-		topRect,
-		radius,
-		false,
-		segments,
-		color.NRGBA{105, 223, 145, 255},
-	)
+	ms.BoardX, ms.BoardY = MousePosToBoardPos(board, boardRect, cursor)
 
-	imgRect := RectToFRect(RetryButtonImage.Bounds())
-	scale := min(topRect.Dx(), topRect.Dy()) / max(imgRect.Dx(), imgRect.Dy())
-	scale *= 0.6
-
-	center := FRectangleCenter(topRect)
-
-	op := &DrawImageOptions{}
-	op.GeoM.Concat(TransformToCenter(imgRect.Dx(), imgRect.Dy(), scale, scale, 0))
-	op.GeoM.Translate(center.X, center.Y-topRect.Dy()*0.02)
-	op.ColorScale.ScaleWithColor(color.NRGBA{0, 0, 0, 255})
-
-	DrawImage(dst, RetryButtonImage, op)
-
-	op.GeoM.Translate(0, topRect.Dy()*0.02*2)
-	op.ColorScale.Reset()
-	op.ColorScale.ScaleWithColor(color.NRGBA{255, 255, 255, 255})
-
-	DrawImage(dst, RetryButtonImage, op)
+	return ms
 }
 
 type TileFgType int
@@ -236,15 +199,22 @@ func AnimationQueueSkipUntilTag(queue *CircularQueue[CallbackAnimation], tags ..
 	}
 }
 
+// called every update
+type StyleModifier func(
+	prevBoard, board Board,
+	boardRect FRectangle,
+	interaction BoardInteractionType,
+	stateChanged bool, // GameState or board has changed
+	prevGameState, gameState GameState,
+	tileStyles [][]TileStyle, // modify these to change style
+) bool
+
 type Game struct {
 	Rect FRectangle
 
-	Board     Board
-	PrevBoard Board
-
-	MineCount int
-
-	PlacedMinesOnBoard bool
+	OnBoardReset       func()
+	OnGameEnd          func(didWin bool)
+	OnFirstInteraction func()
 
 	BaseTileStyles   [][]TileStyle
 	RenderTileStyles [][]TileStyle
@@ -253,13 +223,7 @@ type Game struct {
 
 	GameAnimations CircularQueue[CallbackAnimation]
 
-	TileHighLightTimer Timer
-	TileHighLightX     int
-	TileHighLightY     int
-
-	NumberClickTimer Timer
-	NumberClickX     int
-	NumberClickY     int
+	StyleModifiers []StyleModifier
 
 	RetryButton *RetryButton
 
@@ -278,17 +242,26 @@ type Game struct {
 	WaterFlowOffset time.Duration
 
 	WaterRenderTarget *eb.Image
+
+	board     Board
+	prevBoard Board
+
+	shouldCallOnFirstInteraction bool
+
+	mineCount int
+
+	placedMinesOnBoard bool
 }
 
 func NewGame(boardWidth, boardHeight, mineCount int) *Game {
 	g := new(Game)
 
-	g.MineCount = mineCount
+	g.mineCount = mineCount
 
 	g.WaterRenderTarget = eb.NewImage(int(ScreenWidth), int(ScreenHeight))
 
-	g.TileHighLightTimer.Duration = time.Millisecond * 100
-	g.NumberClickTimer.Duration = time.Millisecond * 30
+	g.StyleModifiers = append(g.StyleModifiers, NewTileHighlightModifier())
+	g.StyleModifiers = append(g.StyleModifiers, NewNumberClickModifier())
 
 	g.RetryButton = NewRetryButton()
 	g.RetryButton.Disabled = true
@@ -301,19 +274,23 @@ func NewGame(boardWidth, boardHeight, mineCount int) *Game {
 
 	g.GameAnimations = NewCircularQueue[CallbackAnimation](10)
 
-	g.ResetBoard(boardWidth, boardHeight)
+	g.ResetBoard(boardWidth, boardHeight, g.mineCount)
 
 	return g
 }
 
-func (g *Game) ResetBoardWithNoStyles(width, height int) {
-	g.PlacedMinesOnBoard = false
+func (g *Game) ResetBoardWithNoStyles(width, height, mineCount int) {
+	g.shouldCallOnFirstInteraction = true
+
+	g.placedMinesOnBoard = false
 
 	g.GameState = GameStatePlaying
 	g.GameAnimations.Clear()
 
-	g.Board = NewBoard(width, height)
-	g.PrevBoard = NewBoard(width, height)
+	g.board = NewBoard(width, height)
+	g.prevBoard = NewBoard(width, height)
+
+	g.mineCount = mineCount
 
 	g.DrawRetryButton = false
 	g.RetryButtonScale = 1
@@ -337,14 +314,18 @@ func (g *Game) ResetBoardWithNoStyles(width, height int) {
 			g.RenderTileStyles[x][y] = NewTileStyle()
 		}
 	}
+
+	if g.OnBoardReset != nil {
+		g.OnBoardReset()
+	}
 }
 
-func (g *Game) ResetBoard(width, height int) {
-	g.ResetBoardWithNoStyles(width, height)
+func (g *Game) ResetBoard(width, height, mineCount int) {
+	g.ResetBoardWithNoStyles(width, height, mineCount)
 
 	for x := range width {
 		for y := range height {
-			targetStyle := GetAnimationTargetTileStyle(g.Board, x, y)
+			targetStyle := GetAnimationTargetTileStyle(g.board, x, y)
 			g.BaseTileStyles[x][y] = targetStyle
 			g.RenderTileStyles[x][y] = targetStyle
 		}
@@ -352,19 +333,7 @@ func (g *Game) ResetBoard(width, height int) {
 }
 
 func (g *Game) Update() {
-	justPressedL := IsMouseButtonJustPressed(eb.MouseButtonLeft)
-	justPressedR := IsMouseButtonJustPressed(eb.MouseButtonRight)
-	pressedL := IsMouseButtonPressed(eb.MouseButtonLeft)
-	pressedR := IsMouseButtonPressed(eb.MouseButtonRight)
-
-	justPressedM := IsMouseButtonJustPressed(eb.MouseButtonMiddle)
-	pressedM := IsMouseButtonPressed(eb.MouseButtonMiddle)
-
-	justPressedAny := justPressedL || justPressedR || justPressedM
-
-	cursor := CursorFPt()
-
-	boardX, boardY := g.MousePosToBoardPos(cursor)
+	ms := GetMouseState(g.board, g.Rect)
 
 	// =================================
 	// handle board interaction
@@ -372,120 +341,51 @@ func (g *Game) Update() {
 
 	// =======================================
 	prevState := g.GameState
-	g.Board.SaveTo(g.PrevBoard)
+	g.board.SaveTo(g.prevBoard)
+
+	var stateChanged bool = false
+
+	var interaction BoardInteractionType = InteractionTypeNone
 	// =======================================
 
-	// =======================================
-	stateChanged := false
-	// =======================================
-
-	if g.GameState == GameStatePlaying && boardX >= 0 && boardY >= 0 && justPressedAny {
-
-		if g.Board.Revealed[boardX][boardY] { // interaction on revealed tile
-			if (justPressedL && pressedR) || (justPressedR && pressedL) || (justPressedM) { // handle step interaction
-				// set number click
-				g.NumberClickTimer.Current = g.NumberClickTimer.Duration
-				g.NumberClickX = boardX
-				g.NumberClickY = boardY
-
-				flagCount := g.Board.GetNeighborFlagCount(boardX, boardY)
-				mineCount := g.Board.GetNeighborMineCount(boardX, boardY)
-
-				if flagCount == mineCount {
-					// check if flagged correctly
-					flaggedCorrectly := true
-					missedMine := false
-
-					iter := NewBoardIterator(boardX-1, boardY-1, boardX+1, boardY+1)
-					for iter.HasNext() {
-						x, y := iter.GetNext()
-
-						if g.Board.IsPosInBoard(x, y) {
-							if g.Board.Mines[x][y] != g.Board.Flags[x][y] {
-								flaggedCorrectly = false
-							}
-							if g.Board.Mines[x][y] && !g.Board.Flags[x][y] {
-								missedMine = true
-							}
-							if g.Board.Flags[x][y] {
-								flagCount += 1
-							}
-						}
-					}
-
-					if flaggedCorrectly { // if flagged correctly, spread safe area
-						iter.Reset()
-						for iter.HasNext() {
-							x, y := iter.GetNext()
-							if g.Board.IsPosInBoard(x, y) {
-								g.Board.SpreadSafeArea(x, y)
-							}
-						}
-					} else { // if not, you lost!
-						if missedMine {
-							g.GameState = GameStateLost
-						}
-					}
-				} else { // if neighbor mine count and flag count is different just highlight the area
-					// set tile highlight
-					g.TileHighLightTimer.Current = g.TileHighLightTimer.Duration
-					g.TileHighLightX = boardX
-					g.TileHighLightY = boardY
-				}
-			}
-		} else { // interaction on not revealed tile
-			if justPressedL { // one tile stepping
-				if !g.Board.Flags[boardX][boardY] {
-					if !g.PlacedMinesOnBoard { // first time interaction
-						g.PlacedMinesOnBoard = true
-
-						// remove flags that might have been placed
-						for x := range g.Board.Width {
-							for y := range g.Board.Height {
-								g.Board.Flags[x][y] = false
-							}
-						}
-
-						g.Board.PlaceMines(g.MineCount, boardX, boardY)
-						g.Board.SpreadSafeArea(boardX, boardY)
-					} else { // mine has been placed
-						if !g.Board.Mines[boardX][boardY] {
-							g.Board.SpreadSafeArea(boardX, boardY)
-						} else {
-							g.GameState = GameStateLost
-						}
-					}
-				}
-			} else if justPressedR { // flagging
-				g.Board.Flags[boardX][boardY] = !g.Board.Flags[boardX][boardY]
-			}
+	if g.GameState == GameStatePlaying && g.board.IsPosInBoard(ms.BoardX, ms.BoardY) && ms.JustPressedAny() {
+		if ((ms.JustPressedL && ms.PressedR) || (ms.PressedL && ms.JustPressedR)) || ms.JustPressedM {
+			interaction = InteractionTypeCheck
+		} else if ms.JustPressedR {
+			interaction = InteractionTypeFlag
+		} else if ms.JustPressedL {
+			interaction = InteractionTypeStep
 		}
 
-		// ==============================
-		// check if state has changed
-		// ==============================
+		if interaction != InteractionTypeNone {
+			g.GameState = g.board.InteractAt(ms.BoardX, ms.BoardY, interaction, g.mineCount)
 
-		// first check game state
-		stateChanged = prevState != g.GameState
+			// ==============================
+			// check if state has changed
+			// ==============================
 
-		// then check board state
-		if !stateChanged {
-		DIFF_CHECK:
-			for x := range g.Board.Width {
-				for y := range g.Board.Height {
-					if g.Board.Mines[x][y] != g.PrevBoard.Mines[x][y] {
-						stateChanged = true
-						break DIFF_CHECK
-					}
+			// first check game state
+			stateChanged = prevState != g.GameState
 
-					if g.Board.Flags[x][y] != g.PrevBoard.Flags[x][y] {
-						stateChanged = true
-						break DIFF_CHECK
-					}
+			// then check board state
+			if !stateChanged {
+			DIFF_CHECK:
+				for x := range g.board.Width {
+					for y := range g.board.Height {
+						if g.board.Mines[x][y] != g.prevBoard.Mines[x][y] {
+							stateChanged = true
+							break DIFF_CHECK
+						}
 
-					if g.Board.Revealed[x][y] != g.PrevBoard.Revealed[x][y] {
-						stateChanged = true
-						break DIFF_CHECK
+						if g.board.Flags[x][y] != g.prevBoard.Flags[x][y] {
+							stateChanged = true
+							break DIFF_CHECK
+						}
+
+						if g.board.Revealed[x][y] != g.prevBoard.Revealed[x][y] {
+							stateChanged = true
+							break DIFF_CHECK
+						}
 					}
 				}
 			}
@@ -498,24 +398,24 @@ func (g *Game) Update() {
 	if IsKeyJustPressed(SetToDecoBoardKey) {
 		g.SetDebugBoardForDecoration()
 		g.QueueRevealAnimation(
-			g.PrevBoard.Revealed, g.Board.Revealed, 0, 0)
+			g.prevBoard.Revealed, g.board.Revealed, 0, 0)
 		stateChanged = true
 	}
 	if IsKeyJustPressed(InstantWinKey) {
 		g.SetBoardForInstantWin()
 		g.QueueRevealAnimation(
-			g.PrevBoard.Revealed, g.Board.Revealed, 0, 0)
+			g.prevBoard.Revealed, g.board.Revealed, 0, 0)
 		stateChanged = true
 	}
 
 	// reveal the board if mouse button 4 is pressed
 	if g.GameState == GameStatePlaying &&
-		boardX >= 0 && boardY >= 0 &&
+		ms.BoardX >= 0 && ms.BoardY >= 0 &&
 		IsMouseButtonJustPressed(eb.MouseButton4) {
 
-		g.PlacedMinesOnBoard = true
+		g.placedMinesOnBoard = true
 
-		g.Board.Revealed[boardX][boardY] = true
+		g.board.Revealed[ms.BoardX][ms.BoardY] = true
 		stateChanged = true
 	}
 
@@ -523,27 +423,13 @@ func (g *Game) Update() {
 	// on state changes
 	// ==============================
 	if stateChanged {
-		// remove flags from the revealed tiles
-		for x := range g.Board.Width {
-			for y := range g.Board.Height {
-				if g.Board.Revealed[x][y] {
-					g.Board.Flags[x][y] = false
-				}
-			}
-		}
-
-		// check if user has won the game
-		if g.Board.IsAllSafeTileRevealed() {
-			g.GameState = GameStateWon
-		}
-
 		// check if we need to start board reveal animation
 	REVEAL_CHECK:
-		for x := range g.Board.Width {
-			for y := range g.Board.Height {
-				if g.Board.Revealed[x][y] && !g.PrevBoard.Revealed[x][y] {
+		for x := range g.board.Width {
+			for y := range g.board.Height {
+				if g.board.Revealed[x][y] && !g.prevBoard.Revealed[x][y] {
 					g.QueueRevealAnimation(
-						g.PrevBoard.Revealed, g.Board.Revealed, boardX, boardY)
+						g.prevBoard.Revealed, g.board.Revealed, ms.BoardX, ms.BoardY)
 
 					break REVEAL_CHECK
 				}
@@ -552,9 +438,24 @@ func (g *Game) Update() {
 
 		if prevState != g.GameState {
 			if g.GameState == GameStateLost {
-				g.QueueDefeatAnimation(boardX, boardY)
+				g.QueueDefeatAnimation(ms.BoardX, ms.BoardY)
 			} else if g.GameState == GameStateWon {
-				g.QueueWinAnimation(boardX, boardY)
+				g.QueueWinAnimation(ms.BoardX, ms.BoardY)
+			}
+		}
+
+		// call OnFirstInteraction
+		if g.shouldCallOnFirstInteraction {
+			g.shouldCallOnFirstInteraction = false
+			if g.OnFirstInteraction != nil {
+				g.OnFirstInteraction()
+			}
+		}
+
+		// call OnGameEnd
+		if g.GameState != prevState && (g.GameState == GameStateWon || g.GameState == GameStateLost) {
+			if g.OnGameEnd != nil {
+				g.OnGameEnd(g.GameState == GameStateWon)
 			}
 		}
 	}
@@ -567,59 +468,41 @@ func (g *Game) Update() {
 	AnimationQueueUpdate(&g.GameAnimations)
 
 	// update BaseTileStyles
-	for x := range g.Board.Width {
-		for y := range g.Board.Height {
+	for x := range g.board.Width {
+		for y := range g.board.Height {
 			AnimationQueueUpdate(&g.TileAnimations[x][y])
 		}
 	}
 
 	// copy it over to RenderTileStyles
-	for x := range g.Board.Width {
-		for y := range g.Board.Height {
+	for x := range g.board.Width {
+		for y := range g.board.Height {
 			g.RenderTileStyles[x][y] = g.BaseTileStyles[x][y]
 		}
 	}
 
-	// ============================
-	// on none user interaction
-	// ============================
-	if !pressedL && !pressedR && !pressedM {
-		g.TileHighLightTimer.TickDown()
-		g.NumberClickTimer.TickDown()
-	}
-
 	// ===================================
-	// update tile highlight
+	// apply style modifiers
 	// ===================================
-	if g.TileHighLightTimer.Current >= 0 {
-		t := g.TileHighLightTimer.Normalize()
-		iter := NewBoardIterator(g.TileHighLightX-1, g.TileHighLightY-1, g.TileHighLightX+1, g.TileHighLightY+1)
-		for iter.HasNext() {
-			x, y := iter.GetNext()
-			if g.Board.IsPosInBoard(x, y) {
-				if !g.Board.Revealed[x][y] && !g.Board.Flags[x][y] {
-					g.RenderTileStyles[x][y].BgTileHightlight += t
-				}
-			}
-		}
-	}
-
-	// ===================================
-	// update number click
-	// ===================================
-	if g.NumberClickTimer.Current >= 0 {
-		t := g.NumberClickTimer.Normalize()
-		g.RenderTileStyles[g.NumberClickX][g.NumberClickY].FgScale *= (1 + t*0.05)
+	for i := 0; i < len(g.StyleModifiers); i++ {
+		g.StyleModifiers[i](
+			g.prevBoard, g.board,
+			g.Rect,
+			interaction,
+			stateChanged,
+			prevState, g.GameState,
+			g.RenderTileStyles,
+		)
 	}
 
 	// ============================
 	// update flag drawing
 	// ============================
 	if stateChanged {
-		for x := range g.Board.Width {
-			for y := range g.Board.Height {
-				if g.PrevBoard.Flags[x][y] != g.Board.Flags[x][y] {
-					if g.Board.Flags[x][y] {
+		for x := range g.board.Width {
+			for y := range g.board.Height {
+				if g.prevBoard.Flags[x][y] != g.board.Flags[x][y] {
+					if g.board.Flags[x][y] {
 						g.BaseTileStyles[x][y].FgType = TileFgTypeFlag
 						g.BaseTileStyles[x][y].FgColor = ColorFlag
 						g.BaseTileStyles[x][y].DrawFg = true
@@ -634,7 +517,7 @@ func (g *Game) Update() {
 	// skipping animations
 	if prevState == GameStateLost || prevState == GameStateWon {
 		// all animations are skippable except AnimationTagRetryButtonReveal
-		if justPressedAny {
+		if ms.JustPressedAny() {
 			g.SkipAllAnimationsUntilTag(AnimationTagRetryButtonReveal)
 		}
 	}
@@ -663,7 +546,7 @@ func (g *Game) Draw(dst *eb.Image) {
 	DrawBoard(
 		dst,
 
-		g.Board, g.Rect,
+		g.board, g.Rect,
 		g.RenderTileStyles,
 
 		g.GameState == GameStateWon, g.WaterRenderTarget, g.WaterAlpha, g.WaterFlowOffset,
@@ -672,6 +555,23 @@ func (g *Game) Draw(dst *eb.Image) {
 	if g.DrawRetryButton {
 		g.RetryButton.Draw(dst)
 	}
+}
+
+func (g *Game) MineCount() int {
+	return g.mineCount
+}
+
+func (g *Game) FlagCount() int {
+	flagCount := 0
+	for x := range g.board.Width {
+		for y := range g.board.Height {
+			if g.board.Flags[x][y] {
+				flagCount++
+			}
+		}
+	}
+
+	return flagCount
 }
 
 func forEachBgTile(
@@ -1012,22 +912,15 @@ func DrawDummyBgBoard(
 	)
 }
 
-func (g *Game) MousePosToBoardPos(mousePos FPoint) (int, int) {
-	boardRect := g.Rect
-
-	// if mouse is outside the board return -1
-	if !mousePos.In(boardRect) {
-		return -1, -1
-	}
-
+func MousePosToBoardPos(board Board, boardRect FRectangle, mousePos FPoint) (int, int) {
 	mousePos.X -= boardRect.Min.X
 	mousePos.Y -= boardRect.Min.Y
 
-	boardX := int(math.Floor(mousePos.X / (boardRect.Dx() / float64(g.Board.Width))))
-	boardY := int(math.Floor(mousePos.Y / (boardRect.Dy() / float64(g.Board.Height))))
+	boardX := int(math.Floor(mousePos.X / (boardRect.Dx() / float64(board.Width))))
+	boardY := int(math.Floor(mousePos.Y / (boardRect.Dy() / float64(board.Height))))
 
-	boardX = min(boardX, g.Board.Width-1)
-	boardY = min(boardY, g.Board.Height-1)
+	boardX = min(boardX, board.Width-1)
+	boardY = min(boardY, board.Height-1)
 
 	return boardX, boardY
 }
@@ -1085,10 +978,118 @@ func GetAnimationTargetTileStyle(board Board, x, y int) TileStyle {
 	return style
 }
 
+func NewTileHighlightModifier() StyleModifier {
+	var highlightTimer Timer
+
+	highlightTimer.Duration = time.Millisecond * 100
+
+	var highlightX, highlightY int
+
+	return func(
+		prevBoard, board Board,
+		boardRect FRectangle,
+		interaction BoardInteractionType,
+		stateChanged bool,
+		prevGameState, gameState GameState,
+		tileStyles [][]TileStyle,
+	) bool {
+		if gameState != GameStatePlaying { // only do this when we are actually playing
+			return false
+		}
+
+		ms := GetMouseState(board, boardRect)
+
+		startHL := interaction == InteractionTypeCheck
+		startHL = startHL && board.IsPosInBoard(ms.BoardX, ms.BoardY)
+		startHL = startHL && prevBoard.Revealed[ms.BoardX][ms.BoardY]
+		startHL = startHL && !stateChanged
+
+		if startHL {
+			highlightTimer.Current = highlightTimer.Duration
+		}
+
+		pressingCheck := (ms.PressedL && ms.PressedR) || ms.PressedM
+
+		if !pressingCheck {
+			highlightTimer.TickDown()
+		}
+
+		if highlightTimer.Current > 0 {
+			if pressingCheck {
+				highlightX = ms.BoardX
+				highlightY = ms.BoardY
+			}
+
+			iter := NewBoardIterator(highlightX-1, highlightY-1, highlightX+1, highlightY+1)
+			for iter.HasNext() {
+				x, y := iter.GetNext()
+				if board.IsPosInBoard(x, y) && !board.Revealed[x][y] && !board.Flags[x][y] {
+					t := highlightTimer.Normalize()
+					tileStyles[x][y].BgTileHightlight += t
+				}
+			}
+		}
+
+		return highlightTimer.Current > 0
+	}
+}
+
+func NewNumberClickModifier() StyleModifier {
+	var clickTimer Timer
+
+	clickTimer.Duration = time.Millisecond * 100
+
+	var clickX, clickY int
+
+	var focused bool
+
+	return func(
+		prevBoard, board Board,
+		boardRect FRectangle,
+		interaction BoardInteractionType,
+		stateChanged bool,
+		prevGameState, gameState GameState,
+		tileStyles [][]TileStyle,
+	) bool {
+		if gameState != GameStatePlaying { // only do this when we are actually playing
+			return false
+		}
+
+		ms := GetMouseState(board, boardRect)
+
+		cursorOnNumber := board.IsPosInBoard(ms.BoardX, ms.BoardY)
+		cursorOnNumber = cursorOnNumber && board.Revealed[ms.BoardX][ms.BoardY]
+		cursorOnNumber = cursorOnNumber && board.GetNeighborMineCount(ms.BoardX, ms.BoardY) > 0
+
+		if cursorOnNumber && ms.JustPressedAny() {
+			clickTimer.Current = clickTimer.Duration
+			clickX = ms.BoardX
+			clickY = ms.BoardY
+			focused = true
+		}
+
+		if !ms.PressedAny() || !(clickX == ms.BoardX && clickY == ms.BoardY) {
+			focused = false
+		}
+
+		if !focused {
+			clickTimer.TickDown()
+		}
+
+		if clickTimer.Current > 0 {
+			if board.IsPosInBoard(clickX, clickY) {
+				tileStyles[clickX][clickY].FgScale *= 1 + clickTimer.Normalize()*0.07
+			}
+		}
+
+		return clickTimer.Current > 0
+	}
+}
+
 func (g *Game) QueueRevealAnimation(revealsBefore, revealsAfter [][]bool, originX, originy int) {
 	g.SkipAllAnimations()
 
-	fw, fh := f64(g.Board.Width-1), f64(g.Board.Height-1)
+	fw, fh := f64(g.board.Width-1), f64(g.board.Height-1)
 
 	originP := FPt(f64(originX), f64(originy))
 
@@ -1097,8 +1098,8 @@ func (g *Game) QueueRevealAnimation(revealsBefore, revealsAfter [][]bool, origin
 	const maxDuration = time.Millisecond * 900
 	const minDuration = time.Millisecond * 20
 
-	for x := range g.Board.Width {
-		for y := range g.Board.Height {
+	for x := range g.board.Width {
+		for y := range g.board.Height {
 			if !revealsBefore[x][y] && revealsAfter[x][y] {
 				pos := FPt(f64(x), f64(y))
 				dist := pos.Sub(originP).Length()
@@ -1109,7 +1110,7 @@ func (g *Game) QueueRevealAnimation(revealsBefore, revealsAfter [][]bool, origin
 				timer.Duration = max(d, minDuration)
 				timer.Current = 0
 
-				targetStyle := GetAnimationTargetTileStyle(g.Board, x, y)
+				targetStyle := GetAnimationTargetTileStyle(g.board, x, y)
 
 				var anim CallbackAnimation
 				anim.Tag = AnimationTagTileReveal
@@ -1158,9 +1159,9 @@ func (g *Game) QueueDefeatAnimation(originX, originY int) {
 
 	var minePoses []image.Point
 
-	for x := range g.Board.Width {
-		for y := range g.Board.Height {
-			if g.Board.Mines[x][y] && !g.Board.Flags[x][y] {
+	for x := range g.board.Width {
+		for y := range g.board.Height {
+			if g.board.Mines[x][y] && !g.board.Flags[x][y] {
 				minePoses = append(minePoses, image.Point{X: x, Y: y})
 			}
 		}
@@ -1259,7 +1260,7 @@ func (g *Game) QueueDefeatAnimation(originX, originY int) {
 func (g *Game) QueueWinAnimation(originX, originY int) {
 	g.SkipAllAnimations()
 
-	fw, fh := f64(g.Board.Width), f64(g.Board.Height)
+	fw, fh := f64(g.board.Width), f64(g.board.Height)
 
 	originP := FPt(f64(originX), f64(originY))
 
@@ -1272,8 +1273,8 @@ func (g *Game) QueueWinAnimation(originX, originY int) {
 	var winDuration time.Duration
 
 	// queue tile animations
-	for x := range g.Board.Width {
-		for y := range g.Board.Height {
+	for x := range g.board.Width {
+		for y := range g.board.Height {
 			pos := FPt(f64(x), f64(y))
 			dist := pos.Sub(originP).Length()
 			d := time.Duration(f64(maxDuration) * (dist / maxDist))
@@ -1312,7 +1313,7 @@ func (g *Game) QueueWinAnimation(originX, originY int) {
 					ogFgColor = style.FgColor
 				}
 
-				if g.Board.Revealed[x][y] {
+				if g.board.Revealed[x][y] {
 					style.FgColor = LerpColorRGBA(ogFgColor, ColorElementWon, colorT)
 				} else {
 					style.FgAlpha = 1 - colorT
@@ -1334,7 +1335,7 @@ func (g *Game) QueueWinAnimation(originX, originY int) {
 
 			anim.AfterDone = func() {
 				style := g.BaseTileStyles[x][y]
-				if !g.Board.Revealed[x][y] {
+				if !g.board.Revealed[x][y] {
 					style.DrawFg = false
 				}
 				style.DrawBg = false
@@ -1390,9 +1391,9 @@ func (g *Game) QueueRetryButtonAnimation() {
 
 	toAnimate := make([]image.Point, 0)
 
-	for x := range g.Board.Width {
-		for y := range g.Board.Height {
-			tileRect := GetBoardTileRect(g.Rect, g.Board.Width, g.Board.Height, x, y)
+	for x := range g.board.Width {
+		for y := range g.board.Height {
+			tileRect := GetBoardTileRect(g.Rect, g.board.Width, g.board.Height, x, y)
 
 			animate := false
 
@@ -1508,9 +1509,9 @@ func (g *Game) QueueRetryButtonAnimation() {
 func (g *Game) QueueResetBoardAnimation() {
 	g.SkipAllAnimations()
 
-	fw, fh := f64(g.Board.Width), f64(g.Board.Height)
+	fw, fh := f64(g.board.Width), f64(g.board.Height)
 
-	centerP := FPt(f64(g.Board.Width-1)*0.5, f64(g.Board.Height-1)*0.5)
+	centerP := FPt(f64(g.board.Width-1)*0.5, f64(g.board.Height-1)*0.5)
 
 	maxDist := math.Sqrt(fw*0.5*fw*0.5 + fh*0.5*fh*0.5)
 
@@ -1519,8 +1520,8 @@ func (g *Game) QueueResetBoardAnimation() {
 
 	var tileAnimationTotal time.Duration
 
-	for x := range g.Board.Width {
-		for y := range g.Board.Height {
+	for x := range g.board.Width {
+		for y := range g.board.Height {
 			pos := FPt(f64(x), f64(y))
 			dist := pos.Sub(centerP).Length()
 			d := time.Duration(Lerp(f64(minDuration), f64(maxDuration), 1-dist/maxDist))
@@ -1621,10 +1622,10 @@ func (g *Game) QueueResetBoardAnimation() {
 
 		anim.AfterDone = func() {
 			g.DrawRetryButton = true
-			g.ResetBoardWithNoStyles(g.Board.Width, g.Board.Height)
+			g.ResetBoardWithNoStyles(g.board.Width, g.board.Height, g.mineCount)
 			g.QueueShowBoardAnimation(
-				g.Board.Width/2,
-				g.Board.Height/2,
+				g.board.Width/2,
+				g.board.Height/2,
 			)
 		}
 
@@ -1640,17 +1641,17 @@ func (g *Game) QueueShowBoardAnimation(originX, originy int) {
 	var maxDist float64
 
 	maxDist = max(maxDist, originP.Sub(FPt(0, 0)).Length())
-	maxDist = max(maxDist, originP.Sub(FPt(f64(g.Board.Width-1), 0)).Length())
-	maxDist = max(maxDist, originP.Sub(FPt(0, f64(g.Board.Height-1))).Length())
-	maxDist = max(maxDist, originP.Sub(FPt(f64(g.Board.Width-1), f64(g.Board.Height-1))).Length())
+	maxDist = max(maxDist, originP.Sub(FPt(f64(g.board.Width-1), 0)).Length())
+	maxDist = max(maxDist, originP.Sub(FPt(0, f64(g.board.Height-1))).Length())
+	maxDist = max(maxDist, originP.Sub(FPt(f64(g.board.Width-1), f64(g.board.Height-1))).Length())
 
 	const minDuration = time.Millisecond * 80
 	const maxDuration = time.Millisecond * 200
 
 	var tileAnimationTotal time.Duration
 
-	for x := range g.Board.Width {
-		for y := range g.Board.Height {
+	for x := range g.board.Width {
+		for y := range g.board.Height {
 			pos := FPt(f64(x), f64(y))
 			dist := pos.Sub(originP).Length()
 			d := time.Duration(Lerp(f64(minDuration), f64(maxDuration), dist/maxDist))
@@ -1661,7 +1662,7 @@ func (g *Game) QueueShowBoardAnimation(originX, originy int) {
 			var anim CallbackAnimation
 			anim.Tag = AnimationTagShowBoard
 
-			targetStyle := GetAnimationTargetTileStyle(g.Board, x, y)
+			targetStyle := GetAnimationTargetTileStyle(g.board, x, y)
 
 			anim.Update = func() {
 				timer.TickUp()
@@ -1724,8 +1725,8 @@ func (g *Game) QueueShowBoardAnimation(originX, originy int) {
 }
 
 func (g *Game) SkipAllAnimations() {
-	for x := range g.Board.Width {
-		for y := range g.Board.Height {
+	for x := range g.board.Width {
+		for y := range g.board.Height {
 			AnimationQueueSkipAll(&g.TileAnimations[x][y])
 		}
 	}
@@ -1734,8 +1735,8 @@ func (g *Game) SkipAllAnimations() {
 }
 
 func (g *Game) SkipAllAnimationsUntilTag(tags ...AnimationTag) {
-	for x := range g.Board.Width {
-		for y := range g.Board.Height {
+	for x := range g.board.Width {
+		for y := range g.board.Height {
 			AnimationQueueSkipUntilTag(&g.TileAnimations[x][y], tags...)
 		}
 	}
@@ -1781,7 +1782,7 @@ func (g *Game) DrawTile(
 	clr color.Color,
 	tile SubView,
 ) {
-	tileRect := GetBoardTileRect(g.Rect, g.Board.Width, g.Board.Height, boardX, boardY)
+	tileRect := GetBoardTileRect(g.Rect, g.board.Width, g.board.Height, boardX, boardY)
 	DrawSubViewInRect(dst, tileRect, scale, offsetY, offsetY, clr, tile)
 }
 
@@ -1856,41 +1857,44 @@ func (g *Game) SetDebugBoardForDecoration() {
 	newBoardHeight := len(newBoard)
 	newBoardWidth := len(newBoard[0])
 
-	g.ResetBoard(max(g.Board.Width, newBoardWidth), max(g.Board.Height, newBoardHeight))
+	g.ResetBoard(max(g.board.Width, newBoardWidth), max(g.board.Height, newBoardHeight), 0)
 	g.QueueShowBoardAnimation(
-		(g.Board.Width-1)/2,
-		(g.Board.Height-1)/2,
+		(g.board.Width-1)/2,
+		(g.board.Height-1)/2,
 	)
 
-	g.PlacedMinesOnBoard = true
+	g.placedMinesOnBoard = true
+	g.mineCount = 0
 
 	iter := NewBoardIterator(0, 0, newBoardWidth-1, newBoardHeight-1)
 	for iter.HasNext() {
 		x, y := iter.GetNext()
-		if g.Board.IsPosInBoard(x, y) {
+		if g.board.IsPosInBoard(x, y) {
 			char := newBoard[y][x] //yeah y and x is reversed
 
 			switch char {
 			case '@':
-				g.Board.Revealed[x][y] = true
+				g.board.Revealed[x][y] = true
 			case '*':
-				g.Board.Mines[x][y] = true
+				g.board.Mines[x][y] = true
+				g.mineCount++
 			case '+':
-				g.Board.Mines[x][y] = true
-				g.Board.Flags[x][y] = true
+				g.board.Mines[x][y] = true
+				g.board.Flags[x][y] = true
 			}
 		}
 	}
 
-	iter = NewBoardIterator(0, 0, g.Board.Width-1, g.Board.Height-1)
+	iter = NewBoardIterator(0, 0, g.board.Width-1, g.board.Height-1)
 	for iter.HasNext() {
 		x, y := iter.GetNext()
 		if x < newBoardWidth+1 && y < newBoardHeight+1 {
 			continue
 		}
 
-		if rand.Int64N(100) < 30 {
-			g.Board.Mines[x][y] = true
+		if rand.Int64N(100) < 30 && !g.board.Mines[x][y] {
+			g.board.Mines[x][y] = true
+			g.mineCount++
 		}
 	}
 
@@ -1899,34 +1903,34 @@ func (g *Game) SetDebugBoardForDecoration() {
 	for iter.HasNext() {
 		x, y := iter.GetNext()
 
-		if !g.Board.Mines[x][y] {
+		if !g.board.Mines[x][y] {
 			if rand.Int64N(100) < 30 {
 				// flag the surrounding
 				innerIter := NewBoardIterator(x-1, y-1, x+1, y+1)
 				for innerIter.HasNext() {
 					inX, inY := innerIter.GetNext()
-					if g.Board.IsPosInBoard(inX, inY) && g.Board.Mines[inX][inY] {
-						g.Board.Flags[inX][inY] = true
+					if g.board.IsPosInBoard(inX, inY) && g.board.Mines[inX][inY] {
+						g.board.Flags[inX][inY] = true
 					}
 				}
 
-				g.Board.SpreadSafeArea(x, y)
+				g.board.SpreadSafeArea(x, y)
 			}
 		}
 	}
 }
 
 func (g *Game) SetBoardForInstantWin() {
-	if !g.PlacedMinesOnBoard {
-		g.Board.PlaceMines(g.MineCount, g.Board.Width-1, g.Board.Height-1)
+	if !g.placedMinesOnBoard {
+		g.board.PlaceMines(g.mineCount, g.board.Width-1, g.board.Height-1)
 	}
-	g.PlacedMinesOnBoard = true
+	g.placedMinesOnBoard = true
 
 	// count how many tiles we have to reveal
 	tilesToReveal := 0
-	for x := range g.Board.Width {
-		for y := range g.Board.Height {
-			if !g.Board.Mines[x][y] && !g.Board.Revealed[x][y] {
+	for x := range g.board.Width {
+		for y := range g.board.Height {
+			if !g.board.Mines[x][y] && !g.board.Revealed[x][y] {
 				tilesToReveal++
 			}
 		}
@@ -1934,15 +1938,101 @@ func (g *Game) SetBoardForInstantWin() {
 
 	// reveal that many tiles EXCEPT ONE
 REVEAL_LOOP:
-	for x := range g.Board.Width {
-		for y := range g.Board.Height {
+	for x := range g.board.Width {
+		for y := range g.board.Height {
 			if tilesToReveal <= 1 {
 				break REVEAL_LOOP
 			}
-			if !g.Board.Mines[x][y] && !g.Board.Revealed[x][y] {
-				g.Board.Revealed[x][y] = true
+			if !g.board.Mines[x][y] && !g.board.Revealed[x][y] {
+				g.board.Revealed[x][y] = true
 				tilesToReveal--
 			}
 		}
 	}
+}
+
+// =====================
+// RetryButton
+// =====================
+
+type RetryButton struct {
+	BaseButton
+
+	ButtonHoverOffset float64
+}
+
+func NewRetryButton() *RetryButton {
+	rb := new(RetryButton)
+
+	return rb
+}
+
+func (rb *RetryButton) Update() {
+	rb.BaseButton.Update()
+
+	if rb.State == ButtonStateHover {
+		rb.ButtonHoverOffset = Lerp(rb.ButtonHoverOffset, 1, 0.3)
+	} else if rb.State == ButtonStateDown {
+		rb.ButtonHoverOffset = 0
+	} else {
+		rb.ButtonHoverOffset = Lerp(rb.ButtonHoverOffset, 0, 0.3)
+	}
+
+	if rb.Disabled {
+		rb.ButtonHoverOffset = 0
+	}
+}
+
+func (rb *RetryButton) Draw(dst *eb.Image) {
+	bottomRect := FRectWH(rb.Rect.Dx(), rb.Rect.Dy()*0.95)
+	topRect := bottomRect
+
+	topRect = FRectMoveTo(topRect, rb.Rect.Min.X, rb.Rect.Min.Y)
+	bottomRect = FRectMoveTo(bottomRect, rb.Rect.Min.X, rb.Rect.Max.Y-bottomRect.Dy())
+
+	if rb.State == ButtonStateDown {
+		topRect = FRectMoveTo(topRect, bottomRect.Min.X, bottomRect.Min.Y)
+	} else if rb.State == ButtonStateHover {
+		topRect = topRect.Add(FPt(0, -topRect.Dy()*0.025*rb.ButtonHoverOffset))
+	}
+
+	const segments = 6
+	const radius = 0.4
+
+	DrawFilledRoundRectFast(
+		dst,
+		bottomRect,
+		radius,
+		false,
+		segments,
+		color.NRGBA{0, 0, 0, 255},
+	)
+
+	DrawFilledRoundRectFast(
+		dst,
+		topRect,
+		radius,
+		false,
+		segments,
+		color.NRGBA{105, 223, 145, 255},
+	)
+
+	imgRect := RectToFRect(RetryButtonImage.Bounds())
+	scale := min(topRect.Dx(), topRect.Dy()) / max(imgRect.Dx(), imgRect.Dy())
+	scale *= 0.6
+
+	center := FRectangleCenter(topRect)
+
+	op := &DrawImageOptions{}
+	op.GeoM.Concat(TransformToCenter(imgRect.Dx(), imgRect.Dy(), scale, scale, 0))
+	op.GeoM.Translate(center.X, center.Y-topRect.Dy()*0.02)
+	op.ColorScale.ScaleWithColor(color.NRGBA{0, 0, 0, 255})
+
+	DrawImage(dst, RetryButtonImage, op)
+
+	op.GeoM.Translate(0, topRect.Dy()*0.02*2)
+	op.ColorScale.Reset()
+	op.ColorScale.ScaleWithColor(color.NRGBA{255, 255, 255, 255})
+
+	DrawImage(dst, RetryButtonImage, op)
 }

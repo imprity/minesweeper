@@ -120,8 +120,8 @@ func DrawSubViewInRect(
 	imgSize := ImageSizeFPt(view)
 	rectSize := rect.Size()
 
-	//drawScale := min(rectSize.X/imgSize.X, rectSize.Y/imgSize.Y)
 	drawScale := GetScaleToFitRectInRect(imgSize.X, imgSize.Y, rectSize.X, rectSize.Y)
+	drawScale *= scale
 
 	op := &DrawSubViewOptions{}
 	op.GeoM.Concat(TransformToCenter(imgSize.X, imgSize.Y, drawScale, drawScale, 0))

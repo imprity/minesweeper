@@ -163,6 +163,18 @@ func (board *Board) GetNeighborFlagCount(posX int, posY int) int {
 	return flagCount
 }
 
+func (board *Board) HasNoMines() bool {
+	for x := range board.Width {
+		for y := range board.Height {
+			if board.Mines[x][y] {
+				return false
+			}
+		}
+	}
+
+	return true
+}
+
 // win condition
 func (board *Board) IsAllSafeTileRevealed() bool {
 	var iter BoardIterator = NewBoardIterator(0, 0, board.Width-1, board.Height-1)
@@ -227,4 +239,102 @@ func (bi *BoardIterator) GetNext() (int, int) {
 func (bi *BoardIterator) Reset() {
 	bi.CurrentX = bi.MinX
 	bi.CurrentY = bi.MinY
+}
+
+// ==============================================
+// board iteraction
+// ==============================================
+type BoardInteractionType int
+
+const (
+	InteractionTypeNone BoardInteractionType = iota
+	InteractionTypeStep
+	InteractionTypeFlag
+	InteractionTypeCheck
+)
+
+func (board *Board) InteractAt(posX int, posY int, interaction BoardInteractionType, minesToSpawn int) GameState {
+	if interaction == InteractionTypeNone {
+		return GameStatePlaying
+	}
+	if !board.IsPosInBoard(posX, posY) {
+		return GameStatePlaying
+	}
+
+	defer func() {
+		// remove flags where it's revealed
+		for x := 0; x < board.Width; x++ {
+			for y := 0; y < board.Height; y++ {
+				if board.Revealed[x][y] {
+					board.Flags[x][y] = false
+				}
+			}
+		}
+	}()
+
+	switch interaction {
+	case InteractionTypeStep:
+		{
+			if board.HasNoMines() {
+				board.PlaceMines(minesToSpawn, posX, posY)
+			}
+			if !board.Revealed[posX][posY] {
+				if board.Mines[posX][posY] {
+					return GameStateLost // user stepped on a mine
+				}
+				//we have to spread out
+				board.SpreadSafeArea(posX, posY)
+			}
+			if board.IsAllSafeTileRevealed() {
+				return GameStateWon
+			} else {
+				return GameStatePlaying
+			}
+		}
+	case InteractionTypeFlag:
+		{
+			if !board.Revealed[posX][posY] {
+				board.Flags[posX][posY] = !board.Flags[posX][posY]
+			}
+			return GameStatePlaying
+		}
+	case InteractionTypeCheck:
+		{
+			if board.Revealed[posX][posY] && board.GetNeighborMineCount(posX, posY) > 0 {
+				var flagCount int = board.GetNeighborFlagCount(posX, posY)
+				if board.GetNeighborMineCount(posX, posY) == flagCount {
+					//check if user flagged it correctly
+					iterator := NewBoardIterator(posX-1, posY-1, posX+1, posY+1)
+
+					for iterator.HasNext() {
+						x, y := iterator.GetNext()
+						if board.IsPosInBoard(x, y) {
+							if board.Flags[x][y] && !board.Mines[x][y] {
+								return GameStateLost
+							}
+						}
+					}
+
+					//reset iterator
+					iterator = NewBoardIterator(posX-1, posY-1, posX+1, posY+1)
+
+					for iterator.HasNext() {
+						x, y := iterator.GetNext()
+						if board.IsPosInBoard(x, y) {
+							board.SpreadSafeArea(x, y)
+						}
+					}
+
+				}
+			}
+
+			if board.IsAllSafeTileRevealed() {
+				return GameStateWon
+			} else {
+				return GameStatePlaying
+			}
+		}
+
+	}
+	panic("UNREACHABLE")
 }

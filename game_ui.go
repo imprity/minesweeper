@@ -59,11 +59,23 @@ func NewGameUI() *GameUI {
 		gu.BoardTileCounts[DifficultyEasy].X, gu.BoardTileCounts[DifficultyEasy].Y,
 		gu.MineCounts[DifficultyEasy],
 	)
+	gu.Game.OnFirstInteraction = func() {
+		gu.TopUI.TimerUI.Start()
+	}
+	gu.Game.OnGameEnd = func(didWin bool) {
+		gu.TopUI.TimerUI.Pause()
+	}
+	gu.Game.OnBoardReset = func() {
+		gu.TopUI.TimerUI.Reset()
+	}
+
 	gu.TopUI = NewTopUI()
-	gu.TopUI.OnDifficultyChange = func(newDifficulty Difficulty) {
+	gu.TopUI.DifficultySelectUI.OnDifficultyChange = func(newDifficulty Difficulty) {
 		gu.Difficulty = newDifficulty
-		gu.Game.MineCount = gu.MineCounts[newDifficulty]
-		gu.Game.ResetBoard(gu.BoardTileCounts[newDifficulty].X, gu.BoardTileCounts[newDifficulty].Y)
+		gu.Game.ResetBoard(
+			gu.BoardTileCounts[newDifficulty].X, gu.BoardTileCounts[newDifficulty].Y,
+			gu.MineCounts[newDifficulty],
+		)
 		gu.Game.Rect = gu.BoardRect(newDifficulty)
 	}
 
@@ -79,6 +91,8 @@ func (gu *GameUI) Update() {
 
 	gu.Game.Update()
 	gu.TopUI.Update()
+
+	gu.TopUI.FlagUI.FlagCount = gu.Game.MineCount() - gu.Game.FlagCount()
 
 	if IsKeyJustPressed(ShowResourceEditorKey) {
 		gu.ResourceEditor.DoShow = !gu.ResourceEditor.DoShow
@@ -168,9 +182,6 @@ type TopUI struct {
 	FlagUIRect             FRectangle
 	DifficultySelectUIRect FRectangle
 	TimerUIRect            FRectangle
-
-	Difficulty         Difficulty
-	OnDifficultyChange func(difficulty Difficulty)
 }
 
 func NewTopUI() *TopUI {
@@ -180,22 +191,10 @@ func NewTopUI() *TopUI {
 	tu.DifficultySelectUI = NewDifficultySelectUI()
 	tu.TimerUI = NewTimerUI()
 
-	tu.DifficultySelectUI.OnDifficultyChange = func(newDifficulty Difficulty) {
-		prevDifficulty := tu.Difficulty
-		if prevDifficulty != newDifficulty {
-			tu.Difficulty = newDifficulty
-			tu.OnDifficultyChange(newDifficulty)
-		}
-	}
-
 	return tu
 }
 
 func (tu *TopUI) Update() {
-	// TEST TEST TEST TEST TEST
-	tu.TimerUI.CurrentTime = GlobalTimerNow()
-	// TEST TEST TEST TEST TEST
-
 	var totalIdealWidth float64
 
 	const idealMargin = 10
@@ -400,15 +399,15 @@ func NewFlagUI() *FlagUI {
 		idealFlagSize, idealFlagSize,
 	)
 
-	var idealTextScale float64 = TopUIElementIdealFontSize / FontSize(BoldFace)
+	var idealTextScale float64 = TopUIElementIdealFontSize *0.85 / FontSize(RegularFace)
 
-	const idealMargin = 10
+	const idealMargin = 6
 
 	var idealTextX float64 = idealFlagRect.Dx() + idealMargin
 
 	var idealMaxTextWidth float64
 	{
-		w, _ := ebt.Measure("000", BoldFace, FontLineSpacing(BoldFace))
+		w, _ := ebt.Measure("000", RegularFace, FontLineSpacing(RegularFace))
 		w *= idealTextScale
 		idealMaxTextWidth = w
 	}
@@ -426,7 +425,7 @@ func NewFlagUI() *FlagUI {
 
 		// draw flag icon
 		DrawSubViewInRect(
-			dst, flagRect, 1.45, 0, scale*1.2, ColorTopUITitle, GetFlagTile(),
+			dst, flagRect, 1.1, 0, scale*0.5, ColorTopUITitle, GetFlagTile(),
 		)
 
 		textX := idealTextX*scale + actualRect.Min.X
@@ -437,14 +436,14 @@ func NewFlagUI() *FlagUI {
 		op := &DrawTextOptions{}
 		op.GeoM.Concat(TextToYcenterLimitWidth(
 			text,
-			BoldFace,
+			RegularFace,
 			TopUIElementIdealFontSize*idealTextScale*scale,
 			textX, textY,
 			idealMaxTextWidth*scale,
 		))
 		op.ColorScale.ScaleWithColor(ColorTopUITitle)
 
-		DrawText(dst, text, BoldFace, op)
+		DrawText(dst, text, RegularFace, op)
 	}
 
 	return fu
@@ -453,13 +452,15 @@ func NewFlagUI() *FlagUI {
 type TimerUI struct {
 	TopUIElement
 
-	CurrentTime time.Duration
+	ticking       bool
+	startTime     time.Time
+	timeStartFrom time.Duration
 }
 
 func NewTimerUI() *TimerUI {
 	tu := new(TimerUI)
 
-	const idealTimerSize = 75
+	const idealTimerSize = 80
 
 	var idealTimerRect FRectangle = FRectXYWH(
 		0, TopUIElementIdealHeight*0.5-idealTimerSize*0.5,
@@ -505,9 +506,11 @@ func NewTimerUI() *TimerUI {
 		textX := idealTextX*scale + actualRect.Min.X
 		textY := TopUIElementIdealTextY*scale + actualRect.Min.Y
 
-		hours := tu.CurrentTime / time.Hour
-		minutes := (tu.CurrentTime % time.Hour) / time.Minute
-		seconds := (tu.CurrentTime % time.Minute) / time.Second
+		currentTime := tu.CurrentTime()
+
+		hours := currentTime / time.Hour
+		minutes := (currentTime % time.Hour) / time.Minute
+		seconds := (currentTime % time.Minute) / time.Second
 
 		textScale := idealTextScaleNormal
 		if hours > 0 {
@@ -542,6 +545,28 @@ func NewTimerUI() *TimerUI {
 	}
 
 	return tu
+}
+
+func (tu *TimerUI) Start() {
+	tu.ticking = true
+	tu.startTime = time.Now()
+}
+
+func (tu *TimerUI) Pause() {
+	tu.ticking = false
+	tu.timeStartFrom = time.Now().Sub(tu.startTime)
+}
+
+func (tu *TimerUI) Reset() {
+	tu.ticking = false
+	tu.timeStartFrom = 0
+}
+
+func (tu *TimerUI) CurrentTime() time.Duration {
+	if !tu.ticking {
+		return tu.timeStartFrom
+	}
+	return tu.timeStartFrom + time.Now().Sub(tu.startTime)
 }
 
 func TextToBaseLine(
