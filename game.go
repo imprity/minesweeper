@@ -919,9 +919,6 @@ func MousePosToBoardPos(board Board, boardRect FRectangle, mousePos FPoint) (int
 	boardX := int(math.Floor(mousePos.X / (boardRect.Dx() / float64(board.Width))))
 	boardY := int(math.Floor(mousePos.Y / (boardRect.Dy() / float64(board.Height))))
 
-	boardX = min(boardX, board.Width-1)
-	boardY = min(boardY, board.Height-1)
-
 	return boardX, boardY
 }
 

@@ -399,7 +399,7 @@ func NewFlagUI() *FlagUI {
 		idealFlagSize, idealFlagSize,
 	)
 
-	var idealTextScale float64 = TopUIElementIdealFontSize *0.85 / FontSize(RegularFace)
+	var idealTextScale float64 = TopUIElementIdealFontSize * 0.85 / FontSize(RegularFace)
 
 	const idealMargin = 6
 
