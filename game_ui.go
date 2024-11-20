@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"image"
 	"time"
+	//"image/color"
 
 	eb "github.com/hajimehoshi/ebiten/v2"
-	ebt "github.com/hajimehoshi/ebiten/v2/text/v2"
 )
 
 type Difficulty int
@@ -319,12 +319,16 @@ func NewDifficultySelectUI() *DifficultySelectUI {
 	var idealTextWidths [DifficultySize]float64
 	var idealTextCenterX float64
 
-	var idealTextScale float64 = TopUIElementIdealFontSize / FontSize(BoldFace)
+	idealFontSize := float64(TopUIElementIdealFontSize)
 
 	for d := Difficulty(0); d < DifficultySize; d++ {
 		str := DifficultyStrs[d]
-		w, _ := ebt.Measure(str, BoldFace, FontLineSpacing(BoldFace))
-		w *= idealTextScale
+		w, _ := MeasureTextSized(
+			str,
+			BoldFace,
+			idealFontSize,
+			FontLineSpacingSized(BoldFace, idealFontSize),
+		)
 		idealTextWidths[d] = w
 		idealMaxTextWidth = max(w, idealMaxTextWidth)
 	}
@@ -339,11 +343,11 @@ func NewDifficultySelectUI() *DifficultySelectUI {
 	}
 
 	idealBtnRectLeft = FRectXYWH(
-		0, TopUIElementIdealHeight*0.5-idealBtnSize.Y*0.5+2,
+		0, TopUIElementIdealHeight*0.5-idealBtnSize.Y*0.5,
 		idealBtnSize.X, idealBtnSize.Y,
 	)
 	idealBtnRectRight = FRectXYWH(
-		idealWidth-idealBtnSize.X, TopUIElementIdealHeight*0.5-idealBtnSize.Y*0.5+2,
+		idealWidth-idealBtnSize.X, TopUIElementIdealHeight*0.5-idealBtnSize.Y*0.5,
 		idealBtnSize.X, idealBtnSize.Y,
 	)
 
@@ -369,10 +373,12 @@ func NewDifficultySelectUI() *DifficultySelectUI {
 		textCenterX := idealTextCenterX*scale + actualRect.Min.X
 		textX := textCenterX - idealTextWidths[ds.Difficulty]*scale*0.5
 
+		fontSize := idealFontSize * scale
+
 		op := &DrawTextOptions{}
 		op.GeoM.Concat(TextToYcenter(
 			BoldFace,
-			TopUIElementIdealFontSize*idealTextScale*scale,
+			fontSize,
 			textX, textY,
 		))
 		op.ColorScale.ScaleWithColor(ColorTopUITitle)
@@ -399,7 +405,7 @@ func NewFlagUI() *FlagUI {
 		idealFlagSize, idealFlagSize,
 	)
 
-	var idealTextScale float64 = TopUIElementIdealFontSize * 0.85 / FontSize(RegularFace)
+	idealFontSize := TopUIElementIdealFontSize * 0.85
 
 	const idealMargin = 6
 
@@ -407,8 +413,8 @@ func NewFlagUI() *FlagUI {
 
 	var idealMaxTextWidth float64
 	{
-		w, _ := ebt.Measure("000", RegularFace, FontLineSpacing(RegularFace))
-		w *= idealTextScale
+		w, _ := MeasureTextSized(
+			"000", RegularFace, idealFontSize, FontLineSpacingSized(RegularFace, idealFontSize))
 		idealMaxTextWidth = w
 	}
 
@@ -425,7 +431,7 @@ func NewFlagUI() *FlagUI {
 
 		// draw flag icon
 		DrawSubViewInRect(
-			dst, flagRect, 1.1, 0, scale*0.5, ColorTopUITitle, GetFlagTile(),
+			dst, flagRect, 1.1, 0, -scale*2, ColorTopUITitle, GetFlagTile(),
 		)
 
 		textX := idealTextX*scale + actualRect.Min.X
@@ -433,11 +439,13 @@ func NewFlagUI() *FlagUI {
 
 		text := fmt.Sprintf("%d", fu.FlagCount)
 
+		fontSize := idealFontSize * scale
+
 		op := &DrawTextOptions{}
 		op.GeoM.Concat(TextToYcenterLimitWidth(
 			text,
 			RegularFace,
-			TopUIElementIdealFontSize*idealTextScale*scale,
+			fontSize,
 			textX, textY,
 			idealMaxTextWidth*scale,
 		))
@@ -471,20 +479,26 @@ func NewTimerUI() *TimerUI {
 
 	var idealTextX float64 = idealTimerRect.Dx() + idealMargin
 
-	var idealTextScaleNormal float64 = TopUIElementIdealFontSize * 0.8 / FontSize(RegularFace)
+	var idealFontSizeNormal float64 = TopUIElementIdealFontSize * 0.8
 
 	var idealMaxTextWidth float64
 	{
-		w, _ := ebt.Measure("00:00", RegularFace, FontLineSpacing(RegularFace))
-		w *= idealTextScaleNormal
+		w, _ := MeasureTextSized(
+			"00:00",
+			RegularFace, idealFontSizeNormal,
+			FontLineSpacingSized(RegularFace, idealFontSizeNormal),
+		)
 		idealMaxTextWidth = w
 	}
 
-	var idealTextScaleSmall float64
+	var idealFontSizeSmall float64
 	{
-		w, _ := ebt.Measure("00:00:00", RegularFace, FontLineSpacing(RegularFace))
-		w *= idealTextScaleNormal
-		idealTextScaleSmall = idealMaxTextWidth / w
+		w, _ := MeasureTextSized(
+			"00:00:00",
+			RegularFace, idealFontSizeNormal,
+			FontLineSpacingSized(RegularFace, idealFontSizeNormal),
+		)
+		idealFontSizeSmall = (idealMaxTextWidth / w)
 	}
 
 	tu.GetIdealWidth = func() float64 {
@@ -512,11 +526,11 @@ func NewTimerUI() *TimerUI {
 		minutes := (currentTime % time.Hour) / time.Minute
 		seconds := (currentTime % time.Minute) / time.Second
 
-		textScale := idealTextScaleNormal
+		fontSize := idealFontSizeNormal
 		if hours > 0 {
-			textScale = idealTextScaleSmall
+			fontSize = idealFontSizeSmall
 		}
-		textScale *= scale
+		fontSize *= scale
 
 		var text string
 		if hours > 0 {
@@ -535,7 +549,7 @@ func NewTimerUI() *TimerUI {
 		op.GeoM.Concat(TextToYcenterLimitWidth(
 			text,
 			RegularFace,
-			TopUIElementIdealFontSize*textScale,
+			fontSize,
 			textX, textY,
 			idealMaxTextWidth*scale,
 		))
@@ -567,74 +581,4 @@ func (tu *TimerUI) CurrentTime() time.Duration {
 		return tu.timeStartFrom
 	}
 	return tu.timeStartFrom + time.Now().Sub(tu.startTime)
-}
-
-func TextToBaseLine(
-	fontFace ebt.Face,
-	fontSize float64,
-	x, y float64,
-) eb.GeoM {
-	scale := fontSize / FontSize(fontFace)
-
-	newX := x
-	newY := y - fontFace.Metrics().HAscent*scale
-
-	var geom eb.GeoM
-	geom.Scale(scale, scale)
-	geom.Translate(newX, newY)
-
-	return geom
-}
-
-func TextToBaseLineLimitWidth(
-	text string,
-	fontFace ebt.Face,
-	fontSize float64,
-	x, y float64,
-	maxWidth float64,
-) eb.GeoM {
-	scale := fontSize / FontSize(fontFace)
-	w, _ := ebt.Measure(text, fontFace, FontLineSpacing(fontFace))
-	w *= scale
-
-	if w > maxWidth {
-		fontSize *= maxWidth / w
-	}
-
-	return TextToBaseLine(fontFace, fontSize, x, y)
-}
-
-func TextToYcenter(
-	fontFace ebt.Face,
-	fontSize float64,
-	x, y float64,
-) eb.GeoM {
-	scale := fontSize / FontSize(fontFace)
-
-	newX := x
-	newY := y - fontSize*0.5
-
-	var geom eb.GeoM
-	geom.Scale(scale, scale)
-	geom.Translate(newX, newY)
-
-	return geom
-}
-
-func TextToYcenterLimitWidth(
-	text string,
-	fontFace ebt.Face,
-	fontSize float64,
-	x, y float64,
-	maxWidth float64,
-) eb.GeoM {
-	scale := fontSize / FontSize(fontFace)
-	w, _ := ebt.Measure(text, fontFace, FontLineSpacing(fontFace))
-	w *= scale
-
-	if w > maxWidth {
-		fontSize *= maxWidth / w
-	}
-
-	return TextToYcenter(fontFace, fontSize, x, y)
 }

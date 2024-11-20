@@ -68,19 +68,6 @@ func New2DArray[T any](width, height int) [][]T {
 	return arr
 }
 
-// returns recommended line height for fonts when writing horizontally
-func FontLineSpacing(face ebt.Face) float64 {
-	m := face.Metrics()
-	return m.HAscent + m.HDescent + m.HLineGap
-}
-
-// returns font's size when written horizontally
-// not really a 'font size' but it's fine...
-func FontSize(face ebt.Face) float64 {
-	m := face.Metrics()
-	return m.HAscent + m.HDescent
-}
-
 func ExecutablePath() (string, error) {
 	path, err := os.Executable()
 
@@ -131,4 +118,104 @@ func DrawSubViewInRect(
 	op.ColorScale.ScaleWithColor(clr)
 
 	DrawSubView(dst, view, op)
+}
+
+// ========================
+// text utils
+// ========================
+
+// returns font's size when written horizontally
+// not really a 'font size' but it's fine...
+func FontSize(face ebt.Face) float64 {
+	m := face.Metrics()
+	return m.HAscent + m.HDescent
+}
+
+// returns recommended line height for fonts when writing horizontally
+func FontLineSpacing(face ebt.Face) float64 {
+	m := face.Metrics()
+	return m.HAscent + m.HDescent + m.HLineGap
+}
+
+// returns recommended line height for fonts when writing horizontally
+func FontLineSpacingSized(face ebt.Face, size float64) float64 {
+	scale := FontScale(face, size)
+	return FontLineSpacing(face) * scale
+}
+
+func FontScale(face ebt.Face, size float64) float64 {
+	return size / FontSize(face)
+}
+
+func MeasureTextSized(text string, face ebt.Face, size float64, lineSpacingInPixels float64) (float64, float64) {
+	w, h := ebt.Measure(text, face, lineSpacingInPixels)
+	scale := FontScale(face, size)
+
+	return w * scale, h * scale
+}
+
+func TextToBaseLine(
+	fontFace ebt.Face,
+	fontSize float64,
+	x, y float64,
+) eb.GeoM {
+	scale := FontScale(fontFace, fontSize)
+
+	newX := x
+	newY := y - fontFace.Metrics().HAscent*scale
+
+	var geom eb.GeoM
+	geom.Scale(scale, scale)
+	geom.Translate(newX, newY)
+
+	return geom
+}
+
+func TextToBaseLineLimitWidth(
+	text string,
+	fontFace ebt.Face,
+	fontSize float64,
+	x, y float64,
+	maxWidth float64,
+) eb.GeoM {
+	w, _ := MeasureTextSized(text, fontFace, fontSize, FontLineSpacingSized(fontFace, fontSize))
+
+	if w > maxWidth {
+		fontSize *= maxWidth / w
+	}
+
+	return TextToBaseLine(fontFace, fontSize, x, y)
+}
+
+func TextToYcenter(
+	fontFace ebt.Face,
+	fontSize float64,
+	x, y float64,
+) eb.GeoM {
+	scale := FontScale(fontFace, fontSize)
+
+	newX := x
+	newY := y - fontSize*0.5
+
+	var geom eb.GeoM
+	geom.Scale(scale, scale)
+	geom.Translate(newX, newY)
+
+	return geom
+}
+
+func TextToYcenterLimitWidth(
+	text string,
+	fontFace ebt.Face,
+	fontSize float64,
+	x, y float64,
+	maxWidth float64,
+) eb.GeoM {
+	w, _ := MeasureTextSized(text, fontFace, fontSize, FontLineSpacingSized(fontFace, fontSize))
+
+	if w > maxWidth {
+		fontSize *= maxWidth / w
+	}
+
+	return TextToYcenter(fontFace, fontSize, x, y)
 }

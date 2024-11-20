@@ -29,16 +29,20 @@ func init() {
 	flag.BoolVar(&FlagPProf, "pprof", false, "enable pprof")
 }
 
+type Scene interface {
+	Update()
+	Draw(dst *eb.Image)
+	Layout(outsideWidth, outsideHeight int)
+}
+
 type App struct {
 	ShowDebugConsole bool
-	Scene            *GameUI
-	//Scene           *LayoutTest
+	Scene            Scene
 }
 
 func NewApp() *App {
 	a := new(App)
 	a.Scene = NewGameUI()
-	//a.Scene = NewLayoutTest()
 	return a
 }
 
