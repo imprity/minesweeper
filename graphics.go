@@ -6,61 +6,84 @@ import (
 )
 
 var TheGraphicsContext struct {
-	BlendStack  []eb.Blend
-	FilterStack []eb.Filter
-	AntiAlias   bool
+	BlendStack     []eb.Blend
+	FilterStack    []eb.Filter
+	AntiAliasStack []bool
+	MipMapStack    []bool
 }
 
 func init() {
 	ctx := &TheGraphicsContext
 
+	ctx.BlendStack = make([]eb.Blend, 0, 32)
+	ctx.FilterStack = make([]eb.Filter, 0, 32)
+	ctx.AntiAliasStack = make([]bool, 0, 32)
+	ctx.MipMapStack = make([]bool, 0, 32)
+
 	ctx.BlendStack = append(ctx.BlendStack, eb.Blend{})
 	ctx.FilterStack = append(ctx.FilterStack, eb.FilterLinear)
-	ctx.AntiAlias = true
+	ctx.AntiAliasStack = append(ctx.AntiAliasStack, true)
+	ctx.MipMapStack = append(ctx.MipMapStack, true)
 }
 
 func BeginBlend(filter eb.Blend) {
 	ctx := &TheGraphicsContext
-
 	ctx.BlendStack = append(ctx.BlendStack, filter)
 }
 
 func EndBlend() {
 	ctx := &TheGraphicsContext
-
 	ctx.BlendStack = ctx.BlendStack[0 : len(ctx.BlendStack)-1]
 }
 
 func CurrentBlend() eb.Blend {
 	ctx := &TheGraphicsContext
-
 	return ctx.BlendStack[len(ctx.BlendStack)-1]
 }
 
 func BeginFilter(filter eb.Filter) {
 	ctx := &TheGraphicsContext
-
 	ctx.FilterStack = append(ctx.FilterStack, filter)
 }
 
 func EndFilter() {
 	ctx := &TheGraphicsContext
-
 	ctx.FilterStack = ctx.FilterStack[0 : len(ctx.FilterStack)-1]
 }
 
 func CurrentFilter() eb.Filter {
 	ctx := &TheGraphicsContext
-
 	return ctx.FilterStack[len(ctx.FilterStack)-1]
 }
 
-func IsAntiAliasOn() bool {
-	return TheGraphicsContext.AntiAlias
+func BeginAntiAlias(antialias bool) {
+	ctx := &TheGraphicsContext
+	ctx.AntiAliasStack = append(ctx.AntiAliasStack, antialias)
 }
 
-func SetAntiAlias(onOff bool) {
-	TheGraphicsContext.AntiAlias = onOff
+func EndAntiAlias() {
+	ctx := &TheGraphicsContext
+	ctx.AntiAliasStack = ctx.AntiAliasStack[0 : len(ctx.AntiAliasStack)-1]
+}
+
+func IsAntiAliasOn() bool {
+	ctx := &TheGraphicsContext
+	return ctx.AntiAliasStack[len(ctx.AntiAliasStack)-1]
+}
+
+func BeginMipMap(mipmap bool) {
+	ctx := &TheGraphicsContext
+	ctx.MipMapStack = append(ctx.MipMapStack, mipmap)
+}
+
+func EndMipMap() {
+	ctx := &TheGraphicsContext
+	ctx.MipMapStack = ctx.MipMapStack[0 : len(ctx.MipMapStack)-1]
+}
+
+func IsMipMapOn() bool {
+	ctx := &TheGraphicsContext
+	return ctx.MipMapStack[len(ctx.MipMapStack)-1]
 }
 
 type DrawImageOptions struct {
@@ -109,6 +132,7 @@ func DrawImage(dst *eb.Image, src *eb.Image, options *DrawImageOptions) {
 	op.ColorScale = options.ColorScale
 	op.Blend = CurrentBlend()
 	op.Filter = CurrentFilter()
+	op.DisableMipmaps = !IsMipMapOn()
 	dst.DrawImage(src, op)
 }
 
@@ -145,7 +169,8 @@ func DrawTriangles(
 	op.Filter = CurrentFilter()
 	op.Address = options.Address
 	op.FillRule = options.FillRule
-	op.AntiAlias = TheGraphicsContext.AntiAlias
+	op.AntiAlias = IsAntiAliasOn()
+	op.DisableMipmaps = !IsMipMapOn()
 
 	dst.DrawTriangles(vertices, indices, img, op)
 }
@@ -164,7 +189,7 @@ func DrawTrianglesShader(
 	op.Uniforms = options.Uniforms
 	op.Images = options.Images
 	op.FillRule = options.FillRule
-	op.AntiAlias = TheGraphicsContext.AntiAlias
+	op.AntiAlias = IsAntiAliasOn()
 
 	dst.DrawTrianglesShader(vertices, indices, shader, op)
 }
@@ -183,6 +208,8 @@ func DrawText(
 	op.ColorScale = options.ColorScale
 	op.Blend = CurrentBlend()
 	op.Filter = CurrentFilter()
+	op.DisableMipmaps = !IsMipMapOn()
 	op.LayoutOptions = options.LayoutOptions
+
 	ebt.Draw(dst, text, face, op)
 }
