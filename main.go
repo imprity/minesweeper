@@ -129,8 +129,13 @@ func main() {
 	eb.SetWindowSize(int(ScreenWidth), int(ScreenHeight))
 	eb.SetWindowResizingMode(eb.WindowResizingModeEnabled)
 	eb.SetWindowTitle("Minesweeper")
+	eb.SetScreenClearedEveryFrame(false)
 
-	if err := eb.RunGame(app); err != nil {
+	op := &eb.RunGameOptions{
+		SingleThread: true,
+	}
+
+	if err := eb.RunGameWithOptions(app, op); err != nil {
 		panic(err)
 	}
 }

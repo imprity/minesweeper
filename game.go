@@ -717,7 +717,7 @@ func forEachFgTile(
 }
 
 func ShouldDrawBgTile(style TileStyle) bool {
-	return style.DrawBg && style.BgScale > 0.001 && style.BgAlpha > 0.001
+	return style.DrawBg && !style.DrawTile && style.BgScale > 0.001 && style.BgAlpha > 0.001
 }
 
 func ShouldDrawTile(style TileStyle) bool {
@@ -740,6 +740,44 @@ type VIBuffer struct {
 func (vi *VIBuffer) Reset() {
 	vi.Vertices = vi.Vertices[:0]
 	vi.Indices = vi.Indices[:0]
+}
+
+// assumes you will use WhiteImage
+// so it will set SrcX and SrcY to 1
+func VIaddRect(buffer *VIBuffer, rect FRectangle, clr color.Color) {
+	indexStart := uint16(len(buffer.Vertices))
+
+	r, g, b, a := clr.RGBA()
+
+	rf := float32(r) / 0xffff
+	gf := float32(g) / 0xffff
+	bf := float32(b) / 0xffff
+	af := float32(a) / 0xffff
+
+	buffer.Vertices = append(
+		buffer.Vertices,
+		eb.Vertex{
+			SrcX: 1, SrcY: 1, DstX: f32(rect.Min.X), DstY: f32(rect.Min.Y),
+			ColorR: rf, ColorG: gf, ColorB: bf, ColorA: af,
+		},
+		eb.Vertex{
+			SrcX: 1, SrcY: 1, DstX: f32(rect.Max.X), DstY: f32(rect.Min.Y),
+			ColorR: rf, ColorG: gf, ColorB: bf, ColorA: af,
+		},
+		eb.Vertex{
+			SrcX: 1, SrcY: 1, DstX: f32(rect.Max.X), DstY: f32(rect.Max.Y),
+			ColorR: rf, ColorG: gf, ColorB: bf, ColorA: af,
+		},
+		eb.Vertex{
+			SrcX: 1, SrcY: 1, DstX: f32(rect.Min.X), DstY: f32(rect.Max.Y),
+			ColorR: rf, ColorG: gf, ColorB: bf, ColorA: af,
+		},
+	)
+
+	buffer.Indices = append(
+		buffer.Indices,
+		indexStart+0, indexStart+1, indexStart+2, indexStart+0, indexStart+2, indexStart+3,
+	)
 }
 
 // assumes you will use WhiteImage
@@ -879,17 +917,20 @@ func DrawBoard(
 
 		func(x, y int, style TileStyle, bgTileRect FRectangle) {
 			if ShouldDrawBgTile(style) {
-				DrawFilledRect(dst, bgTileRect, ColorFade(style.BgFillColor, style.BgAlpha))
+				VIaddRect(
+					shapeBuf,
+					bgTileRect,
+					ColorFade(style.BgFillColor, style.BgAlpha),
+				)
 
 				// draw highlight
 				if style.BgTileHightlight > 0 {
 					t := style.BgTileHightlight
 					c := TheColorTable[ColorTileHighLight]
-					p := GetRectPath(bgTileRect)
 
-					VIaddFillPath(
+					VIaddRect(
 						shapeBuf,
-						*p,
+						bgTileRect,
 						ColorFade(color.NRGBA{c.R, c.G, c.B, uint8(f64(c.A) * t)}, style.BgAlpha),
 					)
 				}
@@ -1041,8 +1082,10 @@ func DrawBoard(
 
 		BeginAntiAlias(false)
 		BeginFilter(eb.FilterNearest)
+		BeginMipMap(false)
 		// draw waterRenderTarget
 		DrawImage(dst, waterRenderTarget, nil)
+		EndMipMap()
 		EndAntiAlias()
 		EndFilter()
 	}
@@ -1936,10 +1979,12 @@ func GetBoardTileRect(
 	tileWidth := boardRect.Dx() / f64(boardWidth)
 	tileHeight := boardRect.Dy() / f64(boardHeight)
 
-	return FRectangle{
+	tileRect := FRectangle{
 		Min: FPt(f64(boardX)*tileWidth, f64(boardY)*tileHeight).Add(boardRect.Min),
 		Max: FPt(f64(boardX+1)*tileWidth, f64(boardY+1)*tileHeight).Add(boardRect.Min),
 	}
+
+	return RectToFRect(FRectToRect(tileRect))
 }
 
 func (g *Game) DrawTile(

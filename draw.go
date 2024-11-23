@@ -8,6 +8,11 @@ import (
 	ebv "github.com/hajimehoshi/ebiten/v2/vector"
 )
 
+var (
+	vectorVertexBuffer  []eb.Vertex = make([]eb.Vertex, 0, 256)
+	vectorIndicesBuffer []uint16    = make([]uint16, 0, 256)
+)
+
 func StrokeLine(
 	dst *eb.Image,
 	x0, y0, x1, y1 float64,
@@ -36,8 +41,16 @@ func DrawFilledRect(
 	rect FRectangle,
 	clr color.Color,
 ) {
-	path := GetRectPath(rect)
-	DrawFilledPath(dst, path, clr)
+	verts := [4]eb.Vertex{
+		{DstX: f32(rect.Min.X), DstY: f32(rect.Min.Y)},
+		{DstX: f32(rect.Max.X), DstY: f32(rect.Min.Y)},
+		{DstX: f32(rect.Max.X), DstY: f32(rect.Max.Y)},
+		{DstX: f32(rect.Min.X), DstY: f32(rect.Max.Y)},
+	}
+	indices := [6]uint16{
+		0, 1, 2, 0, 2, 3,
+	}
+	DrawVerticies(dst, verts[:], indices[:], clr, eb.FillRuleFillAll)
 }
 
 func StrokeRect(
@@ -60,8 +73,7 @@ func DrawFilledCircle(
 ) {
 	path := &ebv.Path{}
 	path.Arc(f32(x), f32(y), f32(r), 0, Pi*2, ebv.Clockwise)
-	vs, is := path.AppendVerticesAndIndicesForFilling(nil, nil)
-	DrawVerticies(dst, vs, is, clr, eb.FillAll)
+	DrawFilledPath(dst, path, clr)
 }
 
 func StrokeCircle(
@@ -77,8 +89,7 @@ func StrokeCircle(
 	strokeOp.Width = f32(strokeWidth)
 	strokeOp.MiterLimit = 10
 
-	vs, is := path.AppendVerticesAndIndicesForStroke(nil, nil, strokeOp)
-	DrawVerticies(dst, vs, is, clr, eb.FillAll)
+	StrokePath(dst, path, strokeOp, clr)
 }
 
 // raidus and segments array maps like this
@@ -95,6 +106,9 @@ func getRoundRectPathImpl(
 	//clamp the radius to the size of rect
 	for i, v := range radiuses {
 		radiuses[i] = min(v, radiusMax)
+		if radiuses[i] < 1.5 {
+			radiuses[i] = 0
+		}
 	}
 
 	inLeftTop := FPt(rect.Min.X+radiuses[0], rect.Min.Y+radiuses[0])
@@ -112,7 +126,7 @@ func getRoundRectPathImpl(
 
 	path := &ebv.Path{}
 
-	if radiuses[0] != 0 {
+	if segments[0] > 1 && radiuses[0] > 1.5 {
 		if useSegments {
 			ArcFast(
 				path,
@@ -131,11 +145,11 @@ func getRoundRectPathImpl(
 			)
 		}
 	} else {
-		path.LineTo(f32(inLeftTop.X), f32(inLeftTop.Y))
+		path.LineTo(f32(rect.Min.X), f32(rect.Min.Y))
 	}
 	path.LineTo(f32(inRightTop.X), f32(inRightTop.Y-radiuses[1]))
 
-	if radiuses[1] != 0 {
+	if segments[1] > 1 && radiuses[1] > 1.5 {
 		if useSegments {
 			ArcFast(
 				path,
@@ -153,10 +167,12 @@ func getRoundRectPathImpl(
 				ebv.Clockwise,
 			)
 		}
+	} else {
+		path.LineTo(f32(rect.Max.X), f32(rect.Min.Y))
 	}
 	path.LineTo(f32(inRightBottom.X+radiuses[2]), f32(inRightBottom.Y))
 
-	if radiuses[2] != 0 {
+	if segments[2] > 1 && radiuses[2] > 1.5 {
 		if useSegments {
 			ArcFast(
 				path,
@@ -174,10 +190,12 @@ func getRoundRectPathImpl(
 				ebv.Clockwise,
 			)
 		}
+	} else {
+		path.LineTo(f32(rect.Max.X), f32(rect.Max.Y))
 	}
 	path.LineTo(f32(inLeftBottom.X), f32(inLeftBottom.Y+radiuses[3]))
 
-	if radiuses[3] != 0 {
+	if segments[3] > 1 && radiuses[3] > 1.5 {
 		if useSegments {
 			ArcFast(
 				path,
@@ -195,6 +213,8 @@ func getRoundRectPathImpl(
 				ebv.Clockwise,
 			)
 		}
+	} else {
+		path.LineTo(f32(rect.Min.X), f32(rect.Max.Y))
 	}
 	path.Close()
 
@@ -411,7 +431,14 @@ func StrokeRoundRectFastEx(
 }
 
 func ArcFast(p *ebv.Path, x, y, radius, startAngle, endAngle float64, dir ebv.Direction, segments int) {
-	if segments == 0 {
+	if segments <= 1 {
+		compass := FPt(radius, 0)
+		compass = compass.Rotate((startAngle + endAngle) * 0.5).Add(FPt(x, y))
+
+		p.LineTo(f32(compass.X), f32(compass.Y))
+
+		return
+	} else if segments <= 2 {
 		compass := FPt(radius, 0)
 
 		start := compass.Rotate(startAngle).Add(FPt(x, y))
@@ -530,8 +557,10 @@ func DrawFilledPathEx(
 	clr color.Color,
 	fillRule eb.FillRule,
 ) {
-	vs, is := path.AppendVerticesAndIndicesForFilling(nil, nil)
-	DrawVerticies(dst, vs, is, clr, fillRule)
+	vectorVertexBuffer = vectorVertexBuffer[:0]
+	vectorIndicesBuffer = vectorIndicesBuffer[:0]
+	vectorVertexBuffer, vectorIndicesBuffer = path.AppendVerticesAndIndicesForFilling(vectorVertexBuffer, vectorIndicesBuffer)
+	DrawVerticies(dst, vectorVertexBuffer, vectorIndicesBuffer, clr, fillRule)
 }
 
 func StrokePathEx(
@@ -541,6 +570,8 @@ func StrokePathEx(
 	clr color.Color,
 	fillRule eb.FillRule,
 ) {
-	vs, is := path.AppendVerticesAndIndicesForStroke(nil, nil, strokeOp)
-	DrawVerticies(dst, vs, is, clr, fillRule)
+	vectorVertexBuffer = vectorVertexBuffer[:0]
+	vectorIndicesBuffer = vectorIndicesBuffer[:0]
+	vectorVertexBuffer, vectorIndicesBuffer = path.AppendVerticesAndIndicesForStroke(vectorVertexBuffer, vectorIndicesBuffer, strokeOp)
+	DrawVerticies(dst, vectorVertexBuffer, vectorIndicesBuffer, clr, fillRule)
 }
