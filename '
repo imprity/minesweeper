@@ -10,7 +10,6 @@ import (
 	"time"
 
 	eb "github.com/hajimehoshi/ebiten/v2"
-	ebv "github.com/hajimehoshi/ebiten/v2/vector"
 )
 
 var _ = fmt.Printf
@@ -252,15 +251,10 @@ type Game struct {
 	mineCount int
 
 	placedMinesOnBoard bool
-
-	viBuffers [2]*VIBuffer
 }
 
 func NewGame(boardWidth, boardHeight, mineCount int) *Game {
 	g := new(Game)
-
-	g.viBuffers[0] = new(VIBuffer)
-	g.viBuffers[1] = new(VIBuffer)
 
 	g.mineCount = mineCount
 
@@ -556,8 +550,6 @@ func (g *Game) Draw(dst *eb.Image) {
 		g.RenderTileStyles,
 
 		g.GameState == GameStateWon, g.WaterRenderTarget, g.WaterAlpha, g.WaterFlowOffset,
-
-		g.viBuffers,
 	)
 
 	if g.DrawRetryButton {
@@ -734,121 +726,10 @@ func ShouldDrawFgTile(style TileStyle) bool {
 
 type VIBuffer struct {
 	Vertices []eb.Vertex
-	Indices  []uint16
+	Indices []uint16
 }
 
-func (vi *VIBuffer) Reset() {
-	vi.Vertices = vi.Vertices[:0]
-	vi.Indices = vi.Indices[:0]
-}
-
-// assumes you will use WhiteImage
-// so it will set SrcX and SrcY to 1
-func VIaddFillPath(buffer *VIBuffer, path ebv.Path, clr color.Color) {
-	vPrevLen := len(buffer.Vertices)
-
-	buffer.Vertices, buffer.Indices = path.AppendVerticesAndIndicesForFilling(buffer.Vertices, buffer.Indices)
-
-	r, g, b, a := clr.RGBA()
-
-	rf := float32(r) / 0xffff
-	gf := float32(g) / 0xffff
-	bf := float32(b) / 0xffff
-	af := float32(a) / 0xffff
-
-	for i := vPrevLen; i < len(buffer.Vertices); i++ {
-		buffer.Vertices[i].SrcX = 1
-		buffer.Vertices[i].SrcY = 1
-		buffer.Vertices[i].ColorR = rf
-		buffer.Vertices[i].ColorG = gf
-		buffer.Vertices[i].ColorB = bf
-		buffer.Vertices[i].ColorA = af
-	}
-}
-
-func VIaddSubView(buffer *VIBuffer, sv SubView, options *DrawSubViewOptions) {
-	rect := sv.Rect
-	rect0 := FRectMoveTo(rect, 0, 0)
-
-	var vs [4]FPoint
-
-	vs[0] = FPt(rect0.Min.X, rect0.Min.Y)
-	vs[1] = FPt(rect0.Max.X, rect0.Min.Y)
-	vs[2] = FPt(rect0.Max.X, rect0.Max.Y)
-	vs[3] = FPt(rect0.Min.X, rect0.Max.Y)
-
-	var xformed [4]FPoint
-
-	xformed[0] = FPointTransform(vs[0], options.GeoM)
-	xformed[1] = FPointTransform(vs[1], options.GeoM)
-	xformed[2] = FPointTransform(vs[2], options.GeoM)
-	xformed[3] = FPointTransform(vs[3], options.GeoM)
-
-	var verts [4]eb.Vertex
-	var indices [6]uint16
-
-	verts[0] = eb.Vertex{
-		DstX: f32(xformed[0].X), DstY: f32(xformed[0].Y),
-		SrcX: f32(rect.Min.X), SrcY: f32(rect.Min.Y),
-	}
-	verts[1] = eb.Vertex{
-		DstX: f32(xformed[1].X), DstY: f32(xformed[1].Y),
-		SrcX: f32(rect.Max.X), SrcY: f32(rect.Min.Y),
-	}
-	verts[2] = eb.Vertex{
-		DstX: f32(xformed[2].X), DstY: f32(xformed[2].Y),
-		SrcX: f32(rect.Max.X), SrcY: f32(rect.Max.Y),
-	}
-	verts[3] = eb.Vertex{
-		DstX: f32(xformed[3].X), DstY: f32(xformed[3].Y),
-		SrcX: f32(rect.Min.X), SrcY: f32(rect.Max.Y),
-	}
-
-	rf := options.ColorScale.R()
-	gf := options.ColorScale.G()
-	bf := options.ColorScale.B()
-	af := options.ColorScale.A()
-
-	for i := range 4 {
-		verts[i].ColorR = rf
-		verts[i].ColorG = gf
-		verts[i].ColorB = bf
-		verts[i].ColorA = af
-	}
-
-	indexStart := uint16(len(buffer.Vertices))
-
-	indices = [6]uint16{
-		indexStart + 0, indexStart + 1, indexStart + 2, indexStart + 0, indexStart + 2, indexStart + 3,
-	}
-
-	buffer.Vertices = append(buffer.Vertices, verts[:]...)
-	buffer.Indices = append(buffer.Indices, indices[:]...)
-}
-
-func VIaddSubViewInRect(
-	buffer *VIBuffer,
-	rect FRectangle,
-	scale float64,
-	offsetX, offsetY float64,
-	clr color.Color,
-	view SubView,
-) {
-	imgSize := ImageSizeFPt(view)
-	rectSize := rect.Size()
-
-	drawScale := GetScaleToFitRectInRect(imgSize.X, imgSize.Y, rectSize.X, rectSize.Y)
-	drawScale *= scale
-
-	op := &DrawSubViewOptions{}
-	op.GeoM.Concat(TransformToCenter(imgSize.X, imgSize.Y, drawScale, drawScale, 0))
-	rectCenter := FRectangleCenter(rect)
-	op.GeoM.Translate(rectCenter.X, rectCenter.Y)
-	op.GeoM.Translate(offsetX, offsetY)
-	op.ColorScale.ScaleWithColor(clr)
-
-	VIaddSubView(buffer, view, op)
-}
+func VIappendFillPath(buffer *VIBuffer, path ebv.Path)
 
 func DrawBoard(
 	dst *eb.Image,
@@ -863,14 +744,8 @@ func DrawBoard(
 	waterAlpha float64,
 	waterFlowOffset time.Duration,
 
-	viBuffers [2]*VIBuffer,
+	viBuffers [2]VIBuffer
 ) {
-	shapeBuf := viBuffers[0]
-	spriteBuf := viBuffers[1]
-
-	shapeBuf.Reset()
-	spriteBuf.Reset()
-
 	// ============================
 	// draw background tiles
 	// ============================
@@ -885,11 +760,9 @@ func DrawBoard(
 				if style.BgTileHightlight > 0 {
 					t := style.BgTileHightlight
 					c := TheColorTable[ColorTileHighLight]
-					p := GetRectPath(bgTileRect)
-
-					VIaddFillPath(
-						shapeBuf,
-						*p,
+					DrawFilledRect(
+						dst,
+						bgTileRect,
 						ColorFade(color.NRGBA{c.R, c.G, c.B, uint8(f64(c.A) * t)}, style.BgAlpha),
 					)
 				}
@@ -912,13 +785,10 @@ func DrawBoard(
 					innerRadius := radius * min(innerRect.Dx(), innerRect.Dy()) * 0.5
 					outerRadius := radius * min(outerRect.Dx(), outerRect.Dy()) * 0.5
 
-					outerP := GetRoundRectPathFast(outerRect, outerRadius, true, 5)
-					innerP := GetRoundRectPathFast(innerRect, innerRadius, true, 5)
+					DrawFilledRoundRectFast(dst, outerRect, outerRadius, true, 5, ColorFade(ColorMineBg1, style.BgAlpha))
+					DrawFilledRoundRectFast(dst, innerRect, innerRadius, true, 5, ColorFade(ColorMineBg2, style.BgAlpha))
 
-					VIaddFillPath(shapeBuf, *outerP, ColorFade(ColorMineBg1, style.BgAlpha))
-					VIaddFillPath(shapeBuf, *innerP, ColorFade(ColorMineBg2, style.BgAlpha))
-
-					VIaddSubViewInRect(spriteBuf, innerRect, 1, 0, 0, ColorFade(ColorMine, style.BgAlpha), GetMineTile())
+					DrawSubViewInRect(dst, innerRect, 1, 0, 0, ColorFade(ColorMine, style.BgAlpha), GetMineTile())
 				}
 			}
 		},
@@ -929,6 +799,13 @@ func DrawBoard(
 	// ============================
 	const segments = 5
 
+	tilesRenderTarget := dst
+
+	if waterRenderTarget != nil && doWaterEffect {
+		waterRenderTarget.Clear()
+		tilesRenderTarget = waterRenderTarget
+	}
+
 	forEachTile(
 		board, boardRect, tileStyles,
 
@@ -936,8 +813,7 @@ func DrawBoard(
 			if ShouldDrawTile(style) {
 				strokeColor := ColorFade(style.TileStrokeColor, style.TileAlpha)
 
-				p := GetRoundRectPathFastEx(strokeRect, radiusPx, true, [4]int{segments, segments, segments, segments})
-				VIaddFillPath(shapeBuf, *p, strokeColor)
+				DrawFilledRoundRectFastEx(tilesRenderTarget, strokeRect, radiusPx, true, [4]int{segments, segments, segments, segments}, strokeColor)
 			}
 		},
 	)
@@ -949,68 +825,10 @@ func DrawBoard(
 			if ShouldDrawTile(style) {
 				fillColor := ColorFade(style.TileFillColor, style.TileAlpha)
 
-				p := GetRoundRectPathFastEx(fillRect, radiusPx, true, [4]int{segments, segments, segments, segments})
-				VIaddFillPath(shapeBuf, *p, fillColor)
+				DrawFilledRoundRectFastEx(tilesRenderTarget, fillRect, radiusPx, true, [4]int{segments, segments, segments, segments}, fillColor)
 			}
 		},
 	)
-
-	forEachFgTile(
-		board, boardRect, tileStyles,
-
-		func(x, y int, style TileStyle, fgRect FRectangle) {
-			if ShouldDrawFgTile(style) {
-				fgColor := style.FgColor
-
-				if style.FgType == TileFgTypeNumber {
-					count := board.GetNeighborMineCount(x, y)
-					if 1 <= count && count <= 8 {
-						VIaddSubViewInRect(
-							spriteBuf,
-							fgRect,
-							style.FgScale,
-							style.FgOffsetX, style.FgOffsetY,
-							ColorFade(fgColor, style.FgAlpha),
-							GetNumberTile(count),
-						)
-					}
-				} else if style.FgType == TileFgTypeFlag {
-					VIaddSubViewInRect(
-						spriteBuf,
-						fgRect,
-						style.FgScale,
-						style.FgOffsetX, style.FgOffsetY,
-						ColorFade(fgColor, style.FgAlpha),
-						GetFlagTile(),
-					)
-				}
-			}
-		},
-	)
-
-	// ====================
-	// flush buffers
-	// ====================
-
-	// flush shapes
-	shapesRenderTarget := dst
-
-	if waterRenderTarget != nil && doWaterEffect {
-		waterRenderTarget.Clear()
-		shapesRenderTarget = waterRenderTarget
-	}
-
-	BeginAntiAlias(false)
-	BeginFilter(eb.FilterNearest)
-	BeginMipMap(false)
-	{
-		op := &DrawTrianglesOptions{}
-		op.ColorScaleMode = eb.ColorScaleModePremultipliedAlpha
-		DrawTriangles(shapesRenderTarget, shapeBuf.Vertices, shapeBuf.Indices, WhiteImage, op)
-	}
-	EndMipMap()
-	EndFilter()
-	EndAntiAlias()
 
 	// draw water effect
 	if doWaterEffect && waterRenderTarget != nil {
@@ -1039,27 +857,48 @@ func DrawBoard(
 		)
 		EndBlend()
 
-		BeginAntiAlias(false)
-		BeginFilter(eb.FilterNearest)
 		// draw waterRenderTarget
 		DrawImage(dst, waterRenderTarget, nil)
-		EndAntiAlias()
-		EndFilter()
 	}
 
-	// flush sprites
-	{
-		op := &DrawTrianglesOptions{}
-		op.ColorScaleMode = eb.ColorScaleModePremultipliedAlpha
-		DrawTriangles(dst, spriteBuf.Vertices, spriteBuf.Indices, TileSprite.Image, op)
-	}
+	forEachFgTile(
+		board, boardRect, tileStyles,
+
+		func(x, y int, style TileStyle, fgRect FRectangle) {
+			if ShouldDrawFgTile(style) {
+				fgColor := style.FgColor
+
+				if style.FgType == TileFgTypeNumber {
+					count := board.GetNeighborMineCount(x, y)
+					if 1 <= count && count <= 8 {
+						DrawSubViewInRect(
+							dst,
+							fgRect,
+							style.FgScale,
+							style.FgOffsetX, style.FgOffsetY,
+							ColorFade(fgColor, style.FgAlpha),
+							GetNumberTile(count),
+						)
+					}
+				} else if style.FgType == TileFgTypeFlag {
+					DrawSubViewInRect(
+						dst,
+						fgRect,
+						style.FgScale,
+						style.FgOffsetX, style.FgOffsetY,
+						ColorFade(fgColor, style.FgAlpha),
+						GetFlagTile(),
+					)
+				}
+			}
+		},
+	)
 }
 
 func DrawDummyBgBoard(
 	dst *eb.Image,
 	boardWidth, boardHeight int,
 	boardRect FRectangle,
-	buffers [2]*VIBuffer,
 ) {
 	// TODO: this is fucking stupid. We are creating a dummy board only to throw it away
 	// each time we draw
@@ -1079,7 +918,6 @@ func DrawDummyBgBoard(
 		dummyStyles,
 
 		false, nil, 0, 0,
-		buffers,
 	)
 }
 

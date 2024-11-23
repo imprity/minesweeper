@@ -86,11 +86,16 @@ func DrawSubView(dst *eb.Image, sv SubView, options *DrawSubViewOptions) {
 		SrcX: f32(rect.Min.X), SrcY: f32(rect.Max.Y),
 	}
 
+	rf := options.ColorScale.R()
+	gf := options.ColorScale.G()
+	bf := options.ColorScale.B()
+	af := options.ColorScale.A()
+
 	for i := range 4 {
-		verts[i].ColorR = options.ColorScale.R()
-		verts[i].ColorG = options.ColorScale.G()
-		verts[i].ColorB = options.ColorScale.B()
-		verts[i].ColorA = options.ColorScale.A()
+		verts[i].ColorR = rf
+		verts[i].ColorG = gf
+		verts[i].ColorB = bf
+		verts[i].ColorA = af
 	}
 
 	indices = [6]uint16{

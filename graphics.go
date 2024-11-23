@@ -22,7 +22,7 @@ func init() {
 
 	ctx.BlendStack = append(ctx.BlendStack, eb.Blend{})
 	ctx.FilterStack = append(ctx.FilterStack, eb.FilterLinear)
-	ctx.AntiAliasStack = append(ctx.AntiAliasStack, true)
+	ctx.AntiAliasStack = append(ctx.AntiAliasStack, false)
 	ctx.MipMapStack = append(ctx.MipMapStack, true)
 }
 

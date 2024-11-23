@@ -201,13 +201,39 @@ func getRoundRectPathImpl(
 	return path
 }
 
+func GetRoundRectPath(
+	rect FRectangle,
+	radius float64,
+	radiusInPixels bool,
+) *ebv.Path {
+	return GetRoundRectPathEx(
+		rect,
+		[4]float64{radius, radius, radius, radius},
+		radiusInPixels,
+	)
+}
+
+func GetRoundRectPathFast(
+	rect FRectangle,
+	radius float64,
+	radiusInPixels bool,
+	segments int,
+) *ebv.Path {
+	return GetRoundRectPathFastEx(
+		rect,
+		[4]float64{radius, radius, radius, radius},
+		radiusInPixels,
+		[4]int{segments, segments, segments, segments},
+	)
+}
+
 // raidus array maps like this
 //
 //	0 --- 1
 //	|     |
 //	|     |
 //	3 --- 2
-func GetRoundRectPath(
+func GetRoundRectPathEx(
 	rect FRectangle,
 	radiuses [4]float64,
 	radiusInPixels bool,
@@ -227,7 +253,7 @@ func GetRoundRectPath(
 //	|     |
 //	|     |
 //	3 --- 2
-func GetRoundRectPathFast(
+func GetRoundRectPathFastEx(
 	rect FRectangle,
 	radiuses [4]float64,
 	radiusInPixels bool,
@@ -249,7 +275,7 @@ func DrawFilledRoundRect(
 	radiusInPixels bool,
 	clr color.Color,
 ) {
-	path := GetRoundRectPath(rect, [4]float64{radius, radius, radius, radius}, radiusInPixels)
+	path := GetRoundRectPath(rect, radius, radiusInPixels)
 	DrawFilledPath(dst, path, clr)
 }
 
@@ -261,7 +287,7 @@ func StrokeRoundRect(
 	stroke float64,
 	clr color.Color,
 ) {
-	path := GetRoundRectPath(rect, [4]float64{radius, radius, radius, radius}, radiusInPixels)
+	path := GetRoundRectPath(rect, radius, radiusInPixels)
 	strokeOp := &ebv.StrokeOptions{}
 	strokeOp.MiterLimit = 4
 	strokeOp.Width = float32(stroke)
@@ -278,9 +304,9 @@ func DrawFilledRoundRectFast(
 ) {
 	path := GetRoundRectPathFast(
 		rect,
-		[4]float64{radius, radius, radius, radius},
+		radius,
 		radiusInPixels,
-		[4]int{segments, segments, segments, segments},
+		segments,
 	)
 	DrawFilledPath(dst, path, clr)
 }
@@ -296,9 +322,9 @@ func StrokeRoundRectFast(
 ) {
 	path := GetRoundRectPathFast(
 		rect,
-		[4]float64{radius, radius, radius, radius},
+		radius,
 		radiusInPixels,
-		[4]int{segments, segments, segments, segments},
+		segments,
 	)
 	strokeOp := &ebv.StrokeOptions{}
 	strokeOp.MiterLimit = 4
@@ -319,7 +345,7 @@ func DrawFilledRoundRectEx(
 	radiusInPixels bool,
 	clr color.Color,
 ) {
-	path := GetRoundRectPath(rect, radiuses, radiusInPixels)
+	path := GetRoundRectPathEx(rect, radiuses, radiusInPixels)
 	DrawFilledPath(dst, path, clr)
 }
 
@@ -337,7 +363,7 @@ func StrokeRoundRectEx(
 	stroke float64,
 	clr color.Color,
 ) {
-	path := GetRoundRectPath(rect, radiuses, radiusInPixels)
+	path := GetRoundRectPathEx(rect, radiuses, radiusInPixels)
 	strokeOp := &ebv.StrokeOptions{}
 	strokeOp.Width = float32(stroke)
 	strokeOp.MiterLimit = 4
@@ -358,7 +384,7 @@ func DrawFilledRoundRectFastEx(
 	segments [4]int,
 	clr color.Color,
 ) {
-	path := GetRoundRectPathFast(rect, radiuses, radiusInPixels, segments)
+	path := GetRoundRectPathFastEx(rect, radiuses, radiusInPixels, segments)
 	DrawFilledPath(dst, path, clr)
 }
 
@@ -377,7 +403,7 @@ func StrokeRoundRectFastEx(
 	stroke float64,
 	clr color.Color,
 ) {
-	path := GetRoundRectPathFast(rect, radiuses, radiusInPixels, segments)
+	path := GetRoundRectPathFastEx(rect, radiuses, radiusInPixels, segments)
 	strokeOp := &ebv.StrokeOptions{}
 	strokeOp.Width = float32(stroke)
 	strokeOp.MiterLimit = 4
@@ -449,13 +475,19 @@ func DrawVerticies(
 	fillRule eb.FillRule,
 ) {
 	r, g, b, a := clr.RGBA()
+
+	rf := float32(r) / 0xffff
+	gf := float32(g) / 0xffff
+	bf := float32(b) / 0xffff
+	af := float32(a) / 0xffff
+
 	for i := range vs {
 		vs[i].SrcX = 1
 		vs[i].SrcY = 1
-		vs[i].ColorR = float32(r) / 0xffff
-		vs[i].ColorG = float32(g) / 0xffff
-		vs[i].ColorB = float32(b) / 0xffff
-		vs[i].ColorA = float32(a) / 0xffff
+		vs[i].ColorR = rf
+		vs[i].ColorG = gf
+		vs[i].ColorB = bf
+		vs[i].ColorA = af
 	}
 
 	op := &DrawTrianglesOptions{}
