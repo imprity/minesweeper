@@ -208,7 +208,7 @@ func (cp *ColorPicker) Update() {
 func (cp *ColorPicker) Draw(dst *eb.Image) {
 	// draw bg rect
 	{
-		DrawFilledRect(dst, cp.Rect, color.NRGBA{0, 0, 0, 130})
+		FillRect(dst, cp.Rect, color.NRGBA{0, 0, 0, 130})
 	}
 	svRect := cp.svRect()
 	hRect := cp.hRect()
@@ -311,7 +311,7 @@ func (cp *ColorPicker) Draw(dst *eb.Image) {
 		fillColor := ColorToNRGBA(cp.Color())
 		fillColor.A = 255
 
-		DrawFilledCircle(
+		FillCircle(
 			dst, cursorX, cursorY, cursorSize, fillColor)
 		StrokeCircle(
 			dst, cursorX, cursorY, cursorSize, 3, color.NRGBA{255, 255, 255, 255})
@@ -325,7 +325,7 @@ func (cp *ColorPicker) Draw(dst *eb.Image) {
 		cursorRect := FRectWH(12, hRect.Dy()+5)
 		cursorRect = CenterFRectangle(cursorRect, cursorX, cursorY)
 
-		DrawFilledRect(dst, cursorRect, ColorFromHSV(cp.Hue, 1, 1))
+		FillRect(dst, cursorRect, ColorFromHSV(cp.Hue, 1, 1))
 		StrokeRect(dst, cursorRect, 3, color.NRGBA{255, 255, 255, 255})
 	}
 
@@ -339,7 +339,7 @@ func (cp *ColorPicker) Draw(dst *eb.Image) {
 
 		alpha := uint8(cp.Alpha * 255)
 
-		DrawFilledRect(dst, cursorRect, color.NRGBA{alpha, alpha, alpha, 255})
+		FillRect(dst, cursorRect, color.NRGBA{alpha, alpha, alpha, 255})
 		StrokeRect(dst, cursorRect, 3, color.NRGBA{255, 255, 255, 255})
 	}
 

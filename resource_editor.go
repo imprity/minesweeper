@@ -180,7 +180,7 @@ func (re *ResourceEditor) Draw(dst *eb.Image) {
 		bgHeight += 20
 
 		// draw bg
-		DrawFilledRect(
+		FillRect(
 			dst, FRectWH(bgWidth, bgHeight), color.NRGBA{0, 0, 0, 150},
 		)
 

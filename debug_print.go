@@ -105,7 +105,7 @@ func DrawDebugMsgs(dst *eb.Image) {
 	}
 
 	// draw background
-	DrawFilledRect(
+	FillRect(
 		dst,
 		rect,
 		color.NRGBA{0, 0, 0, 100},

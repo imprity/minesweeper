@@ -26,17 +26,7 @@ func StrokeLine(
 	StrokePath(dst, p, &ebv.StrokeOptions{Width: f32(strokeWidth)}, clr)
 }
 
-func GetRectPath(rect FRectangle) *ebv.Path {
-	path := &ebv.Path{}
-	path.MoveTo(f32(rect.Min.X), f32(rect.Min.Y))
-	path.LineTo(f32(rect.Max.X), f32(rect.Min.Y))
-	path.LineTo(f32(rect.Max.X), f32(rect.Max.Y))
-	path.LineTo(f32(rect.Min.X), f32(rect.Max.Y))
-	path.Close()
-	return path
-}
-
-func DrawFilledRect(
+func FillRect(
 	dst *eb.Image,
 	rect FRectangle,
 	clr color.Color,
@@ -66,14 +56,14 @@ func StrokeRect(
 	StrokePath(dst, path, strokeOp, clr)
 }
 
-func DrawFilledCircle(
+func FillCircle(
 	dst *eb.Image,
 	x, y, r float64,
 	clr color.Color,
 ) {
 	path := &ebv.Path{}
 	path.Arc(f32(x), f32(y), f32(r), 0, Pi*2, ebv.Clockwise)
-	DrawFilledPath(dst, path, clr)
+	FillPath(dst, path, clr)
 }
 
 func StrokeCircle(
@@ -91,6 +81,234 @@ func StrokeCircle(
 
 	StrokePath(dst, path, strokeOp, clr)
 }
+
+func FillRoundRect(
+	dst *eb.Image,
+	rect FRectangle,
+	radius float64,
+	radiusInPixels bool,
+	clr color.Color,
+) {
+	path := GetRoundRectPath(rect, radius, radiusInPixels)
+	FillPath(dst, path, clr)
+}
+
+func StrokeRoundRect(
+	dst *eb.Image,
+	rect FRectangle,
+	radius float64,
+	radiusInPixels bool,
+	stroke float64,
+	clr color.Color,
+) {
+	path := GetRoundRectPath(rect, radius, radiusInPixels)
+	strokeOp := &ebv.StrokeOptions{}
+	strokeOp.MiterLimit = 4
+	strokeOp.Width = float32(stroke)
+	StrokePath(dst, path, strokeOp, clr)
+}
+
+func FillRoundRectFast(
+	dst *eb.Image,
+	rect FRectangle,
+	radius float64,
+	radiusInPixels bool,
+	segments int,
+	clr color.Color,
+) {
+	path := GetRoundRectPathFast(
+		rect,
+		radius,
+		radiusInPixels,
+		segments,
+	)
+	FillPath(dst, path, clr)
+}
+
+func StrokeRoundRectFast(
+	dst *eb.Image,
+	rect FRectangle,
+	radius float64,
+	radiusInPixels bool,
+	segments int,
+	stroke float64,
+	clr color.Color,
+) {
+	path := GetRoundRectPathFast(
+		rect,
+		radius,
+		radiusInPixels,
+		segments,
+	)
+	strokeOp := &ebv.StrokeOptions{}
+	strokeOp.MiterLimit = 4
+	strokeOp.Width = float32(stroke)
+	StrokePath(dst, path, strokeOp, clr)
+}
+
+// raidus array maps like this
+//
+//	0 --- 1
+//	|     |
+//	|     |
+//	3 --- 2
+func FillRoundRectEx(
+	dst *eb.Image,
+	rect FRectangle,
+	radiuses [4]float64,
+	radiusInPixels bool,
+	clr color.Color,
+) {
+	path := GetRoundRectPathEx(rect, radiuses, radiusInPixels)
+	FillPath(dst, path, clr)
+}
+
+// raidus array maps like this
+//
+//	0 --- 1
+//	|     |
+//	|     |
+//	3 --- 2
+func StrokeRoundRectEx(
+	dst *eb.Image,
+	rect FRectangle,
+	radiuses [4]float64,
+	radiusInPixels bool,
+	stroke float64,
+	clr color.Color,
+) {
+	path := GetRoundRectPathEx(rect, radiuses, radiusInPixels)
+	strokeOp := &ebv.StrokeOptions{}
+	strokeOp.Width = float32(stroke)
+	strokeOp.MiterLimit = 4
+	StrokePath(dst, path, strokeOp, clr)
+}
+
+// raidus array maps like this
+//
+//	0 --- 1
+//	|     |
+//	|     |
+//	3 --- 2
+func FillRoundRectFastEx(
+	dst *eb.Image,
+	rect FRectangle,
+	radiuses [4]float64,
+	radiusInPixels bool,
+	segments [4]int,
+	clr color.Color,
+) {
+	path := GetRoundRectPathFastEx(rect, radiuses, radiusInPixels, segments)
+	FillPath(dst, path, clr)
+}
+
+// raidus array maps like this
+//
+//	0 --- 1
+//	|     |
+//	|     |
+//	3 --- 2
+func StrokeRoundRectFastEx(
+	dst *eb.Image,
+	rect FRectangle,
+	radiuses [4]float64,
+	radiusInPixels bool,
+	segments [4]int,
+	stroke float64,
+	clr color.Color,
+) {
+	path := GetRoundRectPathFastEx(rect, radiuses, radiusInPixels, segments)
+	strokeOp := &ebv.StrokeOptions{}
+	strokeOp.Width = float32(stroke)
+	strokeOp.MiterLimit = 4
+	StrokePath(dst, path, strokeOp, clr)
+}
+
+func DrawVerticies(
+	dst *eb.Image,
+	vs []eb.Vertex,
+	is []uint16,
+	clr color.Color,
+	fillRule eb.FillRule,
+) {
+	r, g, b, a := clr.RGBA()
+
+	rf := float32(r) / 0xffff
+	gf := float32(g) / 0xffff
+	bf := float32(b) / 0xffff
+	af := float32(a) / 0xffff
+
+	for i := range vs {
+		vs[i].SrcX = 1
+		vs[i].SrcY = 1
+		vs[i].ColorR = rf
+		vs[i].ColorG = gf
+		vs[i].ColorB = bf
+		vs[i].ColorA = af
+	}
+
+	op := &DrawTrianglesOptions{}
+	op.ColorScaleMode = eb.ColorScaleModePremultipliedAlpha
+	op.FillRule = fillRule
+	DrawTriangles(dst, vs, is, WhiteImage, op)
+}
+
+func FillPath(
+	dst *eb.Image,
+	path *ebv.Path,
+	clr color.Color,
+) {
+	FillPathEx(
+		dst,
+		path,
+		clr,
+		eb.FillAll,
+	)
+}
+
+func StrokePath(
+	dst *eb.Image,
+	path *ebv.Path,
+	strokeOp *ebv.StrokeOptions,
+	clr color.Color,
+) {
+	StrokePathEx(
+		dst,
+		path,
+		strokeOp,
+		clr,
+		eb.FillAll,
+	)
+}
+
+func FillPathEx(
+	dst *eb.Image,
+	path *ebv.Path,
+	clr color.Color,
+	fillRule eb.FillRule,
+) {
+	vectorVertexBuffer = vectorVertexBuffer[:0]
+	vectorIndicesBuffer = vectorIndicesBuffer[:0]
+	vectorVertexBuffer, vectorIndicesBuffer = path.AppendVerticesAndIndicesForFilling(vectorVertexBuffer, vectorIndicesBuffer)
+	DrawVerticies(dst, vectorVertexBuffer, vectorIndicesBuffer, clr, fillRule)
+}
+
+func StrokePathEx(
+	dst *eb.Image,
+	path *ebv.Path,
+	strokeOp *ebv.StrokeOptions,
+	clr color.Color,
+	fillRule eb.FillRule,
+) {
+	vectorVertexBuffer = vectorVertexBuffer[:0]
+	vectorIndicesBuffer = vectorIndicesBuffer[:0]
+	vectorVertexBuffer, vectorIndicesBuffer = path.AppendVerticesAndIndicesForStroke(vectorVertexBuffer, vectorIndicesBuffer, strokeOp)
+	DrawVerticies(dst, vectorVertexBuffer, vectorIndicesBuffer, clr, fillRule)
+}
+
+// =================
+// path functions
+// =================
 
 // raidus and segments array maps like this
 //
@@ -221,6 +439,16 @@ func getRoundRectPathImpl(
 	return path
 }
 
+func GetRectPath(rect FRectangle) *ebv.Path {
+	path := &ebv.Path{}
+	path.MoveTo(f32(rect.Min.X), f32(rect.Min.Y))
+	path.LineTo(f32(rect.Max.X), f32(rect.Min.Y))
+	path.LineTo(f32(rect.Max.X), f32(rect.Max.Y))
+	path.LineTo(f32(rect.Min.X), f32(rect.Max.Y))
+	path.Close()
+	return path
+}
+
 func GetRoundRectPath(
 	rect FRectangle,
 	radius float64,
@@ -288,148 +516,6 @@ func GetRoundRectPathFastEx(
 	return getRoundRectPathImpl(rect, radiuses, segments, true)
 }
 
-func DrawFilledRoundRect(
-	dst *eb.Image,
-	rect FRectangle,
-	radius float64,
-	radiusInPixels bool,
-	clr color.Color,
-) {
-	path := GetRoundRectPath(rect, radius, radiusInPixels)
-	DrawFilledPath(dst, path, clr)
-}
-
-func StrokeRoundRect(
-	dst *eb.Image,
-	rect FRectangle,
-	radius float64,
-	radiusInPixels bool,
-	stroke float64,
-	clr color.Color,
-) {
-	path := GetRoundRectPath(rect, radius, radiusInPixels)
-	strokeOp := &ebv.StrokeOptions{}
-	strokeOp.MiterLimit = 4
-	strokeOp.Width = float32(stroke)
-	StrokePath(dst, path, strokeOp, clr)
-}
-
-func DrawFilledRoundRectFast(
-	dst *eb.Image,
-	rect FRectangle,
-	radius float64,
-	radiusInPixels bool,
-	segments int,
-	clr color.Color,
-) {
-	path := GetRoundRectPathFast(
-		rect,
-		radius,
-		radiusInPixels,
-		segments,
-	)
-	DrawFilledPath(dst, path, clr)
-}
-
-func StrokeRoundRectFast(
-	dst *eb.Image,
-	rect FRectangle,
-	radius float64,
-	radiusInPixels bool,
-	segments int,
-	stroke float64,
-	clr color.Color,
-) {
-	path := GetRoundRectPathFast(
-		rect,
-		radius,
-		radiusInPixels,
-		segments,
-	)
-	strokeOp := &ebv.StrokeOptions{}
-	strokeOp.MiterLimit = 4
-	strokeOp.Width = float32(stroke)
-	StrokePath(dst, path, strokeOp, clr)
-}
-
-// raidus array maps like this
-//
-//	0 --- 1
-//	|     |
-//	|     |
-//	3 --- 2
-func DrawFilledRoundRectEx(
-	dst *eb.Image,
-	rect FRectangle,
-	radiuses [4]float64,
-	radiusInPixels bool,
-	clr color.Color,
-) {
-	path := GetRoundRectPathEx(rect, radiuses, radiusInPixels)
-	DrawFilledPath(dst, path, clr)
-}
-
-// raidus array maps like this
-//
-//	0 --- 1
-//	|     |
-//	|     |
-//	3 --- 2
-func StrokeRoundRectEx(
-	dst *eb.Image,
-	rect FRectangle,
-	radiuses [4]float64,
-	radiusInPixels bool,
-	stroke float64,
-	clr color.Color,
-) {
-	path := GetRoundRectPathEx(rect, radiuses, radiusInPixels)
-	strokeOp := &ebv.StrokeOptions{}
-	strokeOp.Width = float32(stroke)
-	strokeOp.MiterLimit = 4
-	StrokePath(dst, path, strokeOp, clr)
-}
-
-// raidus array maps like this
-//
-//	0 --- 1
-//	|     |
-//	|     |
-//	3 --- 2
-func DrawFilledRoundRectFastEx(
-	dst *eb.Image,
-	rect FRectangle,
-	radiuses [4]float64,
-	radiusInPixels bool,
-	segments [4]int,
-	clr color.Color,
-) {
-	path := GetRoundRectPathFastEx(rect, radiuses, radiusInPixels, segments)
-	DrawFilledPath(dst, path, clr)
-}
-
-// raidus array maps like this
-//
-//	0 --- 1
-//	|     |
-//	|     |
-//	3 --- 2
-func StrokeRoundRectFastEx(
-	dst *eb.Image,
-	rect FRectangle,
-	radiuses [4]float64,
-	radiusInPixels bool,
-	segments [4]int,
-	stroke float64,
-	clr color.Color,
-) {
-	path := GetRoundRectPathFastEx(rect, radiuses, radiusInPixels, segments)
-	strokeOp := &ebv.StrokeOptions{}
-	strokeOp.Width = float32(stroke)
-	strokeOp.MiterLimit = 4
-	StrokePath(dst, path, strokeOp, clr)
-}
-
 func ArcFast(p *ebv.Path, x, y, radius, startAngle, endAngle float64, dir ebv.Direction, segments int) {
 	if segments <= 1 {
 		compass := FPt(radius, 0)
@@ -492,86 +578,4 @@ func ArcFast(p *ebv.Path, x, y, radius, startAngle, endAngle float64, dir ebv.Di
 
 	end := compass.Rotate(endAngle).Add(arcCenter)
 	p.LineTo(f32(end.X), f32(end.Y))
-}
-
-func DrawVerticies(
-	dst *eb.Image,
-	vs []eb.Vertex,
-	is []uint16,
-	clr color.Color,
-	fillRule eb.FillRule,
-) {
-	r, g, b, a := clr.RGBA()
-
-	rf := float32(r) / 0xffff
-	gf := float32(g) / 0xffff
-	bf := float32(b) / 0xffff
-	af := float32(a) / 0xffff
-
-	for i := range vs {
-		vs[i].SrcX = 1
-		vs[i].SrcY = 1
-		vs[i].ColorR = rf
-		vs[i].ColorG = gf
-		vs[i].ColorB = bf
-		vs[i].ColorA = af
-	}
-
-	op := &DrawTrianglesOptions{}
-	op.ColorScaleMode = eb.ColorScaleModePremultipliedAlpha
-	op.FillRule = fillRule
-	DrawTriangles(dst, vs, is, WhiteImage, op)
-}
-
-func DrawFilledPath(
-	dst *eb.Image,
-	path *ebv.Path,
-	clr color.Color,
-) {
-	DrawFilledPathEx(
-		dst,
-		path,
-		clr,
-		eb.FillAll,
-	)
-}
-
-func StrokePath(
-	dst *eb.Image,
-	path *ebv.Path,
-	strokeOp *ebv.StrokeOptions,
-	clr color.Color,
-) {
-	StrokePathEx(
-		dst,
-		path,
-		strokeOp,
-		clr,
-		eb.FillAll,
-	)
-}
-
-func DrawFilledPathEx(
-	dst *eb.Image,
-	path *ebv.Path,
-	clr color.Color,
-	fillRule eb.FillRule,
-) {
-	vectorVertexBuffer = vectorVertexBuffer[:0]
-	vectorIndicesBuffer = vectorIndicesBuffer[:0]
-	vectorVertexBuffer, vectorIndicesBuffer = path.AppendVerticesAndIndicesForFilling(vectorVertexBuffer, vectorIndicesBuffer)
-	DrawVerticies(dst, vectorVertexBuffer, vectorIndicesBuffer, clr, fillRule)
-}
-
-func StrokePathEx(
-	dst *eb.Image,
-	path *ebv.Path,
-	strokeOp *ebv.StrokeOptions,
-	clr color.Color,
-	fillRule eb.FillRule,
-) {
-	vectorVertexBuffer = vectorVertexBuffer[:0]
-	vectorIndicesBuffer = vectorIndicesBuffer[:0]
-	vectorVertexBuffer, vectorIndicesBuffer = path.AppendVerticesAndIndicesForStroke(vectorVertexBuffer, vectorIndicesBuffer, strokeOp)
-	DrawVerticies(dst, vectorVertexBuffer, vectorIndicesBuffer, clr, fillRule)
 }

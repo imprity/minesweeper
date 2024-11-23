@@ -2212,7 +2212,7 @@ func (rb *RetryButton) Draw(dst *eb.Image) {
 	const segments = 6
 	const radius = 0.4
 
-	DrawFilledRoundRectFast(
+	FillRoundRectFast(
 		dst,
 		bottomRect,
 		radius,
@@ -2221,7 +2221,7 @@ func (rb *RetryButton) Draw(dst *eb.Image) {
 		color.NRGBA{0, 0, 0, 255},
 	)
 
-	DrawFilledRoundRectFast(
+	FillRoundRectFast(
 		dst,
 		topRect,
 		radius,

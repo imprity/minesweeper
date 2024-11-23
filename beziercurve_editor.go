@@ -181,7 +181,7 @@ func (be *BezierEditor) Draw(dst *eb.Image) {
 	// =========================
 	// draw background
 	// =========================
-	DrawFilledRect(dst, be.Rect, color.NRGBA{0, 0, 0, 130})
+	FillRect(dst, be.Rect, color.NRGBA{0, 0, 0, 130})
 
 	// =========================
 	// draw CurveRect
@@ -324,16 +324,16 @@ func (be *BezierEditor) Draw(dst *eb.Image) {
 		)
 
 		// draw circles
-		DrawFilledCircle(dst, sps[0].X, sps[0].Y, 7, circleFill)
+		FillCircle(dst, sps[0].X, sps[0].Y, 7, circleFill)
 		StrokeCircle(dst, sps[0].X, sps[0].Y, 7, 2, circleStroke)
 
-		DrawFilledCircle(dst, sps[3].X, sps[3].Y, 7, circleFill)
+		FillCircle(dst, sps[3].X, sps[3].Y, 7, circleFill)
 		StrokeCircle(dst, sps[3].X, sps[3].Y, 7, 2, circleStroke)
 
-		DrawFilledCircle(dst, sps[1].X, sps[1].Y, 7, circleFill)
+		FillCircle(dst, sps[1].X, sps[1].Y, 7, circleFill)
 		StrokeCircle(dst, sps[1].X, sps[1].Y, 7, 2, circleStroke)
 
-		DrawFilledCircle(dst, sps[2].X, sps[2].Y, 7, circleFill)
+		FillCircle(dst, sps[2].X, sps[2].Y, 7, circleFill)
 		StrokeCircle(dst, sps[2].X, sps[2].Y, 7, 2, circleStroke)
 	}
 

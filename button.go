@@ -205,7 +205,7 @@ func (b *TextButton) Draw(dst *eb.Image) {
 	}
 
 	// draw background color
-	DrawFilledRect(dst, b.Rect, bgColor)
+	FillRect(dst, b.Rect, bgColor)
 
 	// draw text color
 	if len(b.Text) > 0 {
