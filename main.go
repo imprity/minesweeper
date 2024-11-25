@@ -65,8 +65,8 @@ func (a *App) Update() error {
 	// ==========================
 	// DebugPrint
 	// ==========================
-	DebugPrint("FPS", fpsStr)
-	DebugPrint("TPS", tpsStr)
+	DebugPuts("FPS", fpsStr)
+	DebugPuts("TPS", tpsStr)
 
 	// ==========================
 	// asset loading and saving

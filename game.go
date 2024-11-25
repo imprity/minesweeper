@@ -259,8 +259,9 @@ type Game struct {
 func NewGame(boardWidth, boardHeight, mineCount int) *Game {
 	g := new(Game)
 
-	g.viBuffers[0] = new(VIBuffer)
-	g.viBuffers[1] = new(VIBuffer)
+	// NOTE : hard coded number based on previous run
+	g.viBuffers[0] = NewVIBuffer(4096, 16384)
+	g.viBuffers[1] = NewVIBuffer(2048, 2048)
 
 	g.mineCount = mineCount
 
@@ -737,6 +738,15 @@ type VIBuffer struct {
 	Indices  []uint16
 }
 
+func NewVIBuffer(vertCap int, indexCap int) *VIBuffer {
+	vi := new(VIBuffer)
+
+	vi.Vertices = make([]eb.Vertex, 0, vertCap)
+	vi.Indices = make([]uint16, 0, indexCap)
+
+	return vi
+}
+
 func (vi *VIBuffer) Reset() {
 	vi.Vertices = vi.Vertices[:0]
 	vi.Indices = vi.Indices[:0]
@@ -777,6 +787,46 @@ func VIaddRect(buffer *VIBuffer, rect FRectangle, clr color.Color) {
 	buffer.Indices = append(
 		buffer.Indices,
 		indexStart+0, indexStart+1, indexStart+2, indexStart+0, indexStart+2, indexStart+3,
+	)
+}
+
+// assumes you will use WhiteImage
+// so it will set SrcX and SrcY to 1
+func VIaddRoundRectEx(
+	buffer *VIBuffer,
+	rect FRectangle,
+	radiuses [4]float64,
+	radiusInPixels bool,
+	segments [4]int,
+	clr color.Color,
+) {
+	buffer.Vertices, buffer.Indices = AddRoundRectVerts(
+		buffer.Vertices, buffer.Indices,
+		rect,
+		radiuses,
+		radiusInPixels,
+		segments,
+		clr,
+	)
+}
+
+// assumes you will use WhiteImage
+// so it will set SrcX and SrcY to 1
+func VIaddRoundRect(
+	buffer *VIBuffer,
+	rect FRectangle,
+	radius float64,
+	radiusInPixels bool,
+	segments int,
+	clr color.Color,
+) {
+	buffer.Vertices, buffer.Indices = AddRoundRectVerts(
+		buffer.Vertices, buffer.Indices,
+		rect,
+		[4]float64{radius, radius, radius, radius},
+		radiusInPixels,
+		[4]int{segments, segments, segments, segments},
+		clr,
 	)
 }
 
@@ -953,11 +1003,23 @@ func DrawBoard(
 					innerRadius := radius * min(innerRect.Dx(), innerRect.Dy()) * 0.5
 					outerRadius := radius * min(outerRect.Dx(), outerRect.Dy()) * 0.5
 
-					outerP := GetRoundRectPathFast(outerRect, outerRadius, true, 5)
-					innerP := GetRoundRectPathFast(innerRect, innerRadius, true, 5)
+					/*
+						outerP := GetRoundRectPathFast(outerRect, outerRadius, true, 5)
+						innerP := GetRoundRectPathFast(innerRect, innerRadius, true, 5)
 
-					VIaddFillPath(shapeBuf, *outerP, ColorFade(ColorMineBg1, style.BgAlpha))
-					VIaddFillPath(shapeBuf, *innerP, ColorFade(ColorMineBg2, style.BgAlpha))
+						VIaddFillPath(shapeBuf, *outerP, ColorFade(ColorMineBg1, style.BgAlpha))
+						VIaddFillPath(shapeBuf, *innerP, ColorFade(ColorMineBg2, style.BgAlpha))
+					*/
+					VIaddRoundRect(
+						shapeBuf,
+						outerRect, outerRadius, true, 5,
+						ColorFade(ColorMineBg1, style.BgAlpha),
+					)
+					VIaddRoundRect(
+						shapeBuf,
+						innerRect, innerRadius, true, 5,
+						ColorFade(ColorMineBg2, style.BgAlpha),
+					)
 
 					VIaddSubViewInRect(spriteBuf, innerRect, 1, 0, 0, ColorFade(ColorMine, style.BgAlpha), GetMineTile())
 				}
@@ -977,8 +1039,16 @@ func DrawBoard(
 			if ShouldDrawTile(style) {
 				strokeColor := ColorFade(style.TileStrokeColor, style.TileAlpha)
 
-				p := GetRoundRectPathFastEx(strokeRect, radiusPx, true, [4]int{segments, segments, segments, segments})
-				VIaddFillPath(shapeBuf, *p, strokeColor)
+				/*
+					p := GetRoundRectPathFastEx(strokeRect, radiusPx, true, [4]int{segments, segments, segments, segments})
+					VIaddFillPath(shapeBuf, *p, strokeColor)
+				*/
+
+				VIaddRoundRectEx(
+					shapeBuf,
+					strokeRect, radiusPx, true, [4]int{segments, segments, segments, segments},
+					strokeColor,
+				)
 			}
 		},
 	)
@@ -989,9 +1059,16 @@ func DrawBoard(
 		func(x, y int, style TileStyle, strokeRect, fillRect FRectangle, radiusPx [4]float64) {
 			if ShouldDrawTile(style) {
 				fillColor := ColorFade(style.TileFillColor, style.TileAlpha)
+				/*
 
-				p := GetRoundRectPathFastEx(fillRect, radiusPx, true, [4]int{segments, segments, segments, segments})
-				VIaddFillPath(shapeBuf, *p, fillColor)
+					p := GetRoundRectPathFastEx(fillRect, radiusPx, true, [4]int{segments, segments, segments, segments})
+					VIaddFillPath(shapeBuf, *p, fillColor)
+				*/
+				VIaddRoundRectEx(
+					shapeBuf,
+					fillRect, radiusPx, true, [4]int{segments, segments, segments, segments},
+					fillColor,
+				)
 			}
 		},
 	)

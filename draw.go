@@ -579,3 +579,176 @@ func ArcFast(p *ebv.Path, x, y, radius, startAngle, endAngle float64, dir ebv.Di
 	end := compass.Rotate(endAngle).Add(arcCenter)
 	p.LineTo(f32(end.X), f32(end.Y))
 }
+
+// ================
+// misc
+// ================
+
+type TriangleFan struct {
+	Vertices    []eb.Vertex
+	Indices     []uint16
+	IndexStart  uint16
+	VertexCount int
+}
+
+func NewTriangleFan(vs []eb.Vertex, is []uint16) TriangleFan {
+	return TriangleFan{
+		Vertices:   vs,
+		Indices:    is,
+		IndexStart: uint16(len(vs)),
+	}
+}
+
+func (tf *TriangleFan) ExtendFan(dst FPoint, src FPoint, clr color.Color) ([]eb.Vertex, []uint16) {
+	r, g, b, a := clr.RGBA()
+	vert := eb.Vertex{
+		SrcX: f32(src.X), SrcY: f32(src.Y),
+		DstX: f32(dst.X), DstY: f32(dst.Y),
+		ColorR: float32(r) / 0xffff,
+		ColorG: float32(g) / 0xffff,
+		ColorB: float32(b) / 0xffff,
+		ColorA: float32(a) / 0xffff,
+	}
+
+	if len(tf.Vertices) <= 2 {
+		tf.Vertices = append(tf.Vertices, vert)
+
+		if len(tf.Vertices) >= 3 {
+			tf.Indices = append(tf.Indices, tf.IndexStart+0, tf.IndexStart+1, tf.IndexStart+2)
+		}
+		return tf.Vertices, tf.Indices
+	}
+
+	i0 := uint16(tf.IndexStart)
+	i1 := uint16(tf.Indices[len(tf.Indices)-1])
+	i2 := uint16(len(tf.Vertices))
+
+	tf.Indices = append(tf.Indices, i0, i1, i2)
+	tf.Vertices = append(tf.Vertices, vert)
+
+	tf.VertexCount++
+
+	return tf.Vertices, tf.Indices
+}
+
+func (tf *TriangleFan) CloseFan() ([]eb.Vertex, []uint16) {
+	tf.Indices = append(
+		tf.Indices,
+		tf.IndexStart+0,
+		tf.Indices[len(tf.Indices)-1],
+		tf.IndexStart+1,
+	)
+
+	return tf.Vertices, tf.Indices
+}
+
+func addRoundRectVertsImpl(
+	vs []eb.Vertex, is []uint16,
+	rect FRectangle,
+	radiuses [4]float64,
+	segments [4]int,
+	clr color.Color,
+) ([]eb.Vertex, []uint16) {
+	radiusMax := min(rect.Dx()*0.5, rect.Dy()*0.5)
+
+	triangleFan := NewTriangleFan(vs, is)
+
+	//clamp the radius to the size of rect
+	for i, v := range radiuses {
+		radiuses[i] = min(v, radiusMax)
+	}
+
+	inLeftTop := FPt(rect.Min.X+radiuses[0], rect.Min.Y+radiuses[0])
+	inRightTop := FPt(rect.Max.X-radiuses[1], rect.Min.Y+radiuses[1])
+	inRightBottom := FPt(rect.Max.X-radiuses[2], rect.Max.Y-radiuses[2])
+	inLeftBottom := FPt(rect.Min.X+radiuses[3], rect.Max.Y-radiuses[3])
+
+	center := FRectangleCenter(rect)
+
+	triangleFan.ExtendFan(center, FPt(1, 1), clr)
+
+	// left top
+	if segments[0] <= 1 || radiuses[0] < 1.5 {
+		vs, is = triangleFan.ExtendFan(rect.Min, FPt(1, 1), clr)
+	} else {
+		compass := FPt(-radiuses[0], 0)
+		ad := (Pi * 0.5) / f64(segments[0]-1)
+
+		for i := range segments[0] {
+			rotated := compass.Rotate(ad * f64(i))
+			rotated = rotated.Add(inLeftTop)
+
+			triangleFan.ExtendFan(rotated, FPt(1, 1), clr)
+		}
+	}
+
+	// right top
+	if segments[1] <= 1 || radiuses[1] < 1.5 {
+		triangleFan.ExtendFan(FPt(rect.Max.X, rect.Min.Y), FPt(1, 1), clr)
+	} else {
+		compass := FPt(0, -radiuses[1])
+		ad := (Pi * 0.5) / f64(segments[1]-1)
+
+		for i := range segments[1] {
+			rotated := compass.Rotate(ad * f64(i))
+			rotated = rotated.Add(inRightTop)
+
+			triangleFan.ExtendFan(rotated, FPt(1, 1), clr)
+		}
+	}
+	// right bottom
+	if segments[2] <= 1 || radiuses[2] < 1.5 {
+		triangleFan.ExtendFan(rect.Max, FPt(1, 1), clr)
+	} else {
+		compass := FPt(radiuses[2], 0)
+		ad := (Pi * 0.5) / f64(segments[2]-1)
+
+		for i := range segments[2] {
+			rotated := compass.Rotate(ad * f64(i))
+			rotated = rotated.Add(inRightBottom)
+
+			triangleFan.ExtendFan(rotated, FPt(1, 1), clr)
+		}
+	}
+	// left bottom
+	if segments[3] <= 1 || radiuses[3] < 1.5 {
+		triangleFan.ExtendFan(FPt(rect.Min.X, rect.Max.Y), FPt(1, 1), clr)
+	} else {
+		compass := FPt(0, radiuses[3])
+		ad := (Pi * 0.5) / f64(segments[3]-1)
+
+		for i := range segments[3] {
+			rotated := compass.Rotate(ad * f64(i))
+			rotated = rotated.Add(inLeftBottom)
+
+			triangleFan.ExtendFan(rotated, FPt(1, 1), clr)
+		}
+	}
+
+	// close fan
+	return triangleFan.CloseFan()
+}
+
+func AddRoundRectVerts(
+	vs []eb.Vertex,
+	is []uint16,
+	rect FRectangle,
+	radiuses [4]float64,
+	radiusInPixels bool,
+	segments [4]int,
+	clr color.Color,
+) ([]eb.Vertex, []uint16) {
+	if !radiusInPixels {
+		toPx := min(rect.Dx(), rect.Dy()) * 0.5
+		for i := range 4 {
+			radiuses[i] = radiuses[i] * toPx
+		}
+	}
+	return addRoundRectVertsImpl(
+		vs, is,
+		rect,
+		radiuses,
+		segments,
+		clr,
+	)
+}

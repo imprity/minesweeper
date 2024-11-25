@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"image/color"
 	"strings"
 
@@ -20,7 +21,15 @@ var TheDebugPrintManager struct {
 	builder strings.Builder
 }
 
-func DebugPrint(key, value string) {
+func DebugPrintf(key, fmtStr string, values ...any) {
+	DebugPuts(key, fmt.Sprintf(fmtStr, values...))
+}
+
+func DebugPrint(key string, values ...any) {
+	DebugPuts(key, fmt.Sprint(values...))
+}
+
+func DebugPuts(key, value string) {
 	dm := &TheDebugPrintManager
 
 	for i, msg := range dm.DebugMsgs {
