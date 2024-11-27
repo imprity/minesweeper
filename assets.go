@@ -348,7 +348,7 @@ func LoadAssets() {
 		sfs = append(sfs, mustLoadAudioBytes("tmps/converted/krank_sounds/summer/unlink.ogg"))             // 13
 		sfs = append(sfs, mustLoadAudioBytes("tmps/converted/interface/cut.ogg"))                          // 14
 		sfs = append(sfs, mustLoadAudioBytes("tmps/converted/krank_sounds/summer/link.ogg"))               // 15
-		sfs = append(sfs, mustLoadAudioBytes("tmps/converted/krank_sounds/summer/link.ogg"))               // 15
+		sfs = append(sfs, mustLoadAudioBytes("tmps/converted/krank_sounds/summer/unlink.ogg"))             // 16
 
 		SoundEffects = sfs
 	}

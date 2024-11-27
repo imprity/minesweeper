@@ -455,7 +455,7 @@ func (g *Game) Update() {
 
 		if prevState != g.GameState {
 			if g.GameState == GameStateLost { // on loss
-				PlaySoundBytes(SoundEffects[8], 1.0)
+				PlaySoundBytes(SoundEffects[15], 0.7)
 				g.QueueDefeatAnimation(ms.BoardX, ms.BoardY)
 			} else if g.GameState == GameStateWon { // on win
 				g.QueueWinAnimation(ms.BoardX, ms.BoardY)
