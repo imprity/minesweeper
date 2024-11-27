@@ -367,9 +367,7 @@ func (g *Game) Update() {
 		} else if ms.JustPressedR {
 			interaction = InteractionTypeFlag
 		} else if ms.JustPressedL {
-			if !g.board.Flags[ms.BoardX][ms.BoardY] {
-				interaction = InteractionTypeStep
-			}
+			interaction = InteractionTypeStep
 		}
 
 		if interaction != InteractionTypeNone {

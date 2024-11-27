@@ -279,6 +279,9 @@ func (board *Board) InteractAt(posX int, posY int, interaction BoardInteractionT
 				board.PlaceMines(minesToSpawn, posX, posY)
 			}
 			if !board.Revealed[posX][posY] {
+				if board.Flags[posX][posY] { // if flag is up, ignore step
+					return GameStatePlaying
+				}
 				if board.Mines[posX][posY] {
 					return GameStateLost // user stepped on a mine
 				}
