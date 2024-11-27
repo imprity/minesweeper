@@ -26,7 +26,7 @@ func InitClipboardManager() {
 	if err == nil {
 		InfoLogger.Print("clipboard initialized")
 	} else {
-		ErrorLogger.Printf("failed to initialize clipboard %v", err)
+		ErrLogger.Printf("failed to initialize clipboard %v", err)
 	}
 }
 

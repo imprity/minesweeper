@@ -13,7 +13,7 @@ var hsvShader *eb.Shader
 func init() {
 	shader, err := eb.NewShader([]byte(hsvShaderCode))
 	if err != nil {
-		ErrorLogger.Fatalf("failed to load the shader %v", err)
+		ErrLogger.Fatalf("failed to load the shader %v", err)
 	}
 
 	hsvShader = shader

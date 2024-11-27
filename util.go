@@ -5,6 +5,7 @@ import (
 	"image/color"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	eb "github.com/hajimehoshi/ebiten/v2"
@@ -94,6 +95,17 @@ func RelativePath(path string) (string, error) {
 	joined := filepath.Join(filepath.Dir(exePath), path)
 
 	return joined, nil
+}
+
+// examples
+// CheckFileExt("image.png", ".png") => return true
+// CheckFileExt("image.PNG", ".png") => return true
+// CheckFileExt("image.jpg", ".png") => return false
+func CheckFileExt(filepath string, ext string) bool {
+	filepath = strings.ToLower(filepath)
+	ext = strings.ToLower(ext)
+
+	return strings.HasSuffix(filepath, ext)
 }
 
 func DrawSubViewInRect(

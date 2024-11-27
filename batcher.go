@@ -1,0 +1,258 @@
+//go:build ignore
+
+package main
+
+import (
+	"bytes"
+	"errors"
+	"flag"
+	"fmt"
+	"io/fs"
+	"log"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+)
+
+var (
+	SrcDir string
+	DstDir string
+)
+
+func init() {
+	flag.StringVar(&SrcDir, "s", "", "source folder")
+	flag.StringVar(&DstDir, "d", "", "destination folder")
+}
+
+var (
+	ErrLogger  = log.New(os.Stderr, "[ FAIL! ]: ", log.Lshortfile)
+	WarnLogger = log.New(os.Stderr, "[ WARN! ]: ", log.Lshortfile)
+	InfoLogger = log.New(os.Stdout, "", 0)
+)
+
+func main() {
+	flag.Parse()
+
+	// =========================
+	// check if user gave path
+	// =========================
+	if len(SrcDir) <= 0 {
+		ErrLogger.Print("no source folder provided")
+		flag.Usage()
+		CrashOnError(ErrorDefault)
+	}
+	if len(DstDir) <= 0 {
+		ErrLogger.Print("no destination folder provided")
+		flag.Usage()
+		CrashOnError(ErrorDefault)
+	}
+
+	// =============================
+	// check if SrcDir is folder
+	// =============================
+	if isDir, err := IsDir(SrcDir); err != nil {
+		ErrLogger.Printf("failed to check if \"%s\" a folder: %v", SrcDir, err)
+		CrashOnError(SimpleErrorFromError(err))
+	} else if !isDir {
+		ErrLogger.Printf("\"%s\" is not a folder", SrcDir)
+		CrashOnError(ErrorDefault)
+	}
+
+	// =============================
+	// collect files and folders
+	// =============================
+	// TODO: skip folders that has no audios
+	var dirents []string
+	var audioFiles []string
+	{
+		skippedRoot := false
+
+		filepath.Walk(SrcDir, func(path string, info fs.FileInfo, err error) error {
+			if err != nil {
+				ErrLogger.Printf("failed to walk \"%s\": %v", path, err)
+				return filepath.SkipDir
+			}
+
+			if !skippedRoot {
+				if isSame, err := IsSamePath(path, SrcDir); err != nil {
+					ErrLogger.Printf("failed to check if path is source folder: %v", err)
+					CrashOnError(SimpleErrorFromError(err))
+				} else if isSame {
+					skippedRoot = true
+					return nil
+				}
+			}
+
+			if info.IsDir() {
+				dirents = append(dirents, path)
+			} else if info.Mode().IsRegular() {
+				low := strings.ToLower(path)
+				if strings.HasSuffix(low, ".mp3") || strings.HasSuffix(low, ".ogg") || strings.HasSuffix(low, ".wav") {
+					audioFiles = append(audioFiles, path)
+				}
+			}
+
+			return nil
+		})
+	}
+
+	fmt.Printf("\n")
+	fmt.Printf("Audio Files\n")
+	fmt.Printf("\n")
+	for _, file := range audioFiles {
+		fmt.Printf("    %s\n", file)
+	}
+	fmt.Printf("\n")
+
+	var dstDirents []string = make([]string, len(dirents))
+	var dstAudioFiles []string = make([]string, len(audioFiles))
+
+	// ======================================
+	// make everything relative to DstDir
+	// ======================================
+	for i, dirent := range dirents {
+		if rel, err := filepath.Rel(SrcDir, dirent); err != nil {
+			ErrLogger.Printf("failed to make path local: %v", err)
+			CrashOnError(SimpleErrorFromError(err))
+		} else {
+			dstDirents[i] = filepath.Join(DstDir, rel)
+		}
+	}
+	for i, file := range audioFiles {
+		if rel, err := filepath.Rel(SrcDir, file); err != nil {
+			ErrLogger.Printf("failed to make path local: %v", err)
+			CrashOnError(SimpleErrorFromError(err))
+		} else {
+			dstAudioFiles[i] = filepath.Join(DstDir, rel)
+		}
+	}
+
+	// ======================================
+	// create folder structure
+	// ======================================
+	for _, dirent := range dstDirents {
+		if err := MkDir(dirent); err.IsFail {
+			CrashOnError(err)
+		}
+	}
+
+	// ffmpeg -i .\tmps\test-sounds\UI_SFX_Set\click1.wav -vn -ar 44100 -ac 2 -q:a 2 ./meme/test.ogg
+
+	// ======================================
+	// convert audio
+	// ======================================
+	var cmds []*exec.Cmd
+	var stdouts []*bytes.Buffer
+	var stderrs []*bytes.Buffer
+
+	for i, file := range audioFiles {
+		dstFile := dstAudioFiles[i]
+		if before, found := strings.CutSuffix(dstFile, filepath.Ext(dstFile)); found {
+			dstFile = before + ".ogg"
+		}
+
+		cmd := exec.Command(
+			"ffmpeg",
+			"-i", file, // input file
+			"-vn",          // no video
+			"-ar", "44100", // 44100 hz
+			"-ac", "2", // 2 audio channel
+			//"-q:a", "2", // auto bitrate
+			"-b", "192",
+			"-q", "10",
+			dstFile,
+		)
+
+		stdout := &bytes.Buffer{}
+		stderr := &bytes.Buffer{}
+
+		cmd.Stdout = stdout
+		cmd.Stderr = stderr
+
+		InfoLogger.Print(cmd.String())
+
+		if err := cmd.Start(); err != nil {
+			ErrLogger.Printf("failed to convert \"%s\": %v", file, err)
+		} else {
+			cmds = append(cmds, cmd)
+			stdouts = append(stdouts, stdout)
+			stderrs = append(stderrs, stderr)
+		}
+	}
+
+	for i, cmd := range cmds {
+		if err := cmd.Wait(); err != nil {
+			ErrLogger.Printf("%s\n\n", cmd.String())
+			os.Stdout.Write(stderrs[i].Bytes())
+		}
+	}
+}
+
+type SimpleError struct {
+	IsFail   bool
+	ExitCode int
+}
+
+var ErrorDefault = SimpleError{
+	IsFail:   true,
+	ExitCode: 69,
+}
+
+var ErrorOk = SimpleError{
+	IsFail: false,
+}
+
+func SimpleErrorFromError(err error) SimpleError {
+	if err == nil {
+		return SimpleError{}
+	}
+	var exitErr *exec.ExitError
+	if ok := errors.As(err, &exitErr); ok {
+		return SimpleError{
+			IsFail:   true,
+			ExitCode: exitErr.ExitCode(),
+		}
+	} else {
+		return ErrorDefault
+	}
+}
+
+func CrashOnError(err SimpleError) {
+	os.Exit(err.ExitCode)
+}
+
+func IsDir(path string) (bool, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return false, err
+	}
+	return info.IsDir(), nil
+}
+
+func IsSamePath(pathA, pathB string) (bool, error) {
+	absPathA, err := filepath.Abs(pathA)
+	if err != nil {
+		return false, err
+	}
+	absPathB, err := filepath.Abs(pathB)
+	if err != nil {
+		return false, err
+	}
+
+	return absPathA == absPathB, nil
+}
+
+// permission is set to 0755
+func MkDir(path string) SimpleError {
+	path = filepath.Clean(path)
+
+	InfoLogger.Printf("creating %s folder", path)
+
+	if err := os.MkdirAll(path, 0755); err != nil {
+		ErrLogger.Printf("failed to create \"%s\" folder : %v", path, err)
+		return SimpleErrorFromError(err)
+	}
+
+	return SimpleError{}
+}

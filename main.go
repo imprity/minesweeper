@@ -11,6 +11,7 @@ import (
 	_ "net/http/pprof"
 
 	eb "github.com/hajimehoshi/ebiten/v2"
+	eba "github.com/hajimehoshi/ebiten/v2/audio"
 )
 
 var (
@@ -18,7 +19,9 @@ var (
 	ScreenHeight float64 = 600
 )
 
-var ErrorLogger *log.Logger = log.New(os.Stderr, "ERROR: ", log.Lshortfile)
+var AudioContext *eba.Context
+
+var ErrLogger *log.Logger = log.New(os.Stderr, "ERROR: ", log.Lshortfile)
 var InfoLogger *log.Logger = log.New(os.Stdout, "INFO: ", log.Lshortfile)
 
 var FlagHotReload bool
@@ -118,6 +121,8 @@ func main() {
 			InfoLogger.Print(http.ListenAndServe("localhost:6060", nil))
 		}()
 	}
+
+	AudioContext = eba.NewContext(44100)
 
 	InitClipboardManager()
 

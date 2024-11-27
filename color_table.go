@@ -106,7 +106,7 @@ func init() {
 
 	for i := ColorTableIndex(0); i < ColorTableSize; i++ {
 		if !colorSet[i] {
-			ErrorLogger.Fatalf("color for %s has no default value", i.String())
+			ErrLogger.Fatalf("color for %s has no default value", i.String())
 		}
 	}
 

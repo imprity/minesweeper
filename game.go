@@ -277,6 +277,8 @@ func NewGame(boardWidth, boardHeight, mineCount int) *Game {
 
 	g.RetryButton.OnClick = func() {
 		g.QueueResetBoardAnimation()
+		// TODO: sound plays on release instead of press
+		PlaySoundBytes(SoundEffects[12], 0.8)
 	}
 
 	g.GameAnimations = NewCircularQueue[CallbackAnimation](10)
@@ -361,7 +363,9 @@ func (g *Game) Update() {
 		} else if ms.JustPressedR {
 			interaction = InteractionTypeFlag
 		} else if ms.JustPressedL {
-			interaction = InteractionTypeStep
+			if !g.board.Flags[ms.BoardX][ms.BoardY] {
+				interaction = InteractionTypeStep
+			}
 		}
 
 		if interaction != InteractionTypeNone {
@@ -430,13 +434,15 @@ func (g *Game) Update() {
 	// on state changes
 	// ==============================
 	if stateChanged {
-		// check if we need to start board reveal animation
+		// check if we board has been revealed
 	REVEAL_CHECK:
 		for x := range g.board.Width {
 			for y := range g.board.Height {
 				if g.board.Revealed[x][y] && !g.prevBoard.Revealed[x][y] {
+					// on reveal
 					g.QueueRevealAnimation(
 						g.prevBoard.Revealed, g.board.Revealed, ms.BoardX, ms.BoardY)
+					//PlaySoundBytes(SoundEffects[15], 0.5)
 
 					break REVEAL_CHECK
 				}
@@ -444,10 +450,12 @@ func (g *Game) Update() {
 		}
 
 		if prevState != g.GameState {
-			if g.GameState == GameStateLost {
+			if g.GameState == GameStateLost { // on loss
+				PlaySoundBytes(SoundEffects[8], 1.0)
 				g.QueueDefeatAnimation(ms.BoardX, ms.BoardY)
-			} else if g.GameState == GameStateWon {
+			} else if g.GameState == GameStateWon { // on win
 				g.QueueWinAnimation(ms.BoardX, ms.BoardY)
+				PlaySoundBytes(SoundEffects[6], 0.6)
 			}
 		}
 
@@ -464,6 +472,17 @@ func (g *Game) Update() {
 			if g.OnGameEnd != nil {
 				g.OnGameEnd(g.GameState == GameStateWon)
 			}
+		}
+	}
+
+	if interaction != InteractionTypeNone {
+		// TODO: click sound is so fucking annoying
+		// especially because it plays without interval limit
+		PlaySoundBytes(SoundEffects[10], 0.4)
+		if !stateChanged { // user wanted to do something but nothing happened
+			// pass
+		} else { // something did happened
+			// pass
 		}
 	}
 
@@ -1386,6 +1405,8 @@ func (g *Game) QueueRevealAnimation(revealsBefore, revealsAfter [][]bool, origin
 	const maxDuration = time.Millisecond * 900
 	const minDuration = time.Millisecond * 20
 
+	soundEffectCounter := 0
+
 	for x := range g.board.Width {
 		for y := range g.board.Height {
 			if !revealsBefore[x][y] && revealsAfter[x][y] {
@@ -1403,6 +1424,13 @@ func (g *Game) QueueRevealAnimation(revealsBefore, revealsAfter [][]bool, origin
 				var anim CallbackAnimation
 				anim.Tag = AnimationTagTileReveal
 
+				playedSound := false
+
+				if soundEffectCounter%6 != 0 {
+					playedSound = true
+				}
+				soundEffectCounter++
+
 				anim.Update = func() {
 					style := g.BaseTileStyles[x][y]
 					timer.TickUp()
@@ -1419,6 +1447,11 @@ func (g *Game) QueueRevealAnimation(revealsBefore, revealsAfter [][]bool, origin
 						t = Clamp(t, 0, 1)
 
 						style.TileScale = Lerp(1.2, 1.0, t)
+
+						if !playedSound {
+							playedSound = true
+							PlaySoundBytes(SoundEffects[14], 0.3)
+						}
 					} else {
 						style.DrawTile = false
 						style.DrawFg = false
@@ -1428,6 +1461,7 @@ func (g *Game) QueueRevealAnimation(revealsBefore, revealsAfter [][]bool, origin
 				}
 
 				anim.Skip = func() {
+					playedSound = true
 					timer.Current = timer.Duration
 					anim.Update()
 				}
@@ -1495,15 +1529,25 @@ func (g *Game) QueueDefeatAnimation(originX, originY int) {
 		var anim CallbackAnimation
 		anim.Tag = AnimationTagDefeat
 
+		playedSound := false
+
 		anim.Update = func() {
 			style := g.BaseTileStyles[p.X][p.Y]
+
+			if timer.Current > 0 && !playedSound {
+				playedSound = true
+				PlaySoundBytes(SoundEffects[13], 0.3)
+			}
+
 			timer.TickUp()
 			style.BgBombAnim = timer.Normalize()
+
 			g.BaseTileStyles[p.X][p.Y] = style
 		}
 
 		anim.Skip = func() {
 			timer.Current = timer.Duration
+			playedSound = true
 			anim.Update()
 		}
 
@@ -2034,7 +2078,7 @@ func (g *Game) SkipAllAnimationsUntilTag(tags ...AnimationTag) {
 
 func GetNumberTile(number int) SubView {
 	if !(1 <= number && number <= 8) {
-		ErrorLogger.Fatalf("%d is not a valid number", number)
+		ErrLogger.Fatalf("%d is not a valid number", number)
 	}
 
 	return SpriteSubView(TileSprite, number-1)

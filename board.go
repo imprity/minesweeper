@@ -89,7 +89,7 @@ func (board *Board) Copy() Board {
 
 func (board *Board) SaveTo(targetBoard Board) {
 	if !(board.Width == targetBoard.Width && board.Height == targetBoard.Height) {
-		ErrorLogger.Fatalf("targetBoard dimmensions is not equal to board")
+		ErrLogger.Fatalf("targetBoard dimmensions is not equal to board")
 	}
 
 	iterator := NewBoardIterator(0, 0, board.Width-1, board.Height-1)

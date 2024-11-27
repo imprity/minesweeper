@@ -69,13 +69,13 @@ func NewBezierEditor() *BezierEditor {
 	be.CopyButton = NewTextButton()
 	be.CopyButton.Text = "Copy"
 	be.CopyButton.OnClick = func() {
-		ErrorLogger.Print("TODO: not implemented")
+		ErrLogger.Print("TODO: not implemented")
 	}
 
 	be.PasteButton = NewTextButton()
 	be.PasteButton.Text = "Paste"
 	be.PasteButton.OnClick = func() {
-		ErrorLogger.Print("TODO: not implemented")
+		ErrLogger.Print("TODO: not implemented")
 	}
 
 	be.Focused = -1
