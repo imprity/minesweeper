@@ -268,7 +268,7 @@ func NewGame(boardWidth, boardHeight, mineCount int) *Game {
 	g.WaterRenderTarget = eb.NewImage(int(ScreenWidth), int(ScreenHeight))
 
 	g.StyleModifiers = append(g.StyleModifiers, NewTileHighlightModifier())
-	g.StyleModifiers = append(g.StyleModifiers, NewNumberClickModifier())
+	g.StyleModifiers = append(g.StyleModifiers, NewFgClickModifier())
 
 	g.RetryButton = NewRetryButton()
 	g.RetryButton.Disabled = true
@@ -1340,7 +1340,7 @@ func NewTileHighlightModifier() StyleModifier {
 	}
 }
 
-func NewNumberClickModifier() StyleModifier {
+func NewFgClickModifier() StyleModifier {
 	var clickTimer Timer
 
 	clickTimer.Duration = time.Millisecond * 100
@@ -1363,11 +1363,10 @@ func NewNumberClickModifier() StyleModifier {
 
 		ms := GetMouseState(board, boardRect)
 
-		cursorOnNumber := board.IsPosInBoard(ms.BoardX, ms.BoardY)
-		cursorOnNumber = cursorOnNumber && board.Revealed[ms.BoardX][ms.BoardY]
-		cursorOnNumber = cursorOnNumber && board.GetNeighborMineCount(ms.BoardX, ms.BoardY) > 0
+		cursorOnFg := board.IsPosInBoard(ms.BoardX, ms.BoardY)
+		cursorOnFg = cursorOnFg && tileStyles[ms.BoardX][ms.BoardY].DrawFg
 
-		if cursorOnNumber && ms.JustPressedAny() {
+		if cursorOnFg && ms.JustPressedAny() {
 			clickTimer.Current = clickTimer.Duration
 			clickX = ms.BoardX
 			clickY = ms.BoardY
