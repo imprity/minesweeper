@@ -42,12 +42,12 @@ func NewColorPicker() *ColorPicker {
 	cp.PasteButton = NewTextButton()
 
 	cp.CopyButton.Text = "copy"
-	cp.CopyButton.OnClick = func() {
+	cp.CopyButton.OnPress = func(bool) {
 		str := ColorToString(cp.Color())
 		ClipboardWriteText(str)
 	}
 	cp.PasteButton.Text = "paste"
-	cp.PasteButton.OnClick = func() {
+	cp.PasteButton.OnPress = func(bool) {
 		str := ClipboardReadText()
 		if c, err := ParseColorString(str); err == nil {
 			cp.SetColor(c)

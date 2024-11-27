@@ -21,75 +21,67 @@ type BaseButton struct {
 
 	Disabled bool
 
-	OnClick func()
+	// fires when pressed
+	// if RepeateOnHold is true, then if fires up repeatedly when user holds the button
+	OnPress   func(justPressed bool)
+	OnRelease func()
 
 	RepeateOnHold         bool
 	FirstRate, RepeatRate time.Duration
 
-	// If ActOnRelease is true,
-	// insted of OnClick being called on press
-	// it's called when button is released.
-	//
-	// Does nothing if RepeateOnHold is true
-	ActOnRelease        bool
-	ReadyToActOnRelease bool
-
 	State ButtonState
+
+	readyToCallOnRelease bool
 }
 
 func (b *BaseButton) Update() {
-	// TODO : This whole shit is a god damn mess!!!
 	if b.Disabled {
 		b.State = ButtonStateNormal
-		b.ReadyToActOnRelease = false
+		b.readyToCallOnRelease = false
 		return
 	}
 
 	pt := CursorFPt()
 
-	if pt.In(b.Rect) {
-		// handle callback
+	inRect := pt.In(b.Rect)
+
+	if inRect { // if mouse in rect
 		if b.RepeateOnHold {
 			if HandleMouseButtonRepeat(
 				b.FirstRate, b.RepeatRate, eb.MouseButtonLeft,
 			) {
-				if b.OnClick != nil {
-					b.OnClick()
+				if b.OnPress != nil {
+					b.OnPress(IsMouseButtonJustPressed(eb.MouseButtonLeft))
 				}
 			}
 		} else {
 			if IsMouseButtonJustPressed(eb.MouseButtonLeft) {
-				if b.ActOnRelease {
-					b.ReadyToActOnRelease = true
-				} else {
-					if b.OnClick != nil {
-						b.OnClick()
-					}
-				}
+				b.readyToCallOnRelease = true
+				b.OnPress(true)
 			}
 		}
 
-		if b.ActOnRelease && b.ReadyToActOnRelease && IsMouseButtonJustReleased(eb.MouseButtonLeft) {
-			if b.OnClick != nil {
-				b.OnClick()
+		if b.readyToCallOnRelease && IsMouseButtonJustReleased(eb.MouseButtonLeft) {
+			if b.OnRelease != nil {
+				b.OnRelease()
 			}
-			b.ReadyToActOnRelease = false
+			b.readyToCallOnRelease = false
 		}
+	}
 
-		// handle state
+	// handle button state
+	if inRect {
 		if IsMouseButtonPressed(eb.MouseButtonLeft) {
-			b.ReadyToActOnRelease = true
 			b.State = ButtonStateDown
 		} else {
 			b.State = ButtonStateHover
 		}
 	} else {
 		b.State = ButtonStateNormal
-		b.ReadyToActOnRelease = false
 	}
 
-	if !b.ActOnRelease {
-		b.ReadyToActOnRelease = false
+	if !inRect {
+		b.readyToCallOnRelease = false
 	}
 }
 

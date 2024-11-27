@@ -276,7 +276,7 @@ func NewDifficultySelectUI() *DifficultySelectUI {
 		// DifficultyButtonLeft
 		ds.DifficultyButtonLeft = NewImageButton()
 
-		ds.DifficultyButtonLeft.OnClick = func() {
+		ds.DifficultyButtonLeft.OnPress = func(bool) {
 			prevDifficulty := ds.Difficulty
 			ds.Difficulty = max(ds.Difficulty-1, 0)
 			if ds.OnDifficultyChange != nil && prevDifficulty != ds.Difficulty {
@@ -295,7 +295,7 @@ func NewDifficultySelectUI() *DifficultySelectUI {
 		// DifficultyButtonRight
 		ds.DifficultyButtonRight = NewImageButton()
 
-		ds.DifficultyButtonRight.OnClick = func() {
+		ds.DifficultyButtonRight.OnPress = func(bool) {
 			prevDifficulty := ds.Difficulty
 			ds.Difficulty = min(ds.Difficulty+1, DifficultySize-1)
 			if ds.OnDifficultyChange != nil && prevDifficulty != ds.Difficulty {

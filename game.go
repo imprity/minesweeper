@@ -272,13 +272,17 @@ func NewGame(boardWidth, boardHeight, mineCount int) *Game {
 
 	g.RetryButton = NewRetryButton()
 	g.RetryButton.Disabled = true
-	g.RetryButton.ActOnRelease = true
 	g.RetryButtonScale = 1
 
-	g.RetryButton.OnClick = func() {
+	g.RetryButton.OnPress = func(justPressed bool) {
+		if justPressed {
+			PlaySoundBytes(SoundEffects[12], 0.8)
+		}
+	}
+
+	g.RetryButton.OnRelease = func() {
 		g.QueueResetBoardAnimation()
-		// TODO: sound plays on release instead of press
-		PlaySoundBytes(SoundEffects[12], 0.8)
+		PlaySoundBytes(SoundEffects[14], 0.8)
 	}
 
 	g.GameAnimations = NewCircularQueue[CallbackAnimation](10)

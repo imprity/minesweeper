@@ -44,37 +44,37 @@ func NewBezierEditor() *BezierEditor {
 
 	be.SnapTo0ButtonP0 = NewTextButton()
 	be.SnapTo0ButtonP0.Text = "Set To 0"
-	be.SnapTo0ButtonP0.OnClick = func() {
+	be.SnapTo0ButtonP0.OnPress = func(bool) {
 		be.Points[0].Y = 0
 	}
 
 	be.SnapTo0ButtonP3 = NewTextButton()
 	be.SnapTo0ButtonP3.Text = "Set To 0"
-	be.SnapTo0ButtonP3.OnClick = func() {
+	be.SnapTo0ButtonP3.OnPress = func(bool) {
 		be.Points[3].Y = 0
 	}
 
 	be.SnapToOriginP1 = NewTextButton()
 	be.SnapToOriginP1.Text = "To Origin"
-	be.SnapToOriginP1.OnClick = func() {
+	be.SnapToOriginP1.OnPress = func(bool) {
 		be.Points[1] = be.Points[0]
 	}
 
 	be.SnapToOriginP2 = NewTextButton()
 	be.SnapToOriginP2.Text = "To Origin"
-	be.SnapToOriginP2.OnClick = func() {
+	be.SnapToOriginP2.OnPress = func(bool) {
 		be.Points[2] = be.Points[3]
 	}
 
 	be.CopyButton = NewTextButton()
 	be.CopyButton.Text = "Copy"
-	be.CopyButton.OnClick = func() {
+	be.CopyButton.OnPress = func(bool) {
 		ErrLogger.Print("TODO: not implemented")
 	}
 
 	be.PasteButton = NewTextButton()
 	be.PasteButton.Text = "Paste"
-	be.PasteButton.OnClick = func() {
+	be.PasteButton.OnPress = func(bool) {
 		ErrLogger.Print("TODO: not implemented")
 	}
 
