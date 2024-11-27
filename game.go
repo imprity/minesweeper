@@ -480,9 +480,6 @@ func (g *Game) Update() {
 	}
 
 	if interaction != InteractionTypeNone {
-		// TODO: click sound is so fucking annoying
-		// especially because it plays without interval limit
-		PlaySoundBytes(SoundEffects[10], 0.4)
 		if !stateChanged { // user wanted to do something but nothing happened
 			// pass
 		} else { // something did happened
@@ -2110,18 +2107,6 @@ func GetBoardTileRect(
 	}
 
 	return RectToFRect(FRectToRect(tileRect))
-}
-
-func (g *Game) DrawTile(
-	dst *eb.Image,
-	boardX, boardY int,
-	scale float64,
-	offsetX, offsetY float64,
-	clr color.Color,
-	tile SubView,
-) {
-	tileRect := GetBoardTileRect(g.Rect, g.board.Width, g.board.Height, boardX, boardY)
-	DrawSubViewInRect(dst, tileRect, scale, offsetY, offsetY, clr, tile)
 }
 
 func IsOddTile(boardWidth, boardHeight, x, y int) bool {
