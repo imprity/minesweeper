@@ -169,17 +169,17 @@ func LoadAssets() {
 		var decoder AudioDecoder
 
 		if CheckFileExt(path, ".wav") {
-			decoder, err = wav.DecodeWithSampleRate(AudioContext.SampleRate(), bytes.NewReader(audioFile))
+			decoder, err = wav.DecodeWithSampleRate(SampleRate(), bytes.NewReader(audioFile))
 			if err != nil {
 				return nil, err
 			}
 		} else if CheckFileExt(path, ".mp3") {
-			decoder, err = mp3.DecodeWithSampleRate(AudioContext.SampleRate(), bytes.NewReader(audioFile))
+			decoder, err = mp3.DecodeWithSampleRate(SampleRate(), bytes.NewReader(audioFile))
 			if err != nil {
 				return nil, err
 			}
 		} else if CheckFileExt(path, ".ogg") {
-			decoder, err = vorbis.DecodeWithSampleRate(AudioContext.SampleRate(), bytes.NewReader(audioFile))
+			decoder, err = vorbis.DecodeWithSampleRate(SampleRate(), bytes.NewReader(audioFile))
 			if err != nil {
 				return nil, err
 			}

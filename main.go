@@ -11,15 +11,12 @@ import (
 	_ "net/http/pprof"
 
 	eb "github.com/hajimehoshi/ebiten/v2"
-	eba "github.com/hajimehoshi/ebiten/v2/audio"
 )
 
 var (
 	ScreenWidth  float64 = 600
 	ScreenHeight float64 = 600
 )
-
-var AudioContext *eba.Context
 
 var ErrLogger *log.Logger = log.New(os.Stderr, "ERROR: ", log.Lshortfile)
 var InfoLogger *log.Logger = log.New(os.Stdout, "INFO: ", log.Lshortfile)
@@ -56,6 +53,8 @@ func (a *App) Update() error {
 	// update global timer
 	// ==========================
 	UpdateGlobalTimer()
+
+	UpdateSound()
 
 	fpsStr := fmt.Sprintf("%.2f", eb.ActualFPS())
 	tpsStr := fmt.Sprintf("%.2f", eb.ActualTPS())
@@ -122,7 +121,7 @@ func main() {
 		}()
 	}
 
-	AudioContext = eba.NewContext(44100)
+	InitSound()
 
 	InitClipboardManager()
 
