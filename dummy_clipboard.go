@@ -12,7 +12,7 @@ var TheClipboardManager struct {
 
 func InitClipboardManager() {
 	InfoLogger.Print("initializing clipboard")
-	ErrorLogger.Printf("clipboard is disabled")
+	ErrLogger.Printf("clipboard is disabled")
 }
 
 func ClipboardWriteText(str string) {
