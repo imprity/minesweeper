@@ -14,10 +14,12 @@ func (c ColorTableIndex) RGBA() (r, g, b, a uint32) {
 const (
 	ColorBg ColorTableIndex = iota
 
+	ColorTopUIBg
 	ColorTopUITitle
 	ColorTopUIButton
 	ColorTopUIButtonOnHover
 	ColorTopUIButtonOnDown
+	ColorTopUIFlag
 
 	ColorTileNormal1
 	ColorTileNormal2
@@ -67,10 +69,12 @@ func init() {
 
 	setColor(ColorBg, color.NRGBA{10, 10, 10, 255})
 
+	setColor(ColorTopUIBg, color.NRGBA{188, 188, 188, 255})
 	setColor(ColorTopUITitle, color.NRGBA{255, 255, 255, 255})
 	setColor(ColorTopUIButton, color.NRGBA{255, 255, 255, 255})
 	setColor(ColorTopUIButtonOnHover, color.NRGBA{255, 255, 255, 255})
 	setColor(ColorTopUIButtonOnDown, color.NRGBA{255, 255, 255, 255})
+	setColor(ColorTopUIFlag, color.NRGBA{218, 26, 26, 255})
 
 	setColor(ColorTileNormal1, color.NRGBA{30, 30, 30, 255})
 	setColor(ColorTileNormal2, color.NRGBA{50, 50, 50, 255})

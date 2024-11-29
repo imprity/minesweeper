@@ -3,11 +3,13 @@ package main
 import (
 	"fmt"
 	"image"
+	"image/color"
 	"time"
-	//"image/color"
 
 	eb "github.com/hajimehoshi/ebiten/v2"
 )
+
+var _ = color.White
 
 type Difficulty int
 
@@ -31,13 +33,15 @@ type GameUI struct {
 
 	MineCounts      [DifficultySize]int         // constant
 	BoardTileCounts [DifficultySize]image.Point // constant
-	BoardSizeRatios [DifficultySize]float64     // constant, relative to ScreenHeight
+	BoardSizeRatios [DifficultySize]float64     // constant, relative to board area
+
+	BoardMarginTop        float64 // constant
+	BoardMarginBottom     float64 // constant
+	BoardMarginHorizontal float64 // constant
 
 	TopUI *TopUI
 
 	TopUIHeight float64 // constant, relative to ScreenHeight
-
-	TopUIInsetTop float64 // constant
 
 	ResourceEditor *ResourceEditor
 }
@@ -50,10 +54,13 @@ func NewGameUI() *GameUI {
 	gu.BoardTileCounts = [DifficultySize]image.Point{
 		image.Pt(10, 10), image.Pt(15, 13), image.Pt(20, 20),
 	}
-	gu.BoardSizeRatios = [DifficultySize]float64{0.6, 0.75, 0.85}
+	gu.BoardSizeRatios = [DifficultySize]float64{0.75, 0.9, 1}
 
-	gu.TopUIHeight = 0.09
-	gu.TopUIInsetTop = 5
+	gu.TopUIHeight = 0.085
+
+	gu.BoardMarginTop = 10
+	gu.BoardMarginBottom = 10
+	gu.BoardMarginHorizontal = 10
 
 	gu.Game = NewGame(
 		gu.BoardTileCounts[DifficultyEasy].X, gu.BoardTileCounts[DifficultyEasy].Y,
@@ -85,9 +92,10 @@ func NewGameUI() *GameUI {
 }
 
 func (gu *GameUI) Update() {
-	gu.Game.Rect = gu.BoardRect(gu.Difficulty)
-	gu.Game.RetryButtonSize = gu.BoardSize()
 	gu.TopUI.Rect = gu.TopUIRect()
+
+	gu.Game.Rect = gu.BoardRect(gu.Difficulty)
+	gu.Game.RetryButtonSize = min(ScreenWidth, ScreenHeight) * 0.2
 
 	gu.Game.Update()
 	gu.TopUI.Update()
@@ -113,8 +121,11 @@ func (gu *GameUI) Layout(outsideWidth, outsideHeight int) {
 }
 
 func (gu *GameUI) BoardRect(difficulty Difficulty) FRectangle {
-	parentRect := FRectWH(
-		ScreenWidth, ScreenHeight,
+	topRect := gu.TopUI.RenderedRect()
+
+	parentRect := FRect(
+		gu.BoardMarginHorizontal, topRect.Max.Y+gu.BoardMarginTop,
+		ScreenWidth-gu.BoardMarginHorizontal, ScreenHeight-gu.BoardMarginBottom,
 	)
 
 	var boardTileWidth, boardTileHeight int
@@ -140,32 +151,15 @@ func (gu *GameUI) BoardRect(difficulty Difficulty) FRectangle {
 	pCenter := FRectangleCenter(parentRect)
 	boardRect = CenterFRectangle(boardRect, pCenter.X, pCenter.Y)
 
-	if boardRect.Overlaps(gu.TopUIRect()) {
-		parentRect := FRect(
-			0, gu.TopUIRect().Max.Y,
-			ScreenWidth, ScreenHeight,
-		)
-
-		pCenter := FRectangleCenter(parentRect)
-		boardRect = CenterFRectangle(boardRect, pCenter.X, pCenter.Y)
-	}
-
 	return boardRect
-}
-
-func (gu *GameUI) BoardSize() float64 {
-	return min(ScreenWidth, ScreenHeight) * 0.2
 }
 
 func (gu *GameUI) TopUIRect() FRectangle {
 	w := ScreenWidth
 	h := ScreenHeight * gu.TopUIHeight
 
-	h -= gu.TopUIInsetTop
-	h = max(h, 0)
-
 	x := ScreenWidth*0.5 - w*0.5
-	y := gu.TopUIInsetTop
+	y := float64(0)
 
 	return FRectXYWH(x, y, w, h)
 }
@@ -173,12 +167,17 @@ func (gu *GameUI) TopUIRect() FRectangle {
 type TopUI struct {
 	Rect FRectangle
 
+	IdealTopMargin    float64 // constant, relative to TopUIIdealHeight
+	IdealBottomMargin float64 // constant, relative to TopUIIdealHeight
+
+	MuteButtonUI       *MuteButtonUI
 	FlagUI             *FlagUI
 	DifficultySelectUI *DifficultySelectUI
 	TimerUI            *TimerUI
 
 	UIScale float64
 
+	MuteButtonUIRect       FRectangle
 	FlagUIRect             FRectangle
 	DifficultySelectUIRect FRectangle
 	TimerUIRect            FRectangle
@@ -187,6 +186,10 @@ type TopUI struct {
 func NewTopUI() *TopUI {
 	tu := new(TopUI)
 
+	tu.IdealTopMargin = 7
+	tu.IdealBottomMargin = 10
+
+	tu.MuteButtonUI = NewMuteButtonUI()
 	tu.FlagUI = NewFlagUI()
 	tu.DifficultySelectUI = NewDifficultySelectUI()
 	tu.TimerUI = NewTimerUI()
@@ -197,54 +200,99 @@ func NewTopUI() *TopUI {
 func (tu *TopUI) Update() {
 	var totalIdealWidth float64
 
-	const idealMargin = 10
+	const idealMargin = 5
+	const idealMuteMargin = 27
 
+	idealMuteW := tu.MuteButtonUI.GetIdealWidth()
 	idealFlagW := tu.FlagUI.GetIdealWidth()
 	idealDifficultyW := tu.DifficultySelectUI.GetIdealWidth()
 	idealTimerW := tu.TimerUI.GetIdealWidth()
 
 	totalIdealWidth = max(
-		idealDifficultyW*0.5+idealMargin+idealFlagW+idealMargin,
-		idealDifficultyW*0.5+idealMargin+idealTimerW+idealMargin,
+		idealMargin+idealTimerW+idealMargin+idealDifficultyW*0.5,
+		idealDifficultyW*0.5+idealMargin+idealFlagW+idealMargin+idealMuteW+idealMuteMargin,
 	) * 2
 
-	tu.UIScale = min(tu.Rect.Dx()/totalIdealWidth, tu.Rect.Dy()/TopUIElementIdealHeight)
+	tu.UIScale = min(
+		tu.Rect.Dx()/totalIdealWidth,
+		tu.Rect.Dy()/(TopUIIdealHeight+tu.IdealTopMargin+tu.IdealBottomMargin),
+	)
 
+	uiRect := FRect(
+		tu.Rect.Min.X, tu.Rect.Min.Y+tu.IdealTopMargin*tu.UIScale,
+		tu.Rect.Max.X, tu.Rect.Max.Y+tu.IdealBottomMargin*tu.UIScale,
+	)
+
+	margin := idealMargin * tu.UIScale
+	muteMargin := idealMuteMargin * tu.UIScale
+
+	_ = margin
+
+	muteW := idealMuteW * tu.UIScale
 	flagW := idealFlagW * tu.UIScale
 	difficultyW := idealDifficultyW * tu.UIScale
 	timerW := idealTimerW * tu.UIScale
 
-	uiHeight := TopUIElementIdealHeight * tu.UIScale
+	uiHeight := TopUIIdealHeight * tu.UIScale
 
 	// update rectangles
-	tu.FlagUIRect = FRectXYWH(
-		tu.Rect.Min.X+idealMargin*tu.UIScale, tu.Rect.Min.Y,
-		flagW, uiHeight,
+	tu.MuteButtonUIRect = FRectXYWH(
+		uiRect.Max.X-muteMargin-muteW, uiRect.Min.Y,
+		muteW, uiHeight,
 	)
 	tu.DifficultySelectUIRect = FRectXYWH(
-		tu.Rect.Min.X+tu.Rect.Dx()*0.5-difficultyW*0.5, tu.Rect.Min.Y,
+		uiRect.Min.X+uiRect.Dx()*0.5-difficultyW*0.5, uiRect.Min.Y,
 		difficultyW, uiHeight,
 	)
+	timerMinX := uiRect.Min.X
+	timerMaxX := tu.DifficultySelectUIRect.Min.X - timerW
 	tu.TimerUIRect = FRectXYWH(
-		tu.Rect.Max.X-timerW-idealMargin*tu.UIScale, tu.Rect.Min.Y,
+		Lerp(timerMinX, timerMaxX, 0.53),
+		uiRect.Min.Y,
 		timerW, uiHeight,
 	)
+	flagMinX := (tu.DifficultySelectUIRect.Max.X)
+	flagMaxX := (tu.MuteButtonUIRect.Min.X) - flagW
+	tu.FlagUIRect = FRectXYWH(
+		Lerp(flagMinX, flagMaxX, 0.6),
+		uiRect.Min.Y,
+		flagW, uiHeight,
+	)
 
+	tu.MuteButtonUI.OnUpdate(tu.MuteButtonUIRect, tu.UIScale)
 	tu.TimerUI.OnUpdate(tu.TimerUIRect, tu.UIScale)
 	tu.DifficultySelectUI.OnUpdate(tu.DifficultySelectUIRect, tu.UIScale)
 	tu.FlagUI.OnUpdate(tu.FlagUIRect, tu.UIScale)
 }
 
 func (tu *TopUI) Draw(dst *eb.Image) {
+	FillRect(
+		dst,
+		tu.RenderedRect(),
+		ColorTopUIBg,
+		//color.NRGBA{188, 188, 188, 255},
+	)
+	tu.MuteButtonUI.OnDraw(dst, tu.MuteButtonUIRect, tu.UIScale)
 	tu.TimerUI.OnDraw(dst, tu.TimerUIRect, tu.UIScale)
 	tu.DifficultySelectUI.OnDraw(dst, tu.DifficultySelectUIRect, tu.UIScale)
 	tu.FlagUI.OnDraw(dst, tu.FlagUIRect, tu.UIScale)
 }
 
+// TopUI's display rect might be smaller than
+// Rect due to various layouts
+// this function gives you that rect
+func (tu *TopUI) RenderedRect() FRectangle {
+	return FRectXYWH(
+		tu.Rect.Min.X, tu.Rect.Min.Y,
+		tu.Rect.Dx(),
+		(TopUIIdealHeight+tu.IdealTopMargin+tu.IdealBottomMargin)*tu.UIScale,
+	)
+}
+
 const (
-	TopUIElementIdealHeight   = 100
-	TopUIElementIdealFontSize = 80
-	TopUIElementIdealTextY    = 48
+	TopUIIdealHeight   = 100
+	TopUIIdealFontSize = 80
+	TopUIIdealTextY    = 50
 )
 
 type TopUIElement struct {
@@ -319,7 +367,7 @@ func NewDifficultySelectUI() *DifficultySelectUI {
 	var idealTextWidths [DifficultySize]float64
 	var idealTextCenterX float64
 
-	idealFontSize := float64(TopUIElementIdealFontSize)
+	idealFontSize := float64(TopUIIdealFontSize)
 
 	for d := Difficulty(0); d < DifficultySize; d++ {
 		str := DifficultyStrs[d]
@@ -343,13 +391,16 @@ func NewDifficultySelectUI() *DifficultySelectUI {
 	}
 
 	idealBtnRectLeft = FRectXYWH(
-		0, TopUIElementIdealHeight*0.5-idealBtnSize.Y*0.5,
+		0, TopUIIdealHeight*0.5-idealBtnSize.Y*0.5,
 		idealBtnSize.X, idealBtnSize.Y,
 	)
 	idealBtnRectRight = FRectXYWH(
-		idealWidth-idealBtnSize.X, TopUIElementIdealHeight*0.5-idealBtnSize.Y*0.5,
+		idealWidth-idealBtnSize.X, TopUIIdealHeight*0.5-idealBtnSize.Y*0.5,
 		idealBtnSize.X, idealBtnSize.Y,
 	)
+
+	idealBtnRectLeft = idealBtnRectLeft.Add(FPt(0, 5))
+	idealBtnRectRight = idealBtnRectRight.Add(FPt(0, 5))
 
 	idealTextCenterX = idealWidth * 0.5
 
@@ -368,8 +419,10 @@ func NewDifficultySelectUI() *DifficultySelectUI {
 		ds.DifficultyButtonLeft.Draw(dst)
 		ds.DifficultyButtonRight.Draw(dst)
 
+		const idealTextOffsetY = -1
+
 		// draw text
-		textY := TopUIElementIdealTextY*scale + actualRect.Min.Y
+		textY := (TopUIIdealTextY+idealTextOffsetY)*scale + actualRect.Min.Y
 		textCenterX := idealTextCenterX*scale + actualRect.Min.X
 		textX := textCenterX - idealTextWidths[ds.Difficulty]*scale*0.5
 
@@ -398,14 +451,15 @@ type FlagUI struct {
 func NewFlagUI() *FlagUI {
 	fu := new(FlagUI)
 
-	const idealFlagSize = 80
+	const idealFlagSize = 84
 
 	var idealFlagRect FRectangle = FRectXYWH(
-		0, 0,
+		0, TopUIIdealHeight*0.5-idealFlagSize*0.5,
 		idealFlagSize, idealFlagSize,
 	)
+	idealFlagRect = idealFlagRect.Add(FPt(0, -5))
 
-	idealFontSize := TopUIElementIdealFontSize * 0.85
+	idealFontSize := TopUIIdealFontSize * 0.85
 
 	const idealMargin = 6
 
@@ -431,11 +485,11 @@ func NewFlagUI() *FlagUI {
 
 		// draw flag icon
 		DrawSubViewInRect(
-			dst, flagRect, 1.1, 0, -scale*2, ColorTopUITitle, GetFlagTile(),
+			dst, flagRect, 1.1, 0, -scale*2, ColorTopUIFlag, GetFlagTile(),
 		)
 
 		textX := idealTextX*scale + actualRect.Min.X
-		textY := TopUIElementIdealTextY*scale + actualRect.Min.Y
+		textY := TopUIIdealTextY*scale + actualRect.Min.Y
 
 		text := fmt.Sprintf("%d", fu.FlagCount)
 
@@ -471,7 +525,7 @@ func NewTimerUI() *TimerUI {
 	const idealTimerSize = 80
 
 	var idealTimerRect FRectangle = FRectXYWH(
-		0, TopUIElementIdealHeight*0.5-idealTimerSize*0.5,
+		0, TopUIIdealHeight*0.5-idealTimerSize*0.5,
 		idealTimerSize, idealTimerSize,
 	)
 
@@ -479,7 +533,7 @@ func NewTimerUI() *TimerUI {
 
 	var idealTextX float64 = idealTimerRect.Dx() + idealMargin
 
-	var idealFontSizeNormal float64 = TopUIElementIdealFontSize * 0.8
+	var idealFontSizeNormal float64 = TopUIIdealFontSize * 0.8
 
 	var idealMaxTextWidth float64
 	{
@@ -518,7 +572,7 @@ func NewTimerUI() *TimerUI {
 		)
 
 		textX := idealTextX*scale + actualRect.Min.X
-		textY := TopUIElementIdealTextY*scale + actualRect.Min.Y
+		textY := TopUIIdealTextY*scale + actualRect.Min.Y
 
 		currentTime := tu.CurrentTime()
 
@@ -581,4 +635,69 @@ func (tu *TimerUI) CurrentTime() time.Duration {
 		return tu.timeStartFrom
 	}
 	return tu.timeStartFrom + time.Now().Sub(tu.startTime)
+}
+
+type MuteButtonUI struct {
+	TopUIElement
+
+	MuteButton *ImageButton
+
+	IsMute bool
+}
+
+func NewMuteButtonUI() *MuteButtonUI {
+	mu := new(MuteButtonUI)
+
+	// ==============================
+	// create mute button
+	// ==============================
+	{
+		mu.MuteButton = NewImageButton()
+
+		mu.MuteButton.Image = SpriteSubView(TileSprite, 17)
+		mu.MuteButton.ImageOnHover = SpriteSubView(TileSprite, 17)
+		mu.MuteButton.ImageOnDown = SpriteSubView(TileSprite, 17)
+
+		mu.MuteButton.ImageColor = ColorTopUIButton
+		mu.MuteButton.ImageColorOnHover = ColorTopUIButtonOnHover
+		mu.MuteButton.ImageColorOnDown = ColorTopUIButtonOnDown
+
+		mu.MuteButton.OnPress = func(justPressed bool) {
+			mu.IsMute = !mu.IsMute
+			if mu.IsMute {
+				mu.MuteButton.Image = SpriteSubView(TileSprite, 16)
+				mu.MuteButton.ImageOnHover = SpriteSubView(TileSprite, 16)
+				mu.MuteButton.ImageOnDown = SpriteSubView(TileSprite, 16)
+				SetGlobalVolume(0)
+			} else {
+				mu.MuteButton.Image = SpriteSubView(TileSprite, 17)
+				mu.MuteButton.ImageOnHover = SpriteSubView(TileSprite, 17)
+				mu.MuteButton.ImageOnDown = SpriteSubView(TileSprite, 17)
+				SetGlobalVolume(1)
+			}
+		}
+	}
+
+	const idealBtnSize = 82
+
+	var idealBtnRect FRectangle = FRectXYWH(
+		0, TopUIIdealHeight*0.5-idealBtnSize*0.5,
+		idealBtnSize, idealBtnSize,
+	)
+
+	mu.GetIdealWidth = func() float64 {
+		return idealBtnRect.Dx()
+	}
+
+	mu.OnUpdate = func(actualRect FRectangle, scale float64) {
+		rect := FRectScale(idealBtnRect, scale).Add(actualRect.Min)
+		mu.MuteButton.Rect = rect
+		mu.MuteButton.Update()
+	}
+
+	mu.OnDraw = func(dst *eb.Image, actualRect FRectangle, scale float64) {
+		mu.MuteButton.Draw(dst)
+	}
+
+	return mu
 }

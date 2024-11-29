@@ -57,7 +57,9 @@ func (b *BaseButton) Update() {
 		} else {
 			if IsMouseButtonJustPressed(eb.MouseButtonLeft) {
 				b.readyToCallOnRelease = true
-				b.OnPress(true)
+				if b.OnPress != nil {
+					b.OnPress(true)
+				}
 			}
 		}
 
