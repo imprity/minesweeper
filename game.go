@@ -276,13 +276,13 @@ func NewGame(boardWidth, boardHeight, mineCount int) *Game {
 
 	g.RetryButton.OnPress = func(justPressed bool) {
 		if justPressed {
-			PlaySoundBytes(SoundEffects[12], 0.8)
+			PlaySoundBytes(SoundEffects[SeSwitch38], 0.8)
 		}
 	}
 
 	g.RetryButton.OnRelease = func() {
 		g.QueueResetBoardAnimation()
-		PlaySoundBytes(SoundEffects[14], 0.8)
+		PlaySoundBytes(SoundEffects[SeCut], 0.8)
 	}
 
 	g.GameAnimations = NewCircularQueue[CallbackAnimation](10)
@@ -453,11 +453,13 @@ func (g *Game) Update() {
 
 		if prevState != g.GameState {
 			if g.GameState == GameStateLost { // on loss
-				PlaySoundBytes(SoundEffects[15], 0.7)
+				PlaySoundBytes(SoundEffects[SeLinkSummer], 0.7)
 				g.QueueDefeatAnimation(ms.BoardX, ms.BoardY)
 			} else if g.GameState == GameStateWon { // on win
 				g.QueueWinAnimation(ms.BoardX, ms.BoardY)
-				PlaySoundBytes(SoundEffects[6], 0.6)
+				PlaySoundBytes(SoundEffects[SeWobble2], 0.6)
+				//PlaySoundBytes(SoundEffects[SeWobble3], 0.6)
+				//PlaySoundBytes(SoundEffects[SeSave], 0.6)
 			}
 		}
 
@@ -1448,7 +1450,7 @@ func (g *Game) QueueRevealAnimation(revealsBefore, revealsAfter [][]bool, origin
 
 						if !playedSound {
 							playedSound = true
-							PlaySoundBytes(SoundEffects[14], 0.3)
+							PlaySoundBytes(SoundEffects[SeCut], 0.3)
 						}
 					} else {
 						style.DrawTile = false
@@ -1534,7 +1536,7 @@ func (g *Game) QueueDefeatAnimation(originX, originY int) {
 
 			if timer.Current > 0 && !playedSound {
 				playedSound = true
-				PlaySoundBytes(SoundEffects[13], 0.3)
+				PlaySoundBytes(SoundEffects[SeUnlinkSummer], 0.3)
 			}
 
 			timer.TickUp()

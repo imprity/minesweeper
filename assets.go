@@ -50,7 +50,7 @@ var MissingImage *eb.Image
 
 var MissingShader *eb.Shader
 
-var SoundEffects [][]byte
+var SoundEffects = make(map[string][]byte)
 
 func init() {
 	// ===================
@@ -329,28 +329,8 @@ func LoadAssets() {
 	}
 
 	// load audios
-	{
-		sfs := SoundEffects
-
-		sfs = append(sfs, mustLoadAudioBytes("tmps/converted/UI_SFX_Set/switch1.ogg"))                     // 0
-		sfs = append(sfs, mustLoadAudioBytes("tmps/converted/UI_SFX_Set/switch2.ogg"))                     // 1
-		sfs = append(sfs, mustLoadAudioBytes("tmps/converted/UI_SFX_Set/switch3.ogg"))                     // 2
-		sfs = append(sfs, mustLoadAudioBytes("tmps/converted/UI_SFX_Set/switch4.ogg"))                     // 3
-		sfs = append(sfs, mustLoadAudioBytes("tmps/converted/UI_SFX_Set/switch5.ogg"))                     // 4
-		sfs = append(sfs, mustLoadAudioBytes("tmps/converted/GUI_Sound_Effects_by_Lokif/misc_menu_4.ogg")) // 5
-		sfs = append(sfs, mustLoadAudioBytes("tmps/converted/GUI_Sound_Effects_by_Lokif/save.ogg"))        // 6
-		sfs = append(sfs, mustLoadAudioBytes("tmps/converted/GUI_Sound_Effects_by_Lokif/misc_sound.ogg"))  // 7
-		sfs = append(sfs, mustLoadAudioBytes("tmps/converted/GUI_Sound_Effects_by_Lokif/negative_2.ogg"))  // 8
-		sfs = append(sfs, mustLoadAudioBytes("tmps/converted/GUI_Sound_Effects_by_Lokif/positive.ogg"))    // 9
-		sfs = append(sfs, mustLoadAudioBytes("tmps/converted/UI_SFX_Set/click1.ogg"))                      // 10
-		sfs = append(sfs, mustLoadAudioBytes("tmps/converted/interface/dustbin.ogg"))                      // 11
-		sfs = append(sfs, mustLoadAudioBytes("tmps/converted/UI_SFX_Set/switch38.ogg"))                    // 12
-		sfs = append(sfs, mustLoadAudioBytes("tmps/converted/krank_sounds/summer/unlink.ogg"))             // 13
-		sfs = append(sfs, mustLoadAudioBytes("tmps/converted/interface/cut.ogg"))                          // 14
-		sfs = append(sfs, mustLoadAudioBytes("tmps/converted/krank_sounds/summer/link.ogg"))               // 15
-		sfs = append(sfs, mustLoadAudioBytes("tmps/converted/krank_sounds/summer/unlink.ogg"))             // 16
-
-		SoundEffects = sfs
+	for _, src := range SoundSrcs {
+		SoundEffects[src] = mustLoadAudioBytes(src)
 	}
 }
 

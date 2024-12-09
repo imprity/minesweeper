@@ -1,5 +1,15 @@
 //go:build ignore
 
+// ====================================================
+// program that converts audios in directory
+// to .ogg files
+//
+// requires ffmpeg
+//
+// usage :
+// 	go run batcher.go -s "./directory/to/audio/files/" -d "./directory/to/store/ogg/files/"
+// ====================================================
+
 package main
 
 import (
@@ -32,6 +42,7 @@ var (
 )
 
 func main() {
+	// TODO: check if ffmpeg exists
 	flag.Parse()
 
 	// =========================
