@@ -237,8 +237,6 @@ type Game struct {
 
 	GameState GameState
 
-	RevealMines bool
-
 	WaterAlpha      float64
 	WaterFlowOffset time.Duration
 
@@ -436,6 +434,8 @@ func (g *Game) Update() {
 	// on state changes
 	// ==============================
 	if stateChanged {
+		SetRedraw() // just do it!!
+
 		// check if we board has been revealed
 	REVEAL_CHECK:
 		for x := range g.board.Width {
@@ -501,30 +501,8 @@ func (g *Game) Update() {
 		}
 	}
 
-	// copy it over to RenderTileStyles
-	for x := range g.board.Width {
-		for y := range g.board.Height {
-			g.RenderTileStyles[x][y] = g.BaseTileStyles[x][y]
-		}
-	}
-
-	// ===================================
-	// apply style modifiers
-	// ===================================
-	for i := 0; i < len(g.StyleModifiers); i++ {
-		g.StyleModifiers[i](
-			g.prevBoard, g.board,
-			g.Rect,
-			interaction,
-			stateChanged,
-			prevState, g.GameState,
-			g.RenderTileStyles,
-		)
-	}
-
-	// ============================
 	// update flag drawing
-	// ============================
+	// TODO: move this to animation queue like everything else
 	if stateChanged {
 		for x := range g.board.Width {
 			for y := range g.board.Height {
@@ -538,6 +516,48 @@ func (g *Game) Update() {
 					}
 				}
 			}
+		}
+	}
+
+	// copy it over to RenderTileStyles
+	for x := range g.board.Width {
+		for y := range g.board.Height {
+			g.RenderTileStyles[x][y] = g.BaseTileStyles[x][y]
+		}
+	}
+
+	// if animations queue is not empty, we need to redraw
+	if !g.GameAnimations.IsEmpty() {
+		SetRedraw()
+	}
+
+	{
+	REDRAW_CHECK_LOOP:
+		for x := range g.board.Width {
+			for y := range g.board.Height {
+				if !g.TileAnimations[x][y].IsEmpty() {
+					SetRedraw()
+					break REDRAW_CHECK_LOOP
+				}
+			}
+		}
+	}
+
+	// ===================================
+	// apply style modifiers
+	// ===================================
+	for i := 0; i < len(g.StyleModifiers); i++ {
+		doRedraw := g.StyleModifiers[i](
+			g.prevBoard, g.board,
+			g.Rect,
+			interaction,
+			stateChanged,
+			prevState, g.GameState,
+			g.RenderTileStyles,
+		)
+
+		if doRedraw {
+			SetRedraw()
 		}
 	}
 
@@ -557,18 +577,17 @@ func (g *Game) Update() {
 	if !g.DrawRetryButton {
 		g.RetryButton.Disabled = true
 	}
-
-	// ==========================
-	// debug mode
-	// ==========================
-	if IsKeyJustPressed(ShowMinesKey) {
-		g.RevealMines = !g.RevealMines
-	}
 }
 
 func (g *Game) Draw(dst *eb.Image) {
 	// background
 	dst.Fill(TheColorTable[ColorBg])
+
+	doWaterEffect := g.GameState == GameStateWon
+
+	if doWaterEffect {
+		SetRedraw()
+	}
 
 	DrawBoard(
 		dst,
@@ -576,7 +595,7 @@ func (g *Game) Draw(dst *eb.Image) {
 		g.board, g.Rect,
 		g.RenderTileStyles,
 
-		g.GameState == GameStateWon, g.WaterRenderTarget, g.WaterAlpha, g.WaterFlowOffset,
+		doWaterEffect, g.WaterRenderTarget, g.WaterAlpha, g.WaterFlowOffset,
 
 		g.viBuffers,
 	)
@@ -2290,6 +2309,9 @@ func NewRetryButton() *RetryButton {
 }
 
 func (rb *RetryButton) Update() {
+	prevState := rb.BaseButton.State
+	prevHover := rb.ButtonHoverOffset
+
 	rb.BaseButton.Update()
 
 	if rb.State == ButtonStateHover {
@@ -2302,6 +2324,14 @@ func (rb *RetryButton) Update() {
 
 	if rb.Disabled {
 		rb.ButtonHoverOffset = 0
+	}
+
+	if prevState != rb.State {
+		SetRedraw()
+	}
+
+	if !CloseToEx(prevHover, rb.ButtonHoverOffset, 0.05) {
+		SetRedraw()
 	}
 }
 

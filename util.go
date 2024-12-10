@@ -97,6 +97,14 @@ func RelativePath(path string) (string, error) {
 	return joined, nil
 }
 
+func GetHourMinuteSeconds(duration time.Duration) (int, int, int) {
+	hours := duration / time.Hour
+	minutes := (duration % time.Hour) / time.Minute
+	seconds := (duration % time.Minute) / time.Second
+
+	return int(hours), int(minutes), int(seconds)
+}
+
 // examples
 // CheckFileExt("image.png", ".png") => return true
 // CheckFileExt("image.PNG", ".png") => return true

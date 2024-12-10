@@ -18,6 +18,12 @@ var (
 	ScreenHeight float64 = 600
 )
 
+var redrawFrameCounter int = 3
+
+func SetRedraw() {
+	redrawFrameCounter = 3
+}
+
 var ErrLogger *log.Logger = log.New(os.Stderr, "ERROR: ", log.Lshortfile)
 var InfoLogger *log.Logger = log.New(os.Stdout, "INFO: ", log.Lshortfile)
 
@@ -95,14 +101,25 @@ func (a *App) Update() error {
 }
 
 func (a *App) Draw(dst *eb.Image) {
-	a.Scene.Draw(dst)
+	if redrawFrameCounter > 0 {
+		a.Scene.Draw(dst)
+	}
+
+	DebugPrint("do redraw", redrawFrameCounter > 0)
 
 	if a.ShowDebugConsole {
 		DrawDebugMsgs(dst)
 	}
+
+	redrawFrameCounter--
+	redrawFrameCounter = max(redrawFrameCounter, 0)
 }
 
 func (a *App) Layout(outsideWidth, outsideHeight int) (int, int) {
+	if int(ScreenWidth) != outsideWidth || int(ScreenHeight) != outsideHeight {
+		SetRedraw()
+	}
+
 	ScreenWidth = f64(outsideWidth)
 	ScreenHeight = f64(outsideHeight)
 

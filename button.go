@@ -41,6 +41,8 @@ func (b *BaseButton) Update() {
 		return
 	}
 
+	prevState := b.State
+
 	pt := CursorFPt()
 
 	inRect := pt.In(b.Rect)
@@ -84,6 +86,12 @@ func (b *BaseButton) Update() {
 
 	if !inRect {
 		b.readyToCallOnRelease = false
+	}
+
+	// NOTE: I'm not sure this is a safe assumption to make
+	// but certainly is a convinient one
+	if b.State != prevState {
+		SetRedraw()
 	}
 }
 

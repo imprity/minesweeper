@@ -18,6 +18,8 @@ var TheDebugPrintManager struct {
 	DebugMsgs           []DebugMsg
 	PersistentDebugMsgs []DebugMsg
 
+	DebugMsgRenderTarget *eb.Image
+
 	builder strings.Builder
 }
 
@@ -103,33 +105,54 @@ func DrawDebugMsgs(dst *eb.Image) {
 
 	w, h := ebt.Measure(text, ClearFace, fontLineSpacing)
 
-	dstFRect := RectToFRect(dst.Bounds())
-
-	// update width and height of
+	// update width and height of background rect
 	boxW, boxH := w*scale+hozMargin*2, h*scale+vertMargin*2
 
-	rect := FRectangle{
-		Min: FPt(dstFRect.Max.X-boxW, dstFRect.Max.Y-boxH),
-		Max: dstFRect.Max,
+	rect := FRectWH(boxW, boxH)
+
+	createBuf := dm.DebugMsgRenderTarget == nil
+	createBuf = createBuf || dm.DebugMsgRenderTarget.Bounds().Dx() < int(boxW+1)
+	createBuf = createBuf || dm.DebugMsgRenderTarget.Bounds().Dy() < int(boxH+1)
+
+	if createBuf {
+		if dm.DebugMsgRenderTarget != nil {
+			dm.DebugMsgRenderTarget.Deallocate()
+		}
+		dm.DebugMsgRenderTarget = eb.NewImageWithOptions(
+			RectWH(int(boxW+1), int(boxH+1)),
+			&eb.NewImageOptions{Unmanaged: true},
+		)
 	}
+
+	dm.DebugMsgRenderTarget.Clear()
 
 	// draw background
 	FillRect(
-		dst,
+		dm.DebugMsgRenderTarget,
 		rect,
 		color.NRGBA{0, 0, 0, 100},
 	)
 
 	// draw text
-	op := &DrawTextOptions{}
-	op.GeoM.Scale(scale, scale)
-	op.GeoM.Translate(
-		rect.Min.X+hozMargin, rect.Min.Y+vertMargin,
-	)
-	op.ColorScale.ScaleWithColor(color.NRGBA{255, 255, 255, 255})
-	op.LayoutOptions.LineSpacing = fontLineSpacing
+	{
+		op := &DrawTextOptions{}
+		op.GeoM.Scale(scale, scale)
+		op.GeoM.Translate(
+			hozMargin, vertMargin,
+		)
+		op.ColorScale.ScaleWithColor(color.NRGBA{255, 255, 255, 255})
+		op.LayoutOptions.LineSpacing = fontLineSpacing
 
-	DrawText(dst, text, ClearFace, op)
+		DrawText(dm.DebugMsgRenderTarget, text, ClearFace, op)
+	}
+
+	// draw DebugMsgRenderTarget
+	{
+		dstRect := RectToFRect(dst.Bounds())
+		op := &DrawImageOptions{}
+		op.GeoM.Translate(dstRect.Max.X-boxW, dstRect.Max.Y-boxH)
+		DrawImage(dst, dm.DebugMsgRenderTarget, op)
+	}
 }
 
 func ClearDebugMsgs() {

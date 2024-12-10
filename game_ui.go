@@ -559,8 +559,21 @@ func NewTimerUI() *TimerUI {
 		return idealTimerRect.Dx() + idealMargin + idealMaxTextWidth
 	}
 
+	var prevTime time.Duration
+
 	tu.OnUpdate = func(actualRect FRectangle, scale float64) {
-		// pass
+		currentTime := tu.CurrentTime()
+
+		hours, minutes, seconds := GetHourMinuteSeconds(currentTime)
+		prevHours, prevMinutes, prevSeconds := GetHourMinuteSeconds(prevTime)
+
+		if prevHours != hours || prevMinutes != minutes || prevSeconds != seconds {
+			SetRedraw()
+			prevTime = currentTime
+		}
+
+		DebugPrintf("prevTime   ", "%d:%d:%d", prevHours, prevMinutes, prevSeconds)
+		DebugPrintf("currentTime", "%d:%d:%d", hours, minutes, seconds)
 	}
 
 	tu.OnDraw = func(dst *eb.Image, actualRect FRectangle, scale float64) {
@@ -576,9 +589,7 @@ func NewTimerUI() *TimerUI {
 
 		currentTime := tu.CurrentTime()
 
-		hours := currentTime / time.Hour
-		minutes := (currentTime % time.Hour) / time.Minute
-		seconds := (currentTime % time.Minute) / time.Second
+		hours, minutes, seconds := GetHourMinuteSeconds(currentTime)
 
 		fontSize := idealFontSizeNormal
 		if hours > 0 {
