@@ -640,7 +640,7 @@ func forEachBgTile(
 		// draw background tile
 		bgTileRect := ogTileRect
 		bgTileRect = bgTileRect.Add(FPt(style.BgOffsetX, style.BgOffsetY))
-		bgTileRect = FRectScaleCentered(bgTileRect, style.BgScale)
+		bgTileRect = FRectScaleCentered(bgTileRect, style.BgScale, style.BgScale)
 
 		callback(x, y, style, bgTileRect)
 	}
@@ -673,7 +673,7 @@ func forEachTile(
 		tileRect := ogTileRect
 
 		tileRect = tileRect.Add(FPt(style.TileOffsetX, style.TileOffsetY))
-		tileRect = FRectScaleCentered(tileRect, style.TileScale)
+		tileRect = FRectScaleCentered(tileRect, style.TileScale, style.TileScale)
 
 		strokeRect := tileRect.Inset(-2)
 		//strokeRect := tileRect
@@ -1042,13 +1042,6 @@ func DrawBoard(
 					innerRadius := radius * min(innerRect.Dx(), innerRect.Dy()) * 0.5
 					outerRadius := radius * min(outerRect.Dx(), outerRect.Dy()) * 0.5
 
-					/*
-						outerP := GetRoundRectPathFast(outerRect, outerRadius, true, 5)
-						innerP := GetRoundRectPathFast(innerRect, innerRadius, true, 5)
-
-						VIaddFillPath(shapeBuf, *outerP, ColorFade(ColorMineBg1, style.BgAlpha))
-						VIaddFillPath(shapeBuf, *innerP, ColorFade(ColorMineBg2, style.BgAlpha))
-					*/
 					VIaddRoundRect(
 						shapeBuf,
 						outerRect, outerRadius, true, 5,
@@ -1078,11 +1071,6 @@ func DrawBoard(
 			if ShouldDrawTile(style) {
 				strokeColor := ColorFade(style.TileStrokeColor, style.TileAlpha)
 
-				/*
-					p := GetRoundRectPathFastEx(strokeRect, radiusPx, true, [4]int{segments, segments, segments, segments})
-					VIaddFillPath(shapeBuf, *p, strokeColor)
-				*/
-
 				VIaddRoundRectEx(
 					shapeBuf,
 					strokeRect, radiusPx, true, [4]int{segments, segments, segments, segments},
@@ -1098,11 +1086,7 @@ func DrawBoard(
 		func(x, y int, style TileStyle, strokeRect, fillRect FRectangle, radiusPx [4]float64) {
 			if ShouldDrawTile(style) {
 				fillColor := ColorFade(style.TileFillColor, style.TileAlpha)
-				/*
 
-					p := GetRoundRectPathFastEx(fillRect, radiusPx, true, [4]int{segments, segments, segments, segments})
-					VIaddFillPath(shapeBuf, *p, fillColor)
-				*/
 				VIaddRoundRectEx(
 					shapeBuf,
 					fillRect, radiusPx, true, [4]int{segments, segments, segments, segments},
@@ -1263,7 +1247,7 @@ func (g *Game) RetryButtonRect() FRectangle {
 
 func (g *Game) TransformedRetryButtonRect() FRectangle {
 	rect := g.RetryButtonRect()
-	rect = FRectScaleCentered(rect, g.RetryButtonScale)
+	rect = FRectScaleCentered(rect, g.RetryButtonScale, g.RetryButtonScale)
 	rect = rect.Add(FPt(g.RetryButtonOffsetX, g.RetryButtonOffsetY))
 	return rect
 }

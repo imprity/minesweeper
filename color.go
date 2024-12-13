@@ -20,6 +20,8 @@ func ColorNormalized(clr color.Color, multiplyAlpha bool) [4]float64 {
 	return [4]float64{r, g, b, a}
 }
 
+// hue is in radian
+// saturation and brightness ranges 0-1
 func ColorToHSV(clr color.Color) [3]float64 {
 	c := ColorToNRGBA(clr)
 	r, g, b := f64(c.R)/255, f64(c.G)/255, f64(c.B)/255
@@ -67,6 +69,8 @@ func ColorToHSV(clr color.Color) [3]float64 {
 	return [3]float64{hue, saturation, brightness}
 }
 
+// hue is in radian
+// saturation and brightness ranges 0-1
 func ColorFromHSV(hue, saturation, value float64) color.NRGBA {
 	for hue < 0 {
 		hue += math.Pi * 2

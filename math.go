@@ -385,8 +385,8 @@ func FRectScale(rect FRectangle, scale float64) FRectangle {
 	}
 }
 
-func FRectScaleCentered(rect FRectangle, scale float64) FRectangle {
-	newRect := FRectWH(rect.Dx()*scale, rect.Dy()*scale)
+func FRectScaleCentered(rect FRectangle, scaleX, scaleY float64) FRectangle {
+	newRect := FRectWH(rect.Dx()*scaleX, rect.Dy()*scaleY)
 	center := FRectangleCenter(rect)
 	return CenterFRectangle(newRect, center.X, center.Y)
 }

@@ -239,3 +239,17 @@ func TextToYcenterLimitWidth(
 
 	return TextToYcenter(fontFace, fontSize, x, y)
 }
+
+func FitTextInRect(
+	text string,
+	fontFace ebt.Face,
+	rect FRectangle,
+) eb.GeoM {
+	textW, textH := ebt.Measure(text, fontFace, FontLineSpacing(fontFace))
+	scale := min(rect.Dx()/textW, rect.Dy()/textH)
+	geom := TransformToCenter(textW, textH, scale, scale, 0)
+	center := FRectangleCenter(rect)
+	geom.Translate(center.X, center.Y)
+
+	return geom
+}

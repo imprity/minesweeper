@@ -130,7 +130,7 @@ func DrawDebugMsgs(dst *eb.Image) {
 	FillRect(
 		dm.DebugMsgRenderTarget,
 		rect,
-		color.NRGBA{0, 0, 0, 100},
+		color.NRGBA{0, 0, 0, 255},
 	)
 
 	// draw text

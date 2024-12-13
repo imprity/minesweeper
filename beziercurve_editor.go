@@ -1,12 +1,9 @@
 package main
 
 import (
-	"fmt"
 	eb "github.com/hajimehoshi/ebiten/v2"
 	"image/color"
 )
-
-var _ = fmt.Printf
 
 //	    2 - 3
 //	  *-----*

@@ -94,16 +94,19 @@ func NewGameUI() *GameUI {
 func (gu *GameUI) Update() {
 	gu.TopUI.Rect = gu.TopUIRect()
 
-	gu.Game.Rect = gu.BoardRect(gu.Difficulty)
-	gu.Game.RetryButtonSize = min(ScreenWidth, ScreenHeight) * 0.2
-
 	gu.Game.Update()
 	gu.TopUI.Update()
+
+	gu.Game.Rect = gu.BoardRect(gu.Difficulty)
+	gu.Game.RetryButtonSize = min(ScreenWidth, ScreenHeight) * 0.2
 
 	gu.TopUI.FlagUI.FlagCount = gu.Game.MineCount() - gu.Game.FlagCount()
 
 	if IsKeyJustPressed(ShowResourceEditorKey) {
 		gu.ResourceEditor.DoShow = !gu.ResourceEditor.DoShow
+	}
+	if gu.ResourceEditor.DoShow {
+		SetRedraw()
 	}
 	gu.ResourceEditor.Update()
 }
@@ -279,7 +282,7 @@ func (tu *TopUI) Draw(dst *eb.Image) {
 }
 
 // TopUI's display rect might be smaller than
-// Rect due to various layouts
+// Rect field due to various layouts
 // this function gives you that rect
 func (tu *TopUI) RenderedRect() FRectangle {
 	return FRectXYWH(
@@ -571,9 +574,6 @@ func NewTimerUI() *TimerUI {
 			SetRedraw()
 			prevTime = currentTime
 		}
-
-		DebugPrintf("prevTime   ", "%d:%d:%d", prevHours, prevMinutes, prevSeconds)
-		DebugPrintf("currentTime", "%d:%d:%d", hours, minutes, seconds)
 	}
 
 	tu.OnDraw = func(dst *eb.Image, actualRect FRectangle, scale float64) {
