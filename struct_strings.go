@@ -80,12 +80,14 @@ func _() {
 	// Re-run the stringer command to generate them again.
 	var x [1]struct{}
 	_ = x[HSVmodBg-0]
-	_ = x[HSVmodTableSize-1]
+	_ = x[HSVmodTile-1]
+	_ = x[HSVmodFg-2]
+	_ = x[HSVmodTableSize-3]
 }
 
-const _HSVmodTableIndex_name = "HSVmodBgHSVmodTableSize"
+const _HSVmodTableIndex_name = "HSVmodBgHSVmodTileHSVmodFgHSVmodTableSize"
 
-var _HSVmodTableIndex_index = [...]uint8{0, 8, 23}
+var _HSVmodTableIndex_index = [...]uint8{0, 8, 18, 26, 41}
 
 func (i HSVmodTableIndex) String() string {
 	if i < 0 || i >= HSVmodTableIndex(len(_HSVmodTableIndex_index)-1) {

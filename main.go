@@ -86,6 +86,7 @@ func (a *App) Update() error {
 	if IsKeyJustPressed(SaveAssetsKey) {
 		SaveColorTable()
 		SaveBezierTable()
+		SaveHSVmodTable()
 	}
 
 	// ==========================

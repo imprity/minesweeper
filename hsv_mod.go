@@ -1,6 +1,7 @@
 package main
 
 import (
+	"image/color"
 	"encoding/json"
 )
 
@@ -14,11 +15,39 @@ type HSVmodTableIndex int
 
 const (
 	HSVmodBg HSVmodTableIndex = iota
+	HSVmodTile
+	HSVmodFg
 
 	HSVmodTableSize
 )
 
 var TheHSVmodTable [HSVmodTableSize]HSVmod
+
+func (hm *HSVmod) ModifyColor(c color.Color, amount float64) color.Color{
+	if amount == 0 {
+		return c
+	}
+	if hm.Hue == 0 && hm.Saturation == 0 && hm.Value == 0 {
+		return c
+	}
+
+	nc := ColorToNRGBA(c)
+
+	hsv := ColorToHSV(nc)
+
+	hsv[0] += hm.Hue * amount
+	hsv[1] += hm.Saturation * amount
+	hsv[2] += hm.Value * amount
+
+	modified := ColorFromHSV(hsv[0], hsv[1], hsv[2])
+	modified.A = nc.A
+
+	return modified
+}
+
+func (hi HSVmodTableIndex) ModifyColor(c color.Color, amount float64) color.Color {
+	return TheHSVmodTable[hi].ModifyColor(c, amount)
+}
 
 func HSVmodTableToJson(table [HSVmodTableSize]HSVmod) ([]byte, error) {
 	tableMap := make(map[string]HSVmod)

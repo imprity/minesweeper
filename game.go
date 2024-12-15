@@ -84,7 +84,6 @@ type TileStyle struct {
 	BgOffsetY float64
 
 	BgFillColor      color.Color
-	BgTileHightlight float64
 
 	BgBombAnim float64
 
@@ -112,6 +111,8 @@ type TileStyle struct {
 	FgType TileFgType
 
 	FgAlpha float64
+
+	Highlight float64
 }
 
 func NewTileStyle() TileStyle {
@@ -998,6 +999,14 @@ func DrawBoard(
 	shapeBuf.Reset()
 	spriteBuf.Reset()
 
+	modColor := func(
+		c color.Color, 
+		alpha float64, 
+		hsvMod HSVmodTableIndex, hsvModAmount float64,
+	) color.Color{
+		return hsvMod.ModifyColor(ColorFade(c, alpha), hsvModAmount)
+	}
+
 	// ============================
 	// draw background tiles
 	// ============================
@@ -1009,20 +1018,9 @@ func DrawBoard(
 				VIaddRect(
 					shapeBuf,
 					bgTileRect,
-					ColorFade(style.BgFillColor, style.BgAlpha),
+					// ColorFade(style.BgFillColor, style.BgAlpha),
+					modColor(style.BgFillColor, style.BgAlpha, HSVmodBg, style.Highlight),
 				)
-
-				// draw highlight
-				if style.BgTileHightlight > 0 {
-					t := style.BgTileHightlight
-					c := TheColorTable[ColorTileHighLight]
-
-					VIaddRect(
-						shapeBuf,
-						bgTileRect,
-						ColorFade(color.NRGBA{c.R, c.G, c.B, uint8(f64(c.A) * t)}, style.BgAlpha),
-					)
-				}
 
 				// draw bomb animation
 				if style.BgBombAnim > 0 {
@@ -1045,15 +1043,25 @@ func DrawBoard(
 					VIaddRoundRect(
 						shapeBuf,
 						outerRect, outerRadius, true, 5,
-						ColorFade(ColorMineBg1, style.BgAlpha),
+						// ColorFade(ColorMineBg1, style.BgAlpha),
+						modColor(ColorMineBg1, style.BgAlpha, HSVmodBg, style.Highlight),
 					)
 					VIaddRoundRect(
 						shapeBuf,
 						innerRect, innerRadius, true, 5,
-						ColorFade(ColorMineBg2, style.BgAlpha),
+						// ColorFade(ColorMineBg2, style.BgAlpha),
+						modColor(ColorMineBg2, style.BgAlpha, HSVmodBg, style.Highlight),
 					)
 
-					VIaddSubViewInRect(spriteBuf, innerRect, 1, 0, 0, ColorFade(ColorMine, style.BgAlpha), GetMineTile())
+					VIaddSubViewInRect(
+						spriteBuf, 
+						innerRect, 
+						1, 
+						0, 0, 
+						// ColorFade(ColorMine, style.BgAlpha), 
+						modColor(ColorMine, style.BgAlpha, HSVmodBg, style.Highlight),
+						GetMineTile(),
+					)
 				}
 			}
 		},
@@ -1069,7 +1077,10 @@ func DrawBoard(
 
 		func(x, y int, style TileStyle, strokeRect, fillRect FRectangle, radiusPx [4]float64) {
 			if ShouldDrawTile(style) {
-				strokeColor := ColorFade(style.TileStrokeColor, style.TileAlpha)
+				strokeColor := modColor(
+					style.TileStrokeColor, 
+					style.TileAlpha, HSVmodTile, style.Highlight,
+				)
 
 				VIaddRoundRectEx(
 					shapeBuf,
@@ -1085,7 +1096,10 @@ func DrawBoard(
 
 		func(x, y int, style TileStyle, strokeRect, fillRect FRectangle, radiusPx [4]float64) {
 			if ShouldDrawTile(style) {
-				fillColor := ColorFade(style.TileFillColor, style.TileAlpha)
+				fillColor := modColor(
+					style.TileFillColor, 
+					style.TileAlpha, HSVmodTile, style.Highlight,
+				)
 
 				VIaddRoundRectEx(
 					shapeBuf,
@@ -1111,7 +1125,8 @@ func DrawBoard(
 							fgRect,
 							style.FgScale,
 							style.FgOffsetX, style.FgOffsetY,
-							ColorFade(fgColor, style.FgAlpha),
+							// ColorFade(fgColor, style.FgAlpha),
+							modColor(fgColor, style.FgAlpha, HSVmodFg, style.Highlight),
 							GetNumberTile(count),
 						)
 					}
@@ -1121,7 +1136,8 @@ func DrawBoard(
 						fgRect,
 						style.FgScale,
 						style.FgOffsetX, style.FgOffsetY,
-						ColorFade(fgColor, style.FgAlpha),
+						// ColorFade(fgColor, style.FgAlpha),
+						modColor(fgColor, style.FgAlpha, HSVmodFg, style.Highlight),
 						GetFlagTile(),
 					)
 				}
@@ -1289,6 +1305,7 @@ func GetAnimationTargetTileStyle(board Board, x, y int) TileStyle {
 	return style
 }
 
+/*
 func NewTileHighlightModifier() StyleModifier {
 	var highlightTimer Timer
 
@@ -1336,12 +1353,127 @@ func NewTileHighlightModifier() StyleModifier {
 				x, y := iter.GetNext()
 				if board.IsPosInBoard(x, y) && !board.Revealed[x][y] && !board.Flags[x][y] {
 					t := highlightTimer.Normalize()
-					tileStyles[x][y].BgTileHightlight += t
+					tileStyles[x][y].Highlight += t
 				}
 			}
 		}
 
 		return highlightTimer.Current > 0
+	}
+}
+*/
+
+func NewTileHighlightModifier() StyleModifier {
+	var hlWide bool
+	var hlX, hlY int
+
+	hlTiles := make([]uint64,0,9)
+	prevHlTiles := make([]uint64,0,9)
+
+	pair := func(a, b uint64) uint64{
+		return (a + b) * (a + b + 1) / 2 + b
+	}
+
+	highlightTile := func(tileStyles [][]TileStyle, x, y int) {
+		tileStyles[x][y].Highlight = 1
+		
+		pairN := pair(u64(x), u64(y))
+
+		for _, v := range hlTiles {
+			if v == pairN {
+				return 
+			}
+		}
+
+		hlTiles = append(hlTiles, pairN)
+	}
+
+	return func(
+		prevBoard, board Board,
+		boardRect FRectangle,
+		interaction BoardInteractionType,
+		stateChanged bool, // GameState or board has changed
+		prevGameState, gameState GameState,
+		tileStyles [][]TileStyle, // modify these to change style
+	) bool {
+		DebugPrint("hlTiles len", len(hlTiles))
+
+		if gameState != GameStatePlaying {			
+			hlTiles = hlTiles[:0]
+			prevHlTiles = prevHlTiles[:0]
+
+			return prevGameState != gameState
+		}
+
+		prevHlTiles = prevHlTiles[:len(hlTiles)]
+		copy(prevHlTiles, hlTiles)
+
+		hlTiles = hlTiles[:0]
+
+		ms := GetMouseState(board, boardRect)
+
+		goWide := interaction == InteractionTypeCheck
+		goWide = goWide && board.IsPosInBoard(ms.BoardX, ms.BoardY)
+		goWide = goWide && prevBoard.Revealed[ms.BoardX][ms.BoardY]
+		goWide = goWide && !stateChanged
+
+		if goWide {
+			hlWide = true
+		}
+
+		pressingCheck := (ms.PressedL && ms.PressedR) || ms.PressedM
+
+		if !pressingCheck {
+			hlWide = false
+		}
+
+		hlX = ms.BoardX
+		hlY = ms.BoardY
+
+		var iter BoardIterator
+
+		if hlWide {
+			iter = NewBoardIterator(hlX-1, hlY-1, hlX+1, hlY+1)
+		}else {
+			iter = NewBoardIterator(hlX, hlY, hlX, hlY)
+		}
+
+		for iter.HasNext() {
+			x, y := iter.GetNext()
+
+			if !board.IsPosInBoard(x, y) {
+				continue
+			}
+
+			if !board.Revealed[x][y] {
+				if hlWide {
+					if !board.Flags[x][y] {
+						highlightTile(tileStyles, x, y)
+					}
+				}else {
+					highlightTile(tileStyles, x, y)
+				}
+			}			
+		}
+
+		if board.IsPosInBoard(hlX, hlY) && board.Revealed[hlX][hlY] && board.GetNeighborMineCount(hlX, hlY) > 0{
+			highlightTile(tileStyles, hlX, hlY)
+		}
+
+		if len(hlTiles) != len(prevHlTiles) {
+			return true
+		}
+
+		slices.Sort(hlTiles)
+		slices.Sort(prevHlTiles)
+
+		for i :=0; i<len(hlTiles); i++ {
+			if hlTiles[i] != prevHlTiles[i] {
+				return true
+			}
+		}
+
+		return false
 	}
 }
 
@@ -1363,8 +1495,10 @@ func NewFgClickModifier() StyleModifier {
 		tileStyles [][]TileStyle,
 	) bool {
 		if gameState != GameStatePlaying { // only do this when we are actually playing
-			return false
+			return gameState != prevGameState
 		}
+
+		doRedraw := false
 
 		ms := GetMouseState(board, boardRect)
 
@@ -1376,6 +1510,7 @@ func NewFgClickModifier() StyleModifier {
 			clickX = ms.BoardX
 			clickY = ms.BoardY
 			focused = true
+			doRedraw = true
 		}
 
 		if !ms.PressedAny() || !(clickX == ms.BoardX && clickY == ms.BoardY) {
@@ -1383,16 +1518,19 @@ func NewFgClickModifier() StyleModifier {
 		}
 
 		if !focused {
+			if clickTimer.Current >= 0 {
+				doRedraw = true
+			}
 			clickTimer.TickDown()
 		}
 
 		if clickTimer.Current > 0 {
 			if board.IsPosInBoard(clickX, clickY) {
 				tileStyles[clickX][clickY].FgScale *= 1 + clickTimer.Normalize()*0.07
-			}
+			}		
 		}
 
-		return clickTimer.Current > 0
+		return doRedraw
 	}
 }
 

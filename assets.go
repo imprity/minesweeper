@@ -328,6 +328,23 @@ func LoadAssets() {
 		ErrLogger.Printf("failed to load bezier table: %v", err)
 	}
 
+	// load HSVmod table
+	loadHSVmodTable := func() error {
+		jsonData, err := loadData("assets/HSVmod-table.json")
+		if err != nil {
+			return err
+		}
+		table, err := HSVmodTableFromJson(jsonData)
+		if err != nil {
+			return err
+		}
+		TheHSVmodTable = table
+		return nil
+	}
+	if err := loadHSVmodTable(); err != nil {
+		ErrLogger.Printf("failed to load HSVmod table: %v", err)
+	}
+
 	// load audios
 	for _, src := range SoundSrcs {
 		SoundEffects[src] = mustLoadAudioBytes(src)
@@ -381,5 +398,30 @@ func SaveBezierTable() {
 
 	if err := saveImp(); err != nil {
 		ErrLogger.Printf("failed to save color table: %v", err)
+	}
+}
+
+func SaveHSVmodTable() {
+	InfoLogger.Print("saving HSVmod table")
+
+	saveImp := func() error {
+		jsonBytes, err := HSVmodTableToJson(TheHSVmodTable)
+		if err != nil {
+			return err
+		}
+		path, err := RelativePath("assets/HSVmod-table.json")
+		if err != nil {
+			return err
+		}
+		err = os.WriteFile(path, jsonBytes, 0664)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	}
+
+	if err := saveImp(); err != nil {
+		ErrLogger.Printf("failed to HSVmod table: %v", err)
 	}
 }
