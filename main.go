@@ -105,7 +105,11 @@ func (a *App) Draw(dst *eb.Image) {
 		a.Scene.Draw(dst)
 	}
 
-	DebugPrint("do redraw", redrawFrameCounter > 0)
+	if redrawFrameCounter > 0 {
+		DebugPuts("do redraw", "true ")
+	} else {
+		DebugPuts("do redraw", "false")
+	}
 
 	if a.ShowDebugConsole {
 		DrawDebugMsgs(dst)

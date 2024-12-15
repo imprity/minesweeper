@@ -1,8 +1,8 @@
 package main
 
 import (
-	"image/color"
 	"fmt"
+	"image/color"
 
 	eb "github.com/hajimehoshi/ebiten/v2"
 )
@@ -23,6 +23,20 @@ type HSVmodEditor struct {
 
 func NewHSVmodEditor() *HSVmodEditor {
 	return new(HSVmodEditor)
+}
+
+func (hm *HSVmodEditor) SetToHSVmod(mod HSVmod) {
+	hm.Hue = Clamp(mod.Hue, -Pi, Pi)
+	hm.Saturation = Clamp(mod.Saturation, -1, 1)
+	hm.Value = Clamp(mod.Value, -1, 1)
+}
+
+func (hm *HSVmodEditor) GetHSVmod() HSVmod {
+	return HSVmod{
+		Hue:        Clamp(hm.Hue, -Pi, Pi),
+		Saturation: Clamp(hm.Saturation, -1, 1),
+		Value:      Clamp(hm.Value, -1, 1),
+	}
 }
 
 func (hm *HSVmodEditor) getHSVrect() (FRectangle, FRectangle, FRectangle) {
@@ -139,11 +153,11 @@ func (hm *HSVmodEditor) Draw(dst *eb.Image) {
 	drawText := func(rect FRectangle, prefix string, val float64) {
 		op := &DrawTextOptions{}
 		op.GeoM.Concat(
-			FitTextInRect(prefix + " -0.00", ClearFace, rect),
+			FitTextInRect(prefix+" -0.00", ClearFace, rect),
 		)
 		DrawText(
 			dst,
-			fmt.Sprintf(prefix + " % 0.2f", val),
+			fmt.Sprintf(prefix+" % 0.2f", val),
 			ClearFace,
 			op,
 		)
