@@ -1,8 +1,8 @@
 package main
 
 import (
-	"image/color"
 	"encoding/json"
+	"image/color"
 )
 
 type HSVmod struct {
@@ -23,7 +23,7 @@ const (
 
 var TheHSVmodTable [HSVmodTableSize]HSVmod
 
-func (hm *HSVmod) ModifyColor(c color.Color, amount float64) color.Color{
+func (hm *HSVmod) ModifyColor(c color.Color, amount float64) color.Color {
 	if amount == 0 {
 		return c
 	}
