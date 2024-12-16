@@ -34,17 +34,19 @@ func _() {
 	_ = x[ColorMineBg1-23]
 	_ = x[ColorMineBg2-24]
 	_ = x[ColorMine-25]
-	_ = x[ColorTileHighLight-26]
-	_ = x[ColorWater1-27]
-	_ = x[ColorWater2-28]
-	_ = x[ColorWater3-29]
-	_ = x[ColorWater4-30]
-	_ = x[ColorTableSize-31]
+	_ = x[ColorBgHighLight-26]
+	_ = x[ColorTileHighLight-27]
+	_ = x[ColorFgHighLight-28]
+	_ = x[ColorWater1-29]
+	_ = x[ColorWater2-30]
+	_ = x[ColorWater3-31]
+	_ = x[ColorWater4-32]
+	_ = x[ColorTableSize-33]
 }
 
-const _ColorTableIndex_name = "ColorBgColorTopUIBgColorTopUITitleColorTopUIButtonColorTopUIButtonOnHoverColorTopUIButtonOnDownColorTopUIFlagColorTileNormal1ColorTileNormal2ColorTileNormalStrokeColorTileRevealed1ColorTileRevealed2ColorTileRevealedStrokeColorNumber1ColorNumber2ColorNumber3ColorNumber4ColorNumber5ColorNumber6ColorNumber7ColorNumber8ColorFlagColorElementWonColorMineBg1ColorMineBg2ColorMineColorTileHighLightColorWater1ColorWater2ColorWater3ColorWater4ColorTableSize"
+const _ColorTableIndex_name = "ColorBgColorTopUIBgColorTopUITitleColorTopUIButtonColorTopUIButtonOnHoverColorTopUIButtonOnDownColorTopUIFlagColorTileNormal1ColorTileNormal2ColorTileNormalStrokeColorTileRevealed1ColorTileRevealed2ColorTileRevealedStrokeColorNumber1ColorNumber2ColorNumber3ColorNumber4ColorNumber5ColorNumber6ColorNumber7ColorNumber8ColorFlagColorElementWonColorMineBg1ColorMineBg2ColorMineColorBgHighLightColorTileHighLightColorFgHighLightColorWater1ColorWater2ColorWater3ColorWater4ColorTableSize"
 
-var _ColorTableIndex_index = [...]uint16{0, 7, 19, 34, 50, 73, 95, 109, 125, 141, 162, 180, 198, 221, 233, 245, 257, 269, 281, 293, 305, 317, 326, 341, 353, 365, 374, 392, 403, 414, 425, 436, 450}
+var _ColorTableIndex_index = [...]uint16{0, 7, 19, 34, 50, 73, 95, 109, 125, 141, 162, 180, 198, 221, 233, 245, 257, 269, 281, 293, 305, 317, 326, 341, 353, 365, 374, 390, 408, 424, 435, 446, 457, 468, 482}
 
 func (i ColorTableIndex) String() string {
 	if i < 0 || i >= ColorTableIndex(len(_ColorTableIndex_index)-1) {

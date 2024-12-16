@@ -1003,11 +1003,12 @@ func DrawBoard(
 		c color.Color,
 		alpha float64,
 		highlight float64,
+		highlightColor color.Color,
 	) color.Color {
 		faded := ColorFade(c, alpha)
 		norm := ColorNormalized(faded, true)
 
-		hlFaded := ColorFade(ColorTileHighLight, highlight)
+		hlFaded := ColorFade(highlightColor, highlight)
 		hlNorm := ColorNormalized(hlFaded, true)
 
 		blended := [4]float64{
@@ -1041,7 +1042,7 @@ func DrawBoard(
 					shapeBuf,
 					bgTileRect,
 					// ColorFade(style.BgFillColor, style.BgAlpha),
-					modColor(style.BgFillColor, style.BgAlpha, style.Highlight),
+					modColor(style.BgFillColor, style.BgAlpha, style.Highlight, ColorBgHighLight),
 				)
 
 				// draw bomb animation
@@ -1066,13 +1067,13 @@ func DrawBoard(
 						shapeBuf,
 						outerRect, outerRadius, true, 5,
 						// ColorFade(ColorMineBg1, style.BgAlpha),
-						modColor(ColorMineBg1, style.BgAlpha, style.Highlight),
+						modColor(ColorMineBg1, style.BgAlpha, style.Highlight, ColorBgHighLight),
 					)
 					VIaddRoundRect(
 						shapeBuf,
 						innerRect, innerRadius, true, 5,
 						// ColorFade(ColorMineBg2, style.BgAlpha),
-						modColor(ColorMineBg2, style.BgAlpha, style.Highlight),
+						modColor(ColorMineBg2, style.BgAlpha, style.Highlight, ColorBgHighLight),
 					)
 
 					VIaddSubViewInRect(
@@ -1081,7 +1082,7 @@ func DrawBoard(
 						1,
 						0, 0,
 						// ColorFade(ColorMine, style.BgAlpha),
-						modColor(ColorMine, style.BgAlpha, style.Highlight),
+						modColor(ColorMine, style.BgAlpha, style.Highlight, ColorBgHighLight),
 						GetMineTile(),
 					)
 				}
@@ -1101,7 +1102,7 @@ func DrawBoard(
 			if ShouldDrawTile(style) {
 				strokeColor := modColor(
 					style.TileStrokeColor,
-					style.TileAlpha, style.Highlight,
+					style.TileAlpha, style.Highlight, ColorTileHighLight,
 				)
 
 				VIaddRoundRectEx(
@@ -1120,7 +1121,7 @@ func DrawBoard(
 			if ShouldDrawTile(style) {
 				fillColor := modColor(
 					style.TileFillColor,
-					style.TileAlpha, style.Highlight,
+					style.TileAlpha, style.Highlight, ColorTileHighLight,
 				)
 
 				VIaddRoundRectEx(
@@ -1148,7 +1149,7 @@ func DrawBoard(
 							style.FgScale,
 							style.FgOffsetX, style.FgOffsetY,
 							// ColorFade(fgColor, style.FgAlpha),
-							modColor(fgColor, style.FgAlpha, style.Highlight),
+							modColor(fgColor, style.FgAlpha, style.Highlight, ColorFgHighLight),
 							GetNumberTile(count),
 						)
 					}
@@ -1159,7 +1160,7 @@ func DrawBoard(
 						style.FgScale,
 						style.FgOffsetX, style.FgOffsetY,
 						// ColorFade(fgColor, style.FgAlpha),
-						modColor(fgColor, style.FgAlpha, style.Highlight),
+						modColor(fgColor, style.FgAlpha, style.Highlight, ColorFgHighLight),
 						GetFlagTile(),
 					)
 				}
@@ -1589,7 +1590,7 @@ func (g *Game) QueueRevealAnimation(revealsBefore, revealsAfter [][]bool, origin
 
 				playedSound := false
 
-				if soundEffectCounter%6 != 0 {
+				if soundEffectCounter%5 != 0 {
 					playedSound = true
 				}
 				soundEffectCounter++
@@ -1631,6 +1632,15 @@ func (g *Game) QueueRevealAnimation(revealsBefore, revealsAfter [][]bool, origin
 
 				anim.Done = func() bool {
 					return timer.Current >= timer.Duration
+				}
+
+				anim.AfterDone = func() {
+					// always play sound at the end
+					// if you didn't play sound before
+					if soundEffectCounter >= 2 {
+						PlaySoundBytes(SoundEffects[SeCut], 0.3)
+					}
+					soundEffectCounter = 0
 				}
 
 				g.TileAnimations[x][y].Enqueue(anim)

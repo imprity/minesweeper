@@ -5,11 +5,23 @@
         "B": 243,
         "A": 255
     },
+    "ColorBgHighLight": {
+        "R": 0,
+        "G": 0,
+        "B": 0,
+        "A": 76
+    },
     "ColorElementWon": {
         "R": 255,
         "G": 255,
         "B": 255,
         "A": 255
+    },
+    "ColorFgHighLight": {
+        "R": 255,
+        "G": 255,
+        "B": 255,
+        "A": 235
     },
     "ColorFlag": {
         "R": 87,
@@ -84,10 +96,10 @@
         "A": 255
     },
     "ColorTileHighLight": {
-        "R": 0,
-        "G": 0,
-        "B": 0,
-        "A": 72
+        "R": 34,
+        "G": 43,
+        "B": 62,
+        "A": 99
     },
     "ColorTileNormal1": {
         "R": 190,

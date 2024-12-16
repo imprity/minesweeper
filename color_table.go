@@ -46,7 +46,9 @@ const (
 	ColorMineBg2
 	ColorMine
 
+	ColorBgHighLight
 	ColorTileHighLight
+	ColorFgHighLight
 
 	ColorWater1
 	ColorWater2
@@ -101,7 +103,9 @@ func init() {
 	setColor(ColorMineBg2, color.NRGBA{229, 61, 61, 255})
 	setColor(ColorMine, color.NRGBA{255, 255, 255, 255})
 
+	setColor(ColorBgHighLight, color.NRGBA{255, 255, 255, 255})
 	setColor(ColorTileHighLight, color.NRGBA{255, 255, 255, 255})
+	setColor(ColorFgHighLight, color.NRGBA{255, 255, 255, 255})
 
 	setColor(ColorWater1, color.NRGBA{0x64, 0x39, 0xFF, 0xFF})
 	setColor(ColorWater2, color.NRGBA{0x4F, 0x75, 0xFF, 0xFF})
