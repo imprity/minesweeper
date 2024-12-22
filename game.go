@@ -112,6 +112,8 @@ type TileStyle struct {
 
 	FgAlpha float64
 
+	FlagAnim float64
+
 	Highlight float64
 }
 
@@ -139,9 +141,14 @@ const (
 
 	// animations used by Game
 	AnimationTagTileReveal
+	AnimationTagAddFlag
+	AnimationTagRemoveFlag
+
 	AnimationTagWin
 	AnimationTagDefeat
+
 	AnimationTagRetryButtonReveal
+
 	AnimationTagHideBoard
 	AnimationTagShowBoard
 )
@@ -252,7 +259,7 @@ type Game struct {
 
 	placedMinesOnBoard bool
 
-	viBuffers [2]*VIBuffer
+	viBuffers [3]*VIBuffer
 }
 
 func NewGame(boardWidth, boardHeight, mineCount int) *Game {
@@ -261,6 +268,7 @@ func NewGame(boardWidth, boardHeight, mineCount int) *Game {
 	// NOTE : hard coded number based on previous run
 	g.viBuffers[0] = NewVIBuffer(4096, 16384)
 	g.viBuffers[1] = NewVIBuffer(2048, 2048)
+	g.viBuffers[2] = NewVIBuffer(2048, 2048)
 
 	g.mineCount = mineCount
 
@@ -452,6 +460,19 @@ func (g *Game) Update() {
 			}
 		}
 
+		// update flag
+		for x := range g.board.Width {
+			for y := range g.board.Height {
+				if g.prevBoard.Flags[x][y] != g.board.Flags[x][y] {
+					if g.board.Flags[x][y] {
+						g.QueueAddFlagAnimation(x, y)
+					} else {
+						g.QueueRemoveFlagAnimation(x, y)
+					}
+				}
+			}
+		}
+
 		if prevState != g.GameState {
 			if g.GameState == GameStateLost { // on loss
 				PlaySoundBytes(SoundEffects[SeLinkSummer], 0.7)
@@ -499,24 +520,6 @@ func (g *Game) Update() {
 	for x := range g.board.Width {
 		for y := range g.board.Height {
 			AnimationQueueUpdate(&g.TileAnimations[x][y])
-		}
-	}
-
-	// update flag drawing
-	// TODO: move this to animation queue like everything else
-	if stateChanged {
-		for x := range g.board.Width {
-			for y := range g.board.Height {
-				if g.prevBoard.Flags[x][y] != g.board.Flags[x][y] {
-					if g.board.Flags[x][y] {
-						g.BaseTileStyles[x][y].FgType = TileFgTypeFlag
-						g.BaseTileStyles[x][y].FgColor = ColorFlag
-						g.BaseTileStyles[x][y].DrawFg = true
-					} else {
-						g.BaseTileStyles[x][y].FgType = TileFgTypeNone
-					}
-				}
-			}
 		}
 	}
 
@@ -991,13 +994,18 @@ func DrawBoard(
 	waterAlpha float64,
 	waterFlowOffset time.Duration,
 
-	viBuffers [2]*VIBuffer,
+	viBuffers [3]*VIBuffer,
 ) {
+	// TODO : we need flagSpriteBuf only because flag animations are stored in different image
+	// merge flag sprite with other sprites.
+
 	shapeBuf := viBuffers[0]
 	spriteBuf := viBuffers[1]
+	flagSpriteBuf := viBuffers[2]
 
 	shapeBuf.Reset()
 	spriteBuf.Reset()
+	flagSpriteBuf.Reset()
 
 	modColor := func(
 		c color.Color,
@@ -1155,13 +1163,12 @@ func DrawBoard(
 					}
 				} else if style.FgType == TileFgTypeFlag {
 					VIaddSubViewInRect(
-						spriteBuf,
+						flagSpriteBuf,
 						fgRect,
 						style.FgScale,
 						style.FgOffsetX, style.FgOffsetY,
-						// ColorFade(fgColor, style.FgAlpha),
 						modColor(fgColor, style.FgAlpha, style.Highlight, ColorFgHighLight),
-						GetFlagTile(),
+						GetFlagTile(style.FlagAnim),
 					)
 				}
 			}
@@ -1235,13 +1242,20 @@ func DrawBoard(
 		op.ColorScaleMode = eb.ColorScaleModePremultipliedAlpha
 		DrawTriangles(dst, spriteBuf.Vertices, spriteBuf.Indices, TileSprite.Image, op)
 	}
+
+	// flush flag sprites
+	{
+		op := &DrawTrianglesOptions{}
+		op.ColorScaleMode = eb.ColorScaleModePremultipliedAlpha
+		DrawTriangles(dst, flagSpriteBuf.Vertices, flagSpriteBuf.Indices, FlagAnimSprite.Image, op)
+	}
 }
 
 func DrawDummyBgBoard(
 	dst *eb.Image,
 	boardWidth, boardHeight int,
 	boardRect FRectangle,
-	buffers [2]*VIBuffer,
+	buffers [3]*VIBuffer,
 ) {
 	// TODO: this is fucking stupid. We are creating a dummy board only to throw it away
 	// each time we draw
@@ -1327,64 +1341,6 @@ func GetAnimationTargetTileStyle(board Board, x, y int) TileStyle {
 
 	return style
 }
-
-/*
-func NewTileHighlightModifier() StyleModifier {
-	var highlightTimer Timer
-
-	highlightTimer.Duration = time.Millisecond * 100
-
-	var highlightX, highlightY int
-
-	return func(
-		prevBoard, board Board,
-		boardRect FRectangle,
-		interaction BoardInteractionType,
-		stateChanged bool,
-		prevGameState, gameState GameState,
-		tileStyles [][]TileStyle,
-	) bool {
-		if gameState != GameStatePlaying { // only do this when we are actually playing
-			return false
-		}
-
-		ms := GetMouseState(board, boardRect)
-
-		startHL := interaction == InteractionTypeCheck
-		startHL = startHL && board.IsPosInBoard(ms.BoardX, ms.BoardY)
-		startHL = startHL && prevBoard.Revealed[ms.BoardX][ms.BoardY]
-		startHL = startHL && !stateChanged
-
-		if startHL {
-			highlightTimer.Current = highlightTimer.Duration
-		}
-
-		pressingCheck := (ms.PressedL && ms.PressedR) || ms.PressedM
-
-		if !pressingCheck {
-			highlightTimer.TickDown()
-		}
-
-		if highlightTimer.Current > 0 {
-			if pressingCheck {
-				highlightX = ms.BoardX
-				highlightY = ms.BoardY
-			}
-
-			iter := NewBoardIterator(highlightX-1, highlightY-1, highlightX+1, highlightY+1)
-			for iter.HasNext() {
-				x, y := iter.GetNext()
-				if board.IsPosInBoard(x, y) && !board.Revealed[x][y] && !board.Flags[x][y] {
-					t := highlightTimer.Normalize()
-					tileStyles[x][y].Highlight += t
-				}
-			}
-		}
-
-		return highlightTimer.Current > 0
-	}
-}
-*/
 
 func NewTileHighlightModifier() StyleModifier {
 	var hlWide bool
@@ -1647,6 +1603,82 @@ func (g *Game) QueueRevealAnimation(revealsBefore, revealsAfter [][]bool, origin
 			}
 		}
 	}
+}
+
+func (g *Game) QueueAddFlagAnimation(flagX, flagY int) {
+	g.SkipAllAnimations()
+
+	var timer Timer
+	timer.Duration = time.Millisecond * 110
+
+	var anim CallbackAnimation
+	anim.Tag = AnimationTagAddFlag
+
+	anim.Update = func() {
+		style := g.BaseTileStyles[flagX][flagY]
+
+		style.DrawFg = true
+		style.FgType = TileFgTypeFlag
+		style.FgColor = ColorFlag
+
+		timer.TickUp()
+
+		t := timer.Normalize()
+
+		style.FlagAnim = t
+
+		g.BaseTileStyles[flagX][flagY] = style
+	}
+
+	anim.Skip = func() {
+		timer.Current = timer.Duration
+		anim.Update()
+	}
+
+	anim.Done = func() bool {
+		return timer.Current >= timer.Duration
+	}
+
+	anim.AfterDone = func() {
+		style := g.BaseTileStyles[flagX][flagY]
+
+		style.FlagAnim = 1
+
+		g.BaseTileStyles[flagX][flagY] = style
+	}
+
+	g.TileAnimations[flagX][flagY].Enqueue(anim)
+}
+
+func (g *Game) QueueRemoveFlagAnimation(flagX, flagY int) {
+	// TODO : add fancy particle effects and shits
+	g.SkipAllAnimations()
+
+	var anim CallbackAnimation
+	anim.Tag = AnimationTagRemoveFlag
+
+	done := false
+
+	anim.Update = func() {
+		style := g.BaseTileStyles[flagX][flagY]
+
+		style.DrawFg = false
+		style.FgType = TileFgTypeNone
+
+		done = true
+
+		g.BaseTileStyles[flagX][flagY] = style
+	}
+
+	anim.Skip = func() {
+		anim.Update()
+	}
+
+	anim.Done = func() bool {
+		return done
+	}
+
+	g.TileAnimations[flagX][flagY].Enqueue(anim)
 }
 
 func (g *Game) QueueDefeatAnimation(originX, originY int) {
@@ -2261,8 +2293,10 @@ func GetMineTile() SubView {
 	return SpriteSubView(TileSprite, 9)
 }
 
-func GetFlagTile() SubView {
-	return SpriteSubView(TileSprite, 10)
+func GetFlagTile(animT float64) SubView {
+	frame := int(math.Round(animT * f64(FlagAnimSprite.Count-1)))
+	frame = Clamp(frame, 0, FlagAnimSprite.Count-1)
+	return SpriteSubView(FlagAnimSprite, frame)
 }
 
 func GetBoardTileRect(

@@ -27,6 +27,7 @@ import (
 var EmbeddedAssets embed.FS
 
 var TileSprite Sprite
+var FlagAnimSprite Sprite
 
 var RetryButtonImage *eb.Image
 
@@ -160,6 +161,21 @@ func LoadAssets() {
 		return eb.NewImageFromImage(image), nil
 	}
 
+	loadSprite := func(imgPath string, jsonPath string) Sprite {
+		jsonBytes := mustLoadData(jsonPath)
+		sprite, err := ParseSpriteJsonMetadata(bytes.NewReader(jsonBytes))
+		if err != nil {
+			ErrLogger.Fatalf("failed to load sprite json \"%s\": %v", jsonPath, err)
+		}
+
+		img, err := loadImage(imgPath)
+		if err != nil {
+			ErrLogger.Fatalf("failed to load sprite image \"%s\": %v", imgPath, err)
+		}
+		sprite.Image = img
+		return sprite
+	}
+
 	loadAudioBytes := func(path string) ([]byte, error) {
 		audioFile, err := loadData(path)
 		if err != nil {
@@ -204,21 +220,16 @@ func LoadAssets() {
 	}
 
 	// load tile sprite
-	{
-		tileSpriteJson := mustLoadData("assets/spritesheet-100x100-5x5.json")
-		tileSprite, err := ParseSpriteJsonMetadata(bytes.NewReader(tileSpriteJson))
-		if err != nil {
-			ErrLogger.Fatalf("failed to load sprite: %v", err)
-		}
+	TileSprite = loadSprite(
+		"assets/spritesheet-100x100-5x5.png",
+		"assets/spritesheet-100x100-5x5.json",
+	)
 
-		image, err := loadImage("assets/spritesheet-100x100-5x5.png")
-		if err != nil {
-			ErrLogger.Fatalf("failed to load sprite: %v", err)
-		}
-
-		tileSprite.Image = image
-		TileSprite = tileSprite
-	}
+	// load flag animation
+	FlagAnimSprite = loadSprite(
+		"assets/flag-animation-100x100-4x4.png",
+		"assets/flag-animation-100x100-4x4.json",
+	)
 
 	// load RetryButtonImage
 	{

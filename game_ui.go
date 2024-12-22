@@ -488,7 +488,7 @@ func NewFlagUI() *FlagUI {
 
 		// draw flag icon
 		DrawSubViewInRect(
-			dst, flagRect, 1.1, 0, -scale*2, ColorTopUIFlag, GetFlagTile(),
+			dst, flagRect, 1.1, 0, -scale*2, ColorTopUIFlag, GetFlagTile(1.0),
 		)
 
 		textX := idealTextX*scale + actualRect.Min.X
