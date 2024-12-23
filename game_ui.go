@@ -93,12 +93,11 @@ func NewGameUI() *GameUI {
 
 func (gu *GameUI) Update() {
 	gu.TopUI.Rect = gu.TopUIRect()
-
-	gu.Game.Update()
 	gu.TopUI.Update()
 
 	gu.Game.Rect = gu.BoardRect(gu.Difficulty)
 	gu.Game.RetryButtonSize = min(ScreenWidth, ScreenHeight) * 0.2
+	gu.Game.Update()
 
 	gu.TopUI.FlagUI.FlagCount = gu.Game.MineCount() - gu.Game.FlagCount()
 

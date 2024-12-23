@@ -801,6 +801,8 @@ func forEachTile(
 ) {
 	iter := NewBoardIterator(0, 0, board.Width-1, board.Height-1)
 
+	tileSizeW, tileSizeH := GetBoardTileSize(boardRect, board.Width, board.Height)
+
 	for iter.HasNext() {
 		x, y := iter.GetNext()
 
@@ -813,9 +815,14 @@ func forEachTile(
 		tileRect = tileRect.Add(FPt(style.TileOffsetX, style.TileOffsetY))
 		tileRect = FRectScaleCentered(tileRect, style.TileScale, style.TileScale)
 
-		strokeRect := tileRect.Inset(-2)
-		//strokeRect := tileRect
-		fillRect := tileRect.Add(FPt(0, -1.5))
+		tileInset := math.Round(min(tileSizeW, tileSizeH) * 0.065)
+		tileOffsetY := math.Round(min(tileSizeW, tileSizeH) * 0.015)
+
+		tileInset = max(tileInset, 2)
+		tileOffsetY = max(tileOffsetY, 1)
+
+		strokeRect := tileRect.Inset(-tileInset)
+		fillRect := tileRect.Add(FPt(0, -tileOffsetY))
 
 		radiusPx := float64(0)
 
@@ -1228,8 +1235,17 @@ func DrawBoard(
 				if style.BgBombAnim > 0 {
 					t := Clamp(style.BgBombAnim, 0, 1)
 
-					const outerMargin = 1
-					const innerMargin = 2
+					tileW := bgTileRect.Dx()
+					tileH := bgTileRect.Dy()
+
+					//const outerMargin = 1
+					//const innerMargin = 2
+
+					outerMargin := min(tileW, tileH) * 0.04
+					innerMargin := min(tileW, tileH) * 0.06
+
+					outerMargin = max(outerMargin, 1)
+					innerMargin = max(innerMargin, 1)
 
 					outerRect := bgTileRect.Inset(outerMargin)
 					outerRect = outerRect.Inset(min(outerRect.Dx(), outerRect.Dy()) * 0.5 * (1 - t))
@@ -1245,13 +1261,11 @@ func DrawBoard(
 					VIaddRoundRect(
 						shapeBuf,
 						outerRect, outerRadius, true, 5,
-						// ColorFade(ColorMineBg1, style.BgAlpha),
 						modColor(ColorMineBg1, style.BgAlpha, style.Highlight, ColorBgHighLight),
 					)
 					VIaddRoundRect(
 						shapeBuf,
 						innerRect, innerRadius, true, 5,
-						// ColorFade(ColorMineBg2, style.BgAlpha),
 						modColor(ColorMineBg2, style.BgAlpha, style.Highlight, ColorBgHighLight),
 					)
 
@@ -1260,7 +1274,6 @@ func DrawBoard(
 						innerRect,
 						1,
 						0, 0,
-						// ColorFade(ColorMine, style.BgAlpha),
 						modColor(ColorMine, style.BgAlpha, style.Highlight, ColorBgHighLight),
 						GetMineTile(),
 					)
@@ -1279,10 +1292,13 @@ func DrawBoard(
 
 		func(x, y int, style TileStyle, strokeRect, fillRect FRectangle, radiusPx [4]float64) {
 			if ShouldDrawTile(style) {
-				strokeColor := modColor(
-					style.TileStrokeColor,
-					style.TileAlpha, style.Highlight, ColorTileHighLight,
-				)
+				/*
+					strokeColor := modColor(
+						style.TileStrokeColor,
+						style.TileAlpha, style.Highlight, ColorTileHighLight,
+					)
+				*/
+				strokeColor := ColorFade(style.TileStrokeColor, style.TileAlpha)
 
 				VIaddRoundRectEx(
 					shapeBuf,
@@ -1409,16 +1425,28 @@ func DrawBoard(
 
 	// flush sprites
 	{
+		BeginAntiAlias(false)
+		BeginFilter(eb.FilterLinear)
+		BeginMipMap(true)
 		op := &DrawTrianglesOptions{}
 		op.ColorScaleMode = eb.ColorScaleModePremultipliedAlpha
 		DrawTriangles(dst, spriteBuf.Vertices, spriteBuf.Indices, TileSprite.Image, op)
+		EndMipMap()
+		EndAntiAlias()
+		EndFilter()
 	}
 
 	// flush flag sprites
 	{
+		BeginAntiAlias(false)
+		BeginFilter(eb.FilterLinear)
+		BeginMipMap(true)
 		op := &DrawTrianglesOptions{}
 		op.ColorScaleMode = eb.ColorScaleModePremultipliedAlpha
 		DrawTriangles(dst, flagSpriteBuf.Vertices, flagSpriteBuf.Indices, FlagAnimSprite.Image, op)
+		EndMipMap()
+		EndAntiAlias()
+		EndFilter()
 	}
 }
 

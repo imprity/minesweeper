@@ -18,10 +18,10 @@ var (
 	ScreenHeight float64 = 600
 )
 
-var redrawFrameCounter int = 3
+var redrawFrameCounter int = 4
 
 func SetRedraw() {
-	redrawFrameCounter = 3
+	redrawFrameCounter = 4
 }
 
 var ErrLogger *log.Logger = log.New(os.Stderr, "ERROR: ", log.Lshortfile)
@@ -43,7 +43,8 @@ type Scene interface {
 
 type App struct {
 	ShowDebugConsole bool
-	Scene            Scene
+
+	Scene Scene
 }
 
 func NewApp() *App {
@@ -157,9 +158,7 @@ func main() {
 	eb.SetWindowTitle("Minesweeper")
 	eb.SetScreenClearedEveryFrame(false)
 
-	op := &eb.RunGameOptions{
-		SingleThread: true,
-	}
+	op := &eb.RunGameOptions{}
 
 	if err := eb.RunGameWithOptions(app, op); err != nil {
 		panic(err)
