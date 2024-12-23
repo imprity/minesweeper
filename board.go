@@ -244,6 +244,7 @@ func (bi *BoardIterator) Reset() {
 // ==============================================
 // board iteraction
 // ==============================================
+
 type BoardInteractionType int
 
 const (

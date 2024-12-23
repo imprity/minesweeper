@@ -38,10 +38,16 @@ func (t *Timer) ClampCurrent() {
 }
 
 func (t *Timer) Normalize() float64 {
+	if t.Duration == 0 {
+		return 0
+	}
 	return Clamp(f64(t.Current)/f64(t.Duration), 0, 1)
 }
 
 func (t *Timer) NormalizeUnclamped() float64 {
+	if t.Duration == 0 {
+		return 0
+	}
 	return f64(t.Current) / f64(t.Duration)
 }
 

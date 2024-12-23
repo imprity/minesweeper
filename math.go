@@ -4,6 +4,7 @@ import (
 	"golang.org/x/exp/constraints"
 	"image"
 	"math"
+	"math/rand/v2"
 
 	eb "github.com/hajimehoshi/ebiten/v2"
 )
@@ -433,6 +434,10 @@ func CloseToEx(a, b, errorMargin float64) bool {
 		return true
 	}
 	return false
+}
+
+func RandF(minV, maxV float64) float64 {
+	return minV + rand.Float64()*(maxV-minV)
 }
 
 // ========================

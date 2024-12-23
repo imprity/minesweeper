@@ -134,6 +134,88 @@ func NewTileStyle() TileStyle {
 	}
 }
 
+type TileParticle struct {
+	SubView SubView
+
+	Color1 color.Color
+	Color2 color.Color
+
+	// default is linear
+	ColorLerpFunc func(t float64) float64
+
+	// origin
+	BoardX int
+	BoardY int
+
+	// except rotation, everything is in min of
+	// one tile width or height
+	Width  float64
+	Height float64
+
+	OffsetX float64
+	OffsetY float64
+
+	VelocityX float64
+	VelocityY float64
+
+	GravityX float64
+	GravityY float64
+
+	RotVelocity float64
+	Rotation    float64
+
+	// ticks for every update
+	// doesn't actually kills the particle (for now)
+	// it only controls color for now
+	Timer Timer
+
+	Dead bool
+}
+
+type TileParticleUnitConverter struct {
+	BoardWidth  int
+	BoardHeight int
+
+	BoardRect FRectangle
+}
+
+func (tc *TileParticleUnitConverter) ToPx(v float64) float64 {
+	tileW, tileH := GetBoardTileSize(tc.BoardRect, tc.BoardWidth, tc.BoardHeight)
+	return min(tileW, tileH) * v
+}
+
+func (tc *TileParticleUnitConverter) FromPx(px float64) float64 {
+	tileW, tileH := GetBoardTileSize(tc.BoardRect, tc.BoardWidth, tc.BoardHeight)
+	return px / min(tileW, tileH)
+}
+
+// convert particle offset to position on screen
+func (tc *TileParticleUnitConverter) OffsetToScreen(p TileParticle) (float64, float64) {
+	offsetX := tc.ToPx(p.OffsetX)
+	offsetY := tc.ToPx(p.OffsetY)
+
+	tileRect := GetBoardTileRect(
+		tc.BoardRect,
+		tc.BoardWidth, tc.BoardHeight,
+		p.BoardX, p.BoardY,
+	)
+
+	tileCenter := FRectangleCenter(tileRect)
+
+	return tileCenter.X + offsetX, tileCenter.Y + offsetY
+}
+
+func AppendTileParticle(particles []TileParticle, p TileParticle) []TileParticle {
+	for i := range particles {
+		if particles[i].Dead {
+			particles[i] = p
+			return particles
+		}
+	}
+
+	return append(particles, p)
+}
+
 type AnimationTag int
 
 const (
@@ -250,6 +332,8 @@ type Game struct {
 
 	WaterRenderTarget *eb.Image
 
+	Particles []TileParticle
+
 	board     Board
 	prevBoard Board
 
@@ -294,6 +378,8 @@ func NewGame(boardWidth, boardHeight, mineCount int) *Game {
 
 	g.GameAnimations = NewCircularQueue[CallbackAnimation](10)
 
+	g.Particles = make([]TileParticle, 0, 256)
+
 	g.ResetBoard(boardWidth, boardHeight, g.mineCount)
 
 	return g
@@ -334,6 +420,8 @@ func (g *Game) ResetBoardWithNoStyles(width, height, mineCount int) {
 			g.RenderTileStyles[x][y] = NewTileStyle()
 		}
 	}
+
+	g.Particles = g.Particles[:0]
 
 	if g.OnBoardReset != nil {
 		g.OnBoardReset()
@@ -425,17 +513,6 @@ func (g *Game) Update() {
 		g.SetBoardForInstantWin()
 		g.QueueRevealAnimation(
 			g.prevBoard.Revealed, g.board.Revealed, 0, 0)
-		stateChanged = true
-	}
-
-	// reveal the board if mouse button 4 is pressed
-	if g.GameState == GameStatePlaying &&
-		ms.BoardX >= 0 && ms.BoardY >= 0 &&
-		IsMouseButtonJustPressed(eb.MouseButton4) {
-
-		g.placedMinesOnBoard = true
-
-		g.board.Revealed[ms.BoardX][ms.BoardY] = true
 		stateChanged = true
 	}
 
@@ -534,7 +611,6 @@ func (g *Game) Update() {
 	if !g.GameAnimations.IsEmpty() {
 		SetRedraw()
 	}
-
 	{
 	REDRAW_CHECK_LOOP:
 		for x := range g.board.Width {
@@ -573,6 +649,51 @@ func (g *Game) Update() {
 		}
 	}
 
+	// =================================
+	// update particles
+	// =================================
+	{
+		tc := TileParticleUnitConverter{
+			BoardWidth: g.board.Width, BoardHeight: g.board.Height,
+			BoardRect: g.Rect,
+		}
+
+		foundAlive := false
+
+		for i, p := range g.Particles {
+			if !p.Dead {
+				foundAlive = true
+
+				p.OffsetX += p.VelocityX
+				p.OffsetY += p.VelocityY
+
+				p.VelocityX += p.GravityX
+				p.VelocityY += p.GravityY
+
+				p.Rotation += p.RotVelocity
+
+				p.Timer.TickUp()
+
+				// we consider it dead if it's below screen
+				// TODO : I'm half assing this check
+				// be more thorough if it ever becomes a problem
+				whMax := tc.ToPx(max(p.Width, p.Height))
+				_, sy := tc.OffsetToScreen(p)
+				if sy > ScreenHeight+whMax {
+					p.Dead = true
+				}
+
+				g.Particles[i] = p
+			} else {
+				continue
+			}
+		}
+
+		if foundAlive {
+			SetRedraw()
+		}
+	}
+
 	// ===================================
 	// update RetryButton
 	// ===================================
@@ -606,6 +727,19 @@ func (g *Game) Draw(dst *eb.Image) {
 
 	if g.DrawRetryButton {
 		g.RetryButton.Draw(dst)
+	}
+
+	DrawParticles(
+		dst,
+		g.Particles,
+		g.board.Width, g.board.Height,
+		g.Rect,
+	)
+}
+
+func (g *Game) Layout(outsideWidth, outsideHeight int) {
+	if g.WaterRenderTarget.Bounds().Dx() != outsideWidth || g.WaterRenderTarget.Bounds().Dy() != outsideHeight {
+		g.WaterRenderTarget = eb.NewImage(outsideWidth, outsideHeight)
 	}
 }
 
@@ -774,6 +908,43 @@ func ShouldDrawFgTile(style TileStyle) bool {
 		style.DrawFg &&
 		style.FgType != TileFgTypeNone &&
 		style.FgAlpha > 0.001
+}
+
+func GetAnimationTargetTileStyle(board Board, x, y int) TileStyle {
+	style := NewTileStyle()
+
+	style.DrawBg = true
+	style.BgFillColor = ColorTileNormal1
+	if IsOddTile(board.Width, board.Height, x, y) {
+		style.BgFillColor = ColorTileNormal2
+	}
+
+	if board.IsPosInBoard(x, y) {
+		if board.Revealed[x][y] {
+			style.DrawTile = true
+
+			style.TileFillColor = ColorTileRevealed1
+			if IsOddTile(board.Width, board.Height, x, y) {
+				style.TileFillColor = ColorTileRevealed2
+			}
+			style.TileStrokeColor = ColorTileRevealedStroke
+
+			count := board.GetNeighborMineCount(x, y)
+
+			if 1 <= count && count <= 8 {
+				style.DrawFg = true
+				style.FgType = TileFgTypeNumber
+				style.FgColor = ColorTableGetNumber(count)
+			}
+		}
+
+		if board.Flags[x][y] {
+			style.FgType = TileFgTypeFlag
+			style.FgColor = ColorFlag
+		}
+	}
+
+	return style
 }
 
 type VIBuffer struct {
@@ -1279,67 +1450,50 @@ func DrawDummyBgBoard(
 	)
 }
 
-func MousePosToBoardPos(board Board, boardRect FRectangle, mousePos FPoint) (int, int) {
-	mousePos.X -= boardRect.Min.X
-	mousePos.Y -= boardRect.Min.Y
-
-	boardX := int(math.Floor(mousePos.X / (boardRect.Dx() / float64(board.Width))))
-	boardY := int(math.Floor(mousePos.Y / (boardRect.Dy() / float64(board.Height))))
-
-	return boardX, boardY
-}
-
-func (g *Game) RetryButtonRect() FRectangle {
-	boardRect := g.Rect
-	rect := FRectWH(g.RetryButtonSize, g.RetryButtonSize)
-	center := FRectangleCenter(boardRect)
-	rect = CenterFRectangle(rect, center.X, center.Y)
-
-	return rect
-}
-
-func (g *Game) TransformedRetryButtonRect() FRectangle {
-	rect := g.RetryButtonRect()
-	rect = FRectScaleCentered(rect, g.RetryButtonScale, g.RetryButtonScale)
-	rect = rect.Add(FPt(g.RetryButtonOffsetX, g.RetryButtonOffsetY))
-	return rect
-}
-
-func GetAnimationTargetTileStyle(board Board, x, y int) TileStyle {
-	style := NewTileStyle()
-
-	style.DrawBg = true
-	style.BgFillColor = ColorTileNormal1
-	if IsOddTile(board.Width, board.Height, x, y) {
-		style.BgFillColor = ColorTileNormal2
+func DrawParticles(
+	dst *eb.Image,
+	particles []TileParticle,
+	boardWidth, boardHeight int,
+	boardRect FRectangle,
+) {
+	tc := TileParticleUnitConverter{
+		BoardWidth: boardWidth, BoardHeight: boardHeight,
+		BoardRect: boardRect,
 	}
 
-	if board.IsPosInBoard(x, y) {
-		if board.Revealed[x][y] {
-			style.DrawTile = true
-
-			style.TileFillColor = ColorTileRevealed1
-			if IsOddTile(board.Width, board.Height, x, y) {
-				style.TileFillColor = ColorTileRevealed2
-			}
-			style.TileStrokeColor = ColorTileRevealedStroke
-
-			count := board.GetNeighborMineCount(x, y)
-
-			if 1 <= count && count <= 8 {
-				style.DrawFg = true
-				style.FgType = TileFgTypeNumber
-				style.FgColor = ColorTableGetNumber(count)
-			}
+	for _, p := range particles {
+		if p.Dead {
+			continue
 		}
 
-		if board.Flags[x][y] {
-			style.FgType = TileFgTypeFlag
-			style.FgColor = ColorFlag
+		svSize := p.SubView.Rect.Size()
+
+		scaleX := tc.ToPx(p.Width) / svSize.X
+		scaleY := tc.ToPx(p.Height) / svSize.Y
+
+		screenX, screenY := tc.OffsetToScreen(p)
+
+		t := p.Timer.Normalize()
+
+		if p.ColorLerpFunc != nil {
+			t = p.ColorLerpFunc(t)
 		}
+
+		color := LerpColorRGBA(p.Color1, p.Color2, t)
+
+		op := &DrawSubViewOptions{}
+
+		op.GeoM.Concat(TransformToCenter(
+			p.SubView.Rect.Dx(), p.SubView.Rect.Dy(),
+			scaleX, scaleY,
+			p.Rotation,
+		))
+		op.GeoM.Translate(screenX, screenY)
+
+		op.ColorScale.ScaleWithColor(color)
+
+		DrawSubView(dst, p.SubView, op)
 	}
-
-	return style
 }
 
 func NewTileHighlightModifier() StyleModifier {
@@ -1651,7 +1805,6 @@ func (g *Game) QueueAddFlagAnimation(flagX, flagY int) {
 }
 
 func (g *Game) QueueRemoveFlagAnimation(flagX, flagY int) {
-	// TODO : add fancy particle effects and shits
 	g.SkipAllAnimations()
 
 	var anim CallbackAnimation
@@ -1664,6 +1817,30 @@ func (g *Game) QueueRemoveFlagAnimation(flagX, flagY int) {
 
 		style.DrawFg = false
 		style.FgType = TileFgTypeNone
+
+		velocityX := RandF(0.02, 0.06)
+		if rand.IntN(100) > 50 {
+			velocityX *= -1
+		}
+
+		velocityY := RandF(-0.25, -0.3)
+
+		rotVelocity := RandF(-0.1, 0.1)
+
+		p := TileParticle{
+			SubView:       GetFlagTile(1),
+			Color1:        ColorFlag,
+			Color2:        ColorFade(ColorFlag, 0),
+			ColorLerpFunc: EaseInQuint,
+			Timer:         Timer{Duration: time.Millisecond * 700},
+			BoardX:        flagX, BoardY: flagY,
+			Width: 1, Height: 1,
+			VelocityX: velocityX, VelocityY: velocityY,
+			RotVelocity: rotVelocity,
+			GravityX:    0, GravityY: 0.02,
+		}
+
+		g.Particles = AppendTileParticle(g.Particles, p)
 
 		done = true
 
@@ -2299,6 +2476,26 @@ func GetFlagTile(animT float64) SubView {
 	return SpriteSubView(FlagAnimSprite, frame)
 }
 
+func MousePosToBoardPos(board Board, boardRect FRectangle, mousePos FPoint) (int, int) {
+	mousePos.X -= boardRect.Min.X
+	mousePos.Y -= boardRect.Min.Y
+
+	boardX := int(math.Floor(mousePos.X / (boardRect.Dx() / float64(board.Width))))
+	boardY := int(math.Floor(mousePos.Y / (boardRect.Dy() / float64(board.Height))))
+
+	return boardX, boardY
+}
+
+func GetBoardTileSize(
+	boardRect FRectangle,
+	boardWidth, boardHeight int,
+) (float64, float64) {
+	tileWidth := boardRect.Dx() / f64(boardWidth)
+	tileHeight := boardRect.Dy() / f64(boardHeight)
+
+	return tileWidth, tileHeight
+}
+
 func GetBoardTileRect(
 	boardRect FRectangle,
 	boardWidth, boardHeight int,
@@ -2359,10 +2556,20 @@ func DrawWaterRect(
 	DrawRectShader(dst, imgRect.Dx(), imgRect.Dy(), WaterShader, op)
 }
 
-func (g *Game) Layout(outsideWidth, outsideHeight int) {
-	if g.WaterRenderTarget.Bounds().Dx() != outsideWidth || g.WaterRenderTarget.Bounds().Dy() != outsideHeight {
-		g.WaterRenderTarget = eb.NewImage(outsideWidth, outsideHeight)
-	}
+func (g *Game) RetryButtonRect() FRectangle {
+	boardRect := g.Rect
+	rect := FRectWH(g.RetryButtonSize, g.RetryButtonSize)
+	center := FRectangleCenter(boardRect)
+	rect = CenterFRectangle(rect, center.X, center.Y)
+
+	return rect
+}
+
+func (g *Game) TransformedRetryButtonRect() FRectangle {
+	rect := g.RetryButtonRect()
+	rect = FRectScaleCentered(rect, g.RetryButtonScale, g.RetryButtonScale)
+	rect = rect.Add(FPt(g.RetryButtonOffsetX, g.RetryButtonOffsetY))
+	return rect
 }
 
 // =====================
