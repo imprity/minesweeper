@@ -7,8 +7,6 @@ import (
 	"os"
 
 	_ "github.com/silbinarywolf/preferdiscretegpu"
-	"net/http"
-	_ "net/http/pprof"
 
 	eb "github.com/hajimehoshi/ebiten/v2"
 )
@@ -18,7 +16,10 @@ var (
 	ScreenHeight float64 = 600
 )
 
-var redrawFrameCounter int = 4
+var (
+	alwaysDraw         bool = false
+	redrawFrameCounter int  = 4
+)
 
 func SetRedraw() {
 	redrawFrameCounter = 4
@@ -28,11 +29,9 @@ var ErrLogger *log.Logger = log.New(os.Stderr, "ERROR: ", log.Lshortfile)
 var InfoLogger *log.Logger = log.New(os.Stdout, "INFO: ", log.Lshortfile)
 
 var FlagHotReload bool
-var FlagPProf bool
 
 func init() {
 	flag.BoolVar(&FlagHotReload, "hot", false, "enable hot reloading")
-	flag.BoolVar(&FlagPProf, "pprof", false, "enable pprof")
 }
 
 type Scene interface {
@@ -103,11 +102,11 @@ func (a *App) Update() error {
 }
 
 func (a *App) Draw(dst *eb.Image) {
-	if redrawFrameCounter > 0 {
+	if redrawFrameCounter > 0 || alwaysDraw {
 		a.Scene.Draw(dst)
 	}
 
-	if redrawFrameCounter > 0 {
+	if redrawFrameCounter > 0 || alwaysDraw {
 		DebugPuts("do redraw", "true ")
 	} else {
 		DebugPuts("do redraw", "false")
@@ -136,13 +135,6 @@ func (a *App) Layout(outsideWidth, outsideHeight int) (int, int) {
 
 func main() {
 	flag.Parse()
-
-	if FlagPProf {
-		go func() {
-			InfoLogger.Print("initializing pprof")
-			InfoLogger.Print(http.ListenAndServe("localhost:6060", nil))
-		}()
-	}
 
 	InitSound()
 

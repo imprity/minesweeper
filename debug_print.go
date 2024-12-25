@@ -47,7 +47,15 @@ func DebugPuts(key, value string) {
 	})
 }
 
-func DebugPrintPersist(key, value string) {
+func DebugPrintfPersist(key, fmtStr string, values ...any) {
+	DebugPutsPersist(key, fmt.Sprintf(fmtStr, values...))
+}
+
+func DebugPrintPersist(key string, values ...any) {
+	DebugPutsPersist(key, fmt.Sprint(values...))
+}
+
+func DebugPutsPersist(key, value string) {
 	dm := &TheDebugPrintManager
 
 	for i, msg := range dm.PersistentDebugMsgs {
@@ -130,6 +138,11 @@ func DrawDebugMsgs(dst *eb.Image) {
 	FillRect(
 		dm.DebugMsgRenderTarget,
 		rect,
+		color.NRGBA{255, 255, 255, 255},
+	)
+	FillRect(
+		dm.DebugMsgRenderTarget,
+		rect.Inset(2),
 		color.NRGBA{0, 0, 0, 255},
 	)
 

@@ -2,3 +2,5 @@
 minesweeper
 tmps/
 web_build/minesweeper.wasm
+web_build/minesweeper.wasm.bak
+build-settings.txt

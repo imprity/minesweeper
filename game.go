@@ -797,7 +797,7 @@ func forEachTile(
 	board Board,
 	boardRect FRectangle,
 	tileStyles [][]TileStyle,
-	callback func(x, y int, style TileStyle, strokeRect, fillRect FRectangle, radiusPx [4]float64),
+	callback func(x, y int, style TileStyle, strokeRect, fillRect FRectangle, isRound [4]bool),
 ) {
 	iter := NewBoardIterator(0, 0, board.Width-1, board.Height-1)
 
@@ -824,30 +824,11 @@ func forEachTile(
 		strokeRect := tileRect.Inset(-tileInset)
 		fillRect := tileRect.Add(FPt(0, -tileOffsetY))
 
-		radiusPx := float64(0)
-
-		if style.TileScale < 1.00 {
-			radius := 1 - style.TileScale
-			radius = Clamp(radius, 0, 1)
-			radius = EaseOutQuint(radius)
-			radiusPx = min(fillRect.Dx(), fillRect.Dy()) * 0.5 * radius
-		} else {
-			dx := fillRect.Dx() - ogTileRect.Dx()
-			dy := fillRect.Dy() - ogTileRect.Dy()
-
-			t := min(dx, dy)
-			t = max(t, 0)
-
-			radiusPx = t * 0.7
-		}
-
-		radiusPx = max(fillRect.Dx(), fillRect.Dy()) * 0.5 * 0.2
-
-		tileRadiuses := [4]float64{
-			radiusPx,
-			radiusPx,
-			radiusPx,
-			radiusPx,
+		isRound := [4]bool{
+			true,
+			true,
+			true,
+			true,
 		}
 
 		if isTileFirmlyPlaced(style) {
@@ -874,14 +855,14 @@ func forEachTile(
 
 				if 0 <= rx && rx < board.Width && 0 <= ry && ry < board.Height {
 					if isTileFirmlyPlaced(tileStyles[rx][ry]) {
-						tileRadiuses[i] = 0
-						tileRadiuses[(i+1)%4] = 0
+						isRound[i] = false
+						isRound[(i+1)%4] = false
 					}
 				}
 			}
 		}
 
-		callback(x, y, style, strokeRect, fillRect, tileRadiuses)
+		callback(x, y, style, strokeRect, fillRect, isRound)
 	}
 }
 
@@ -894,7 +875,7 @@ func forEachFgTile(
 	forEachTile(
 		board, boardRect, tileStyles,
 
-		func(x, y int, style TileStyle, strokeRect, fillRect FRectangle, radiusPx [4]float64) {
+		func(x, y int, style TileStyle, strokeRect, fillRect FRectangle, isRound [4]bool) {
 			fgRect := fillRect
 			callback(x, y, style, fgRect)
 		},
@@ -1048,6 +1029,126 @@ func VIaddRoundRect(
 		radiusInPixels,
 		[4]int{segments, segments, segments, segments},
 		clr,
+	)
+}
+
+// assumes you will use TileImage
+func VIaddRoundTile(
+	buffer *VIBuffer,
+	rect FRectangle,
+	isRound [4]bool,
+	clr color.Color,
+) {
+	var verts [4]eb.Vertex
+
+	sv, turns := GetRoundTile(isRound)
+
+	verts[0].DstX, verts[0].DstY = f32(rect.Min.X), f32(rect.Min.Y)
+	verts[1].DstX, verts[1].DstY = f32(rect.Max.X), f32(rect.Min.Y)
+	verts[2].DstX, verts[2].DstY = f32(rect.Max.X), f32(rect.Max.Y)
+	verts[3].DstX, verts[3].DstY = f32(rect.Min.X), f32(rect.Max.Y)
+
+	var srcX [4]float32
+	var srcY [4]float32
+
+	srcX[0], srcY[0] = f32(sv.Rect.Min.X), f32(sv.Rect.Min.Y)
+	srcX[1], srcY[1] = f32(sv.Rect.Max.X), f32(sv.Rect.Min.Y)
+	srcX[2], srcY[2] = f32(sv.Rect.Max.X), f32(sv.Rect.Max.Y)
+	srcX[3], srcY[3] = f32(sv.Rect.Min.X), f32(sv.Rect.Max.Y)
+
+	for i := range 4 {
+		srcI := (i + turns*3) % 4
+		verts[i].SrcX, verts[i].SrcY = srcX[srcI], srcY[srcI]
+	}
+
+	r, g, b, a := clr.RGBA()
+
+	rf := float32(r) / 0xffff
+	gf := float32(g) / 0xffff
+	bf := float32(b) / 0xffff
+	af := float32(a) / 0xffff
+
+	for i := range 4 {
+		verts[i].ColorR = rf
+		verts[i].ColorG = gf
+		verts[i].ColorB = bf
+		verts[i].ColorA = af
+	}
+
+	indexStart := uint16(len(buffer.Vertices))
+
+	buffer.Vertices = append(buffer.Vertices, verts[:]...)
+	buffer.Indices = append(
+		buffer.Indices,
+		indexStart+0, indexStart+1, indexStart+2, indexStart+0, indexStart+2, indexStart+3,
+	)
+}
+
+// assumes you will use TileImage
+func viAddTileWithoutRotImpl(
+	buffer *VIBuffer,
+	sv SubView,
+	rect FRectangle,
+	clr color.Color,
+) {
+	indexStart := uint16(len(buffer.Vertices))
+
+	r, g, b, a := clr.RGBA()
+
+	rf := float32(r) / 0xffff
+	gf := float32(g) / 0xffff
+	bf := float32(b) / 0xffff
+	af := float32(a) / 0xffff
+
+	buffer.Vertices = append(
+		buffer.Vertices,
+		eb.Vertex{
+			SrcX: f32(sv.Rect.Min.X), SrcY: f32(sv.Rect.Min.Y),
+			DstX: f32(rect.Min.X), DstY: f32(rect.Min.Y),
+			ColorR: rf, ColorG: gf, ColorB: bf, ColorA: af,
+		},
+		eb.Vertex{
+			SrcX: f32(sv.Rect.Max.X), SrcY: f32(sv.Rect.Min.Y),
+			DstX: f32(rect.Max.X), DstY: f32(rect.Min.Y),
+			ColorR: rf, ColorG: gf, ColorB: bf, ColorA: af,
+		},
+		eb.Vertex{
+			SrcX: f32(sv.Rect.Max.X), SrcY: f32(sv.Rect.Max.Y),
+			DstX: f32(rect.Max.X), DstY: f32(rect.Max.Y),
+			ColorR: rf, ColorG: gf, ColorB: bf, ColorA: af,
+		},
+		eb.Vertex{
+			SrcX: f32(sv.Rect.Min.X), SrcY: f32(sv.Rect.Max.Y),
+			DstX: f32(rect.Min.X), DstY: f32(rect.Max.Y),
+			ColorR: rf, ColorG: gf, ColorB: bf, ColorA: af,
+		},
+	)
+
+	buffer.Indices = append(
+		buffer.Indices,
+		indexStart+0, indexStart+1, indexStart+2, indexStart+0, indexStart+2, indexStart+3,
+	)
+}
+
+// assumes you will use TileImage
+func VIaddAllRoundTile(
+	buffer *VIBuffer,
+	rect FRectangle,
+	clr color.Color,
+) {
+	viAddTileWithoutRotImpl(
+		buffer, GetAllRoundTile(), rect, clr,
+	)
+}
+
+// assumes you will use TileImage
+func VIaddRectTile(
+	buffer *VIBuffer,
+	rect FRectangle,
+	clr color.Color,
+) {
+	viAddTileWithoutRotImpl(
+		buffer, GetRectTile(), rect, clr,
 	)
 }
 
@@ -1216,6 +1317,8 @@ func DrawBoard(
 		}
 	}
 
+	const segments = 6
+
 	// ============================
 	// draw background tiles
 	// ============================
@@ -1224,7 +1327,15 @@ func DrawBoard(
 
 		func(x, y int, style TileStyle, bgTileRect FRectangle) {
 			if ShouldDrawBgTile(style) {
-				VIaddRect(
+				/*
+					VIaddRect(
+						shapeBuf,
+						bgTileRect,
+						// ColorFade(style.BgFillColor, style.BgAlpha),
+						modColor(style.BgFillColor, style.BgAlpha, style.Highlight, ColorBgHighLight),
+					)
+				*/
+				VIaddRectTile(
 					shapeBuf,
 					bgTileRect,
 					// ColorFade(style.BgFillColor, style.BgAlpha),
@@ -1238,9 +1349,6 @@ func DrawBoard(
 					tileW := bgTileRect.Dx()
 					tileH := bgTileRect.Dy()
 
-					//const outerMargin = 1
-					//const innerMargin = 2
-
 					outerMargin := min(tileW, tileH) * 0.04
 					innerMargin := min(tileW, tileH) * 0.06
 
@@ -1253,19 +1361,26 @@ func DrawBoard(
 
 					innerRect = innerRect.Add(FPt(0, innerMargin))
 
-					radius := Lerp(1, 0.1, t*t*t)
-
-					innerRadius := radius * min(innerRect.Dx(), innerRect.Dy()) * 0.5
-					outerRadius := radius * min(outerRect.Dx(), outerRect.Dy()) * 0.5
-
-					VIaddRoundRect(
+					/*
+						VIaddRoundRect(
+							shapeBuf,
+							outerRect, outerRadius, true, segments,
+							modColor(ColorMineBg1, style.BgAlpha, style.Highlight, ColorBgHighLight),
+						)
+						VIaddRoundRect(
+							shapeBuf,
+							innerRect, innerRadius, true, segments,
+							modColor(ColorMineBg2, style.BgAlpha, style.Highlight, ColorBgHighLight),
+						)
+					*/
+					VIaddAllRoundTile(
 						shapeBuf,
-						outerRect, outerRadius, true, 5,
+						outerRect,
 						modColor(ColorMineBg1, style.BgAlpha, style.Highlight, ColorBgHighLight),
 					)
-					VIaddRoundRect(
+					VIaddAllRoundTile(
 						shapeBuf,
-						innerRect, innerRadius, true, 5,
+						innerRect,
 						modColor(ColorMineBg2, style.BgAlpha, style.Highlight, ColorBgHighLight),
 					)
 
@@ -1285,26 +1400,28 @@ func DrawBoard(
 	// ============================
 	// draw tiles
 	// ============================
-	const segments = 5
 
 	forEachTile(
 		board, boardRect, tileStyles,
 
-		func(x, y int, style TileStyle, strokeRect, fillRect FRectangle, radiusPx [4]float64) {
+		func(x, y int, style TileStyle, strokeRect, fillRect FRectangle, isRound [4]bool) {
 			if ShouldDrawTile(style) {
-				/*
-					strokeColor := modColor(
-						style.TileStrokeColor,
-						style.TileAlpha, style.Highlight, ColorTileHighLight,
-					)
-				*/
 				strokeColor := ColorFade(style.TileStrokeColor, style.TileAlpha)
 
-				VIaddRoundRectEx(
+				VIaddRoundTile(
 					shapeBuf,
-					strokeRect, radiusPx, true, [4]int{segments, segments, segments, segments},
+					strokeRect,
+					isRound,
 					strokeColor,
 				)
+
+				/*
+					VIaddRoundRectEx(
+						shapeBuf,
+						strokeRect, radiusPx, true, [4]int{segments, segments, segments, segments},
+						strokeColor,
+					)
+				*/
 			}
 		},
 	)
@@ -1312,18 +1429,27 @@ func DrawBoard(
 	forEachTile(
 		board, boardRect, tileStyles,
 
-		func(x, y int, style TileStyle, strokeRect, fillRect FRectangle, radiusPx [4]float64) {
+		func(x, y int, style TileStyle, strokeRect, fillRect FRectangle, isRound [4]bool) {
 			if ShouldDrawTile(style) {
 				fillColor := modColor(
 					style.TileFillColor,
 					style.TileAlpha, style.Highlight, ColorTileHighLight,
 				)
 
-				VIaddRoundRectEx(
+				VIaddRoundTile(
 					shapeBuf,
-					fillRect, radiusPx, true, [4]int{segments, segments, segments, segments},
+					fillRect,
+					isRound,
 					fillColor,
 				)
+
+				/*
+					VIaddRoundRectEx(
+						shapeBuf,
+						fillRect, radiusPx, true, [4]int{segments, segments, segments, segments},
+						fillColor,
+					)
+				*/
 			}
 		},
 	)
@@ -1375,12 +1501,12 @@ func DrawBoard(
 	}
 
 	BeginAntiAlias(false)
-	BeginFilter(eb.FilterNearest)
-	BeginMipMap(false)
+	BeginFilter(eb.FilterLinear)
+	BeginMipMap(true)
 	{
 		op := &DrawTrianglesOptions{}
 		op.ColorScaleMode = eb.ColorScaleModePremultipliedAlpha
-		DrawTriangles(shapesRenderTarget, shapeBuf.Vertices, shapeBuf.Indices, WhiteImage, op)
+		DrawTriangles(shapesRenderTarget, shapeBuf.Vertices, shapeBuf.Indices, TileSprite.Image, op)
 	}
 	EndMipMap()
 	EndFilter()
@@ -2502,6 +2628,83 @@ func GetFlagTile(animT float64) SubView {
 	frame := int(math.Round(animT * f64(FlagAnimSprite.Count-1)))
 	frame = Clamp(frame, 0, FlagAnimSprite.Count-1)
 	return SpriteSubView(FlagAnimSprite, frame)
+}
+
+// returns rounded cornder rect SubView
+// and how many 90 degree turns it need (always from 0 to 3)
+func GetRoundTile(isRound [4]bool) (SubView, int) {
+	const (
+		d0   = 0
+		d90  = 1
+		d180 = 2
+		d270 = 3
+	)
+
+	roundCount := 0
+
+	for _, round := range isRound {
+		if round {
+			roundCount++
+		}
+	}
+
+	switch roundCount {
+	case 0:
+		return SpriteSubView(TileSprite, 20), d0
+	case 1:
+		if isRound[0] {
+			return SpriteSubView(TileSprite, 21), d0
+		}
+		if isRound[1] {
+			return SpriteSubView(TileSprite, 21), d90
+		}
+		if isRound[2] {
+			return SpriteSubView(TileSprite, 21), d180
+		}
+		if isRound[3] {
+			return SpriteSubView(TileSprite, 21), d270
+		}
+	case 2:
+		if !isRound[0] && !isRound[1] {
+			return SpriteSubView(TileSprite, 22), d180
+		}
+		if !isRound[1] && !isRound[2] {
+			return SpriteSubView(TileSprite, 22), d270
+		}
+		if !isRound[2] && !isRound[3] {
+			return SpriteSubView(TileSprite, 22), d0 // d360
+		}
+		if !isRound[3] && !isRound[0] {
+			return SpriteSubView(TileSprite, 22), d90 // d450
+		}
+	case 3:
+		if !isRound[0] {
+			return SpriteSubView(TileSprite, 23), d90
+		}
+		if !isRound[1] {
+			return SpriteSubView(TileSprite, 23), d180
+		}
+		if !isRound[2] {
+			return SpriteSubView(TileSprite, 23), d270
+		}
+		if !isRound[3] {
+			return SpriteSubView(TileSprite, 23), d0 // d360
+		}
+	case 4:
+		return SpriteSubView(TileSprite, 24), d0
+	default:
+		panic("UNREACHABLE")
+	}
+
+	return SpriteSubView(TileSprite, 24), d0
+}
+
+func GetAllRoundTile() SubView {
+	return SpriteSubView(TileSprite, 24)
+}
+
+func GetRectTile() SubView {
+	return SpriteSubView(TileSprite, 20)
 }
 
 func MousePosToBoardPos(board Board, boardRect FRectangle, mousePos FPoint) (int, int) {

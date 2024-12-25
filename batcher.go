@@ -18,7 +18,7 @@ import (
 	"flag"
 	"fmt"
 	"io/fs"
-	"log"
+	"minesweeper/misc"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -35,12 +35,6 @@ func init() {
 	flag.StringVar(&DstDir, "d", "", "destination folder")
 }
 
-var (
-	ErrLogger  = log.New(os.Stderr, "[ FAIL! ]: ", log.Lshortfile)
-	WarnLogger = log.New(os.Stderr, "[ WARN! ]: ", log.Lshortfile)
-	InfoLogger = log.New(os.Stdout, "", 0)
-)
-
 func main() {
 	// TODO: check if ffmpeg exists
 	flag.Parse()
@@ -49,12 +43,12 @@ func main() {
 	// check if user gave path
 	// =========================
 	if len(SrcDir) <= 0 {
-		ErrLogger.Print("no source folder provided")
+		misc.ErrLogger.Print("no source folder provided")
 		flag.Usage()
 		CrashOnError(ErrorDefault)
 	}
 	if len(DstDir) <= 0 {
-		ErrLogger.Print("no destination folder provided")
+		misc.ErrLogger.Print("no destination folder provided")
 		flag.Usage()
 		CrashOnError(ErrorDefault)
 	}
@@ -63,10 +57,10 @@ func main() {
 	// check if SrcDir is folder
 	// =============================
 	if isDir, err := IsDir(SrcDir); err != nil {
-		ErrLogger.Printf("failed to check if \"%s\" a folder: %v", SrcDir, err)
+		misc.ErrLogger.Printf("failed to check if \"%s\" a folder: %v", SrcDir, err)
 		CrashOnError(SimpleErrorFromError(err))
 	} else if !isDir {
-		ErrLogger.Printf("\"%s\" is not a folder", SrcDir)
+		misc.ErrLogger.Printf("\"%s\" is not a folder", SrcDir)
 		CrashOnError(ErrorDefault)
 	}
 
@@ -81,13 +75,13 @@ func main() {
 
 		filepath.Walk(SrcDir, func(path string, info fs.FileInfo, err error) error {
 			if err != nil {
-				ErrLogger.Printf("failed to walk \"%s\": %v", path, err)
+				misc.ErrLogger.Printf("failed to walk \"%s\": %v", path, err)
 				return filepath.SkipDir
 			}
 
 			if !skippedRoot {
 				if isSame, err := IsSamePath(path, SrcDir); err != nil {
-					ErrLogger.Printf("failed to check if path is source folder: %v", err)
+					misc.ErrLogger.Printf("failed to check if path is source folder: %v", err)
 					CrashOnError(SimpleErrorFromError(err))
 				} else if isSame {
 					skippedRoot = true
@@ -124,7 +118,7 @@ func main() {
 	// ======================================
 	for i, dirent := range dirents {
 		if rel, err := filepath.Rel(SrcDir, dirent); err != nil {
-			ErrLogger.Printf("failed to make path local: %v", err)
+			misc.ErrLogger.Printf("failed to make path local: %v", err)
 			CrashOnError(SimpleErrorFromError(err))
 		} else {
 			dstDirents[i] = filepath.Join(DstDir, rel)
@@ -132,7 +126,7 @@ func main() {
 	}
 	for i, file := range audioFiles {
 		if rel, err := filepath.Rel(SrcDir, file); err != nil {
-			ErrLogger.Printf("failed to make path local: %v", err)
+			misc.ErrLogger.Printf("failed to make path local: %v", err)
 			CrashOnError(SimpleErrorFromError(err))
 		} else {
 			dstAudioFiles[i] = filepath.Join(DstDir, rel)
@@ -181,10 +175,10 @@ func main() {
 		cmd.Stdout = stdout
 		cmd.Stderr = stderr
 
-		InfoLogger.Print(cmd.String())
+		misc.InfoLogger.Print(cmd.String())
 
 		if err := cmd.Start(); err != nil {
-			ErrLogger.Printf("failed to convert \"%s\": %v", file, err)
+			misc.ErrLogger.Printf("failed to convert \"%s\": %v", file, err)
 		} else {
 			cmds = append(cmds, cmd)
 			stdouts = append(stdouts, stdout)
@@ -194,7 +188,7 @@ func main() {
 
 	for i, cmd := range cmds {
 		if err := cmd.Wait(); err != nil {
-			ErrLogger.Printf("%s\n\n", cmd.String())
+			misc.ErrLogger.Printf("%s\n\n", cmd.String())
 			os.Stdout.Write(stderrs[i].Bytes())
 		}
 	}
@@ -258,10 +252,10 @@ func IsSamePath(pathA, pathB string) (bool, error) {
 func MkDir(path string) SimpleError {
 	path = filepath.Clean(path)
 
-	InfoLogger.Printf("creating %s folder", path)
+	misc.InfoLogger.Printf("creating %s folder", path)
 
 	if err := os.MkdirAll(path, 0755); err != nil {
-		ErrLogger.Printf("failed to create \"%s\" folder : %v", path, err)
+		misc.ErrLogger.Printf("failed to create \"%s\" folder : %v", path, err)
 		return SimpleErrorFromError(err)
 	}
 
