@@ -1,9 +1,18 @@
 package main
 
+// TODO : currently, reveal animation and bomb animation
+// needs too many sound players for it's sound effects
+//
+// causing sound to bug out on chrome
+//
+// change the animation and sound effects to use less players
+// it doesn't even sound that good even with using many players
+
 import (
 	"fmt"
 	"image"
 	"image/color"
+	"io"
 	"math"
 	"math/rand/v2"
 	"slices"
@@ -300,6 +309,50 @@ type StyleModifier func(
 	tileStyles [][]TileStyle, // modify these to change style
 ) bool
 
+type PlayerPool struct {
+	pool   []*Player
+	cursor int
+	volume float64
+}
+
+func NewPlayerPool(size int, audioBytes []byte) PlayerPool {
+	pool := PlayerPool{}
+	pool.pool = make([]*Player, size)
+
+	for i := 0; i < len(pool.pool); i++ {
+		pool.pool[i] = NewPlayerFromBytes(audioBytes)
+	}
+
+	pool.volume = 1
+
+	return pool
+}
+
+func (p *PlayerPool) SetVolume(volume float64) {
+	volume = Clamp(volume, 0, 1)
+	p.volume = volume
+	for _, p := range p.pool {
+		p.SetVolume(volume)
+	}
+}
+
+func (p *PlayerPool) Volume() float64 {
+	return p.volume
+}
+
+func (p *PlayerPool) Play() {
+	if !IsSoundReady() {
+		return
+	}
+
+	p.pool[p.cursor].Seek(0, io.SeekStart)
+	p.pool[p.cursor].Play()
+	p.cursor++
+	if p.cursor >= len(p.pool) {
+		p.cursor = 0
+	}
+}
+
 type Game struct {
 	Rect FRectangle
 
@@ -334,6 +387,9 @@ type Game struct {
 
 	Particles []TileParticle
 
+	TileRevealSoundPlayers PlayerPool
+	BombSoundPlayers       PlayerPool
+
 	board     Board
 	prevBoard Board
 
@@ -367,18 +423,23 @@ func NewGame(boardWidth, boardHeight, mineCount int) *Game {
 
 	g.RetryButton.OnPress = func(justPressed bool) {
 		if justPressed {
-			PlaySoundBytes(SoundEffects[SeSwitch38], 0.8)
+			PlaySoundBytes(SeSwitch38, 0.8)
 		}
 	}
 
 	g.RetryButton.OnRelease = func() {
 		g.QueueResetBoardAnimation()
-		PlaySoundBytes(SoundEffects[SeCut], 0.8)
+		PlaySoundBytes(SeCut, 0.8)
 	}
 
 	g.GameAnimations = NewCircularQueue[CallbackAnimation](10)
 
 	g.Particles = make([]TileParticle, 0, 256)
+
+	g.TileRevealSoundPlayers = NewPlayerPool(10, SoundEffects[SeCut])
+	g.TileRevealSoundPlayers.SetVolume(0.3)
+	g.BombSoundPlayers = NewPlayerPool(5, SoundEffects[SeUnlinkSummer])
+	g.BombSoundPlayers.SetVolume(0.3)
 
 	g.ResetBoard(boardWidth, boardHeight, g.mineCount)
 
@@ -552,11 +613,11 @@ func (g *Game) Update() {
 
 		if prevState != g.GameState {
 			if g.GameState == GameStateLost { // on loss
-				PlaySoundBytes(SoundEffects[SeLinkSummer], 0.7)
+				PlaySoundBytes(SeLinkSummer, 0.7)
 				g.QueueDefeatAnimation(ms.BoardX, ms.BoardY)
 			} else if g.GameState == GameStateWon { // on win
 				g.QueueWinAnimation(ms.BoardX, ms.BoardY)
-				PlaySoundBytes(SoundEffects[SeWobble2], 0.6)
+				PlaySoundBytes(SeWobble2, 0.6)
 				//PlaySoundBytes(SoundEffects[SeWobble3], 0.6)
 				//PlaySoundBytes(SoundEffects[SeSave], 0.6)
 			}
@@ -1878,7 +1939,7 @@ func (g *Game) QueueRevealAnimation(revealsBefore, revealsAfter [][]bool, origin
 
 						if !playedSound {
 							playedSound = true
-							PlaySoundBytes(SoundEffects[SeCut], 0.3)
+							g.TileRevealSoundPlayers.Play()
 						}
 					} else {
 						style.DrawTile = false
@@ -1902,7 +1963,7 @@ func (g *Game) QueueRevealAnimation(revealsBefore, revealsAfter [][]bool, origin
 					// always play sound at the end
 					// if you didn't play sound before
 					if soundEffectCounter >= 2 {
-						PlaySoundBytes(SoundEffects[SeCut], 0.3)
+						g.TileRevealSoundPlayers.Play()
 					}
 					soundEffectCounter = 0
 				}
@@ -2072,7 +2133,7 @@ func (g *Game) QueueDefeatAnimation(originX, originY int) {
 
 			if timer.Current > 0 && !playedSound {
 				playedSound = true
-				PlaySoundBytes(SoundEffects[SeUnlinkSummer], 0.3)
+				g.BombSoundPlayers.Play()
 			}
 
 			timer.TickUp()
