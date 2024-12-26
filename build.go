@@ -350,7 +350,7 @@ func BuildApp(settings map[string]bool, buildWeb bool) (error, int) {
 		cmd := exec.Command(
 			"wasm-opt",
 			"./web_build/minesweeper.wasm",
-			"-O4",
+			"-O2",
 			"--enable-bulk-memory-opt", // NOTE: I have no idea what this option does lol
 			"-o",
 			"./web_build/minesweeper-opt.wasm",
