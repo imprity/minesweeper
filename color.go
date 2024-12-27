@@ -117,6 +117,12 @@ func ColorToNRGBA(clr color.Color) color.NRGBA {
 	if clr == nil {
 		return color.NRGBA{}
 	}
+	switch clr.(type) {
+	case  color.NRGBA:
+		return clr.(color.NRGBA)
+	case ColorTableIndex:
+		return TheColorTable[clr.(ColorTableIndex)]
+	}
 	return color.NRGBAModel.Convert(clr).(color.NRGBA)
 }
 
@@ -144,12 +150,19 @@ func LerpColorRGBA(c1, c2 color.Color, t float64) color.NRGBA {
 }
 
 func ColorFade(c color.Color, a float64) color.NRGBA {
-	nc := ColorNormalized(c, false)
+	nrgba := ColorToNRGBA(c)
+
+	a1 := uint32(nrgba.A)
+	a2 := uint32(a * 255)
+
+	a3 := a1 * a2 * 255
+	a3 = a3 / (255 * 255)
+
 	return color.NRGBA{
-		uint8(255 * nc[0]),
-		uint8(255 * nc[1]),
-		uint8(255 * nc[2]),
-		uint8(255 * nc[3] * a),
+		nrgba.R,
+		nrgba.G,
+		nrgba.B,
+		uint8(a3),
 	}
 }
 
