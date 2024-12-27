@@ -1,6 +1,12 @@
 *.exe
+
 minesweeper
-tmps/
+build
+run_web
+
 web_build/minesweeper.wasm
 web_build/minesweeper.wasm.bak
+
+tmps/
+
 build-settings.txt
