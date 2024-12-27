@@ -1305,7 +1305,7 @@ func VIaddSubViewInRect(
 	clr color.Color,
 	view SubView,
 ) {
-	imgSize := ImageSizeFPt(view)
+	imgSize := view.Rect.Size()
 	rectSize := rect.Size()
 
 	drawScale := GetScaleToFitRectInRect(imgSize.X, imgSize.Y, rectSize.X, rectSize.Y)
@@ -1354,27 +1354,21 @@ func DrawBoard(
 		highlightColor color.Color,
 	) color.Color {
 		faded := ColorFade(c, alpha)
-		norm := ColorNormalized(faded, true)
-
 		hlFaded := ColorFade(highlightColor, highlight)
-		hlNorm := ColorNormalized(hlFaded, true)
 
-		blended := [4]float64{
-			hlNorm[0] + norm[0]*(1-hlNorm[3]),
-			hlNorm[1] + norm[1]*(1-hlNorm[3]),
-			hlNorm[2] + norm[2]*(1-hlNorm[3]),
-			hlNorm[3] + norm[3]*(1-hlNorm[3]),
-		}
+		r1, g1, b1, a1 := faded.RGBA()
+		r2, g2, b2, a2 := hlFaded.RGBA()
 
-		for i, v := range blended {
-			blended[i] = Clamp(v, 0, 1)
-		}
+		r1, g1, b1, a1 = r1 >> 8, g1 >> 8, b1 >> 8, a1 >> 8
+		r2, g2, b2, a2 = r2 >> 8, g2 >> 8, b2 >> 8, a2 >> 8
+
+		r3 := r2 + (r1 * (255 - a2)) * 255 / (255 * 255)
+		g3 := g2 + (g1 * (255 - a2)) * 255 / (255 * 255)
+		b3 := b2 + (b1 * (255 - a2)) * 255 / (255 * 255)
+		a3 := a2 + (a1 * (255 - a2)) * 255 / (255 * 255)
 
 		return color.RGBA{
-			uint8(255 * blended[0]),
-			uint8(255 * blended[1]),
-			uint8(255 * blended[2]),
-			uint8(255 * blended[3]),
+			uint8(r3), uint8(g3), uint8(b3), uint8(a3),
 		}
 	}
 
@@ -1563,7 +1557,7 @@ func DrawBoard(
 
 	BeginAntiAlias(false)
 	BeginFilter(eb.FilterLinear)
-	BeginMipMap(true)
+	BeginMipMap(false)
 	{
 		op := &DrawTrianglesOptions{}
 		op.ColorScaleMode = eb.ColorScaleModePremultipliedAlpha
