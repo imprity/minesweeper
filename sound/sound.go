@@ -49,7 +49,7 @@ type decodeStream interface {
 	Length() int64
 }
 
-func (c *Context) registerAudio(
+func (c *Context) RegisterAudio(
 	audioName string,
 	audioFile []byte,
 	audioFileType string,

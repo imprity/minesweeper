@@ -1,19 +1,18 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"time"
 
-	"github.com/ebitengine/oto/v3"
+	"minesweeper/sound"
 )
 
 const SampleRate = 44100
 const BytesPerSample = 4
 
 var TheSoundManager struct {
-	Context *oto.Context
+	Context *sound.Context
 
 	volume     float64
 	prevVolume float64
@@ -32,15 +31,17 @@ func InitSound() {
 	sm.volume = 1
 	sm.prevVolume = 1
 
-	contextOp := oto.NewContextOptions{
-		SampleRate:   SampleRate,
-		ChannelCount: 2,
-		Format:       oto.FormatSignedInt16LE,
-		BufferSize:   time.Millisecond * 50,
-	}
+	/*
+		contextOp := oto.NewContextOptions{
+			SampleRate:   SampleRate,
+			ChannelCount: 2,
+			Format:       oto.FormatSignedInt16LE,
+			BufferSize:   time.Millisecond * 50,
+		}
+	*/
 
 	var err error
-	sm.Context, sm.contextReadyChan, err = oto.NewContext(&contextOp)
+	sm.Context, sm.contextReadyChan, err = sound.NewContext(SampleRate)
 
 	if err != nil {
 		ErrLogger.Fatalf("couldn't initialize sound %v", err)
@@ -87,24 +88,29 @@ func UpdateSound() {
 	sm.prevVolume = sm.volume
 }
 
-func newPlayerInternal(audioBytes []byte) *Player {
+func RegisterAudio(audioName string, audioFile []byte, audioFileType string) <-chan error {
+	sm := &TheSoundManager
+	return sm.Context.RegisterAudio(
+		audioName,
+		audioFile,
+		audioFileType,
+	)
+}
+
+func newPlayerInternal(audioName string) *Player {
 	sm := &TheSoundManager
 
 	player := new(Player)
-	player.player = sm.Context.NewPlayer(bytes.NewReader(audioBytes))
+	player.player = sm.Context.NewPlayer(audioName)
 	player.volume = 1
-
-	const buffSizeTime = time.Second / 2
-	buffSizeBytes := int(buffSizeTime) * SampleRate / int(time.Second) * BytesPerSample
-	player.player.SetBufferSize(int(buffSizeBytes))
 
 	return player
 }
 
-func NewPlayerFromBytes(audioBytes []byte) *Player {
+func NewPlayer(audioName string) *Player {
 	sm := &TheSoundManager
 
-	player := newPlayerInternal(audioBytes)
+	player := newPlayerInternal(audioName)
 
 	sm.players = append(sm.players, player)
 
@@ -127,28 +133,28 @@ func IsSoundReady() bool {
 	return sm.contextReady
 }
 
-func PlaySoundBytes(sound string, volume float64) {
+func PlaySoundBytes(audioName string, volume float64) {
 	if !IsSoundReady() {
 		return
 	}
 
 	sm := &TheSoundManager
 
-	for _, player := range sm.tmpPlayers[sound] {
+	for _, player := range sm.tmpPlayers[audioName] {
 		if !player.IsPlaying() {
 			player.SetVolume(volume)
-			player.Seek(0, io.SeekStart)
+			player.SetPosition(0)
 			player.Play()
 			return
 		}
 	}
 
 	// all players are busy, create new one
-	tmpP := newPlayerInternal(SoundEffects[sound])
+	tmpP := newPlayerInternal(audioName)
 	tmpP.SetVolume(volume)
 	tmpP.Play()
 
-	sm.tmpPlayers[sound] = append(sm.tmpPlayers[sound], tmpP)
+	sm.tmpPlayers[audioName] = append(sm.tmpPlayers[audioName], tmpP)
 }
 
 type AudioDecoder interface {
@@ -157,7 +163,7 @@ type AudioDecoder interface {
 }
 
 type Player struct {
-	player *oto.Player
+	player *sound.Player
 	volume float64
 }
 
@@ -179,10 +185,8 @@ func (p *Player) PlayIfReady() {
 	}
 }
 
-func (p *Player) Seek(offset int64, whence int) int64 {
-	// yes, I'm ignoring error lol
-	pos, _ := p.player.Seek(offset, whence)
-	return pos
+func (p *Player) SetPosition(offset time.Duration) {
+	p.player.SetPosition(offset)
 }
 
 func (p *Player) SetVolume(volume float64) {

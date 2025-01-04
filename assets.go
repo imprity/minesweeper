@@ -3,22 +3,16 @@ package main
 import (
 	"bytes"
 	"embed"
-	"fmt"
 	"image"
 	"image/color"
 	_ "image/jpeg"
 	_ "image/png"
-	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 
 	eb "github.com/hajimehoshi/ebiten/v2"
 	ebt "github.com/hajimehoshi/ebiten/v2/text/v2"
-
-	"github.com/hajimehoshi/ebiten/v2/audio/mp3"
-	"github.com/hajimehoshi/ebiten/v2/audio/vorbis"
-	"github.com/hajimehoshi/ebiten/v2/audio/wav"
 )
 
 //go:embed dejavu-fonts-ttf-2.37/ttf/DejaVuSansMono.ttf
@@ -50,8 +44,6 @@ var WhiteImage *eb.Image
 var MissingImage *eb.Image
 
 var MissingShader *eb.Shader
-
-var SoundEffects = make(map[string][]byte)
 
 func init() {
 	// ===================
@@ -174,49 +166,6 @@ func LoadAssets() {
 		}
 		sprite.Image = img
 		return sprite
-	}
-
-	loadAudioBytes := func(path string) ([]byte, error) {
-		audioFile, err := loadData(path)
-		if err != nil {
-			return nil, err
-		}
-
-		var decoder AudioDecoder
-
-		if CheckFileExt(path, ".wav") {
-			decoder, err = wav.DecodeWithSampleRate(SampleRate, bytes.NewReader(audioFile))
-			if err != nil {
-				return nil, err
-			}
-		} else if CheckFileExt(path, ".mp3") {
-			decoder, err = mp3.DecodeWithSampleRate(SampleRate, bytes.NewReader(audioFile))
-			if err != nil {
-				return nil, err
-			}
-		} else if CheckFileExt(path, ".ogg") {
-			decoder, err = vorbis.DecodeWithSampleRate(SampleRate, bytes.NewReader(audioFile))
-			if err != nil {
-				return nil, err
-			}
-		} else {
-			return nil, fmt.Errorf("usupported file format: %s", filepath.Ext(path))
-		}
-
-		audioBytes, err := io.ReadAll(decoder)
-		if err != nil {
-			return nil, err
-		}
-
-		return audioBytes, nil
-	}
-
-	mustLoadAudioBytes := func(filepath string) []byte {
-		audio, err := loadAudioBytes(filepath)
-		if err != nil {
-			ErrLogger.Fatalf("failed to load %s: %v", filepath, err)
-		}
-		return audio
 	}
 
 	// load tile sprite
@@ -357,8 +306,14 @@ func LoadAssets() {
 	}
 
 	// load audios
+	audioErrors := make(map[string]<-chan error)
 	for _, src := range SoundSrcs {
-		SoundEffects[src] = mustLoadAudioBytes(src)
+		file := mustLoadData(src)
+		audioErrors[src] = RegisterAudio(src, file, filepath.Ext(src))
+	}
+
+	for _, errChan := range audioErrors {
+		<-errChan
 	}
 }
 

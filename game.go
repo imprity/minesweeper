@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"image"
 	"image/color"
-	"io"
 	"math"
 	"math/rand/v2"
 	"slices"
@@ -315,12 +314,12 @@ type PlayerPool struct {
 	volume float64
 }
 
-func NewPlayerPool(size int, audioBytes []byte) PlayerPool {
+func NewPlayerPool(size int, audioName string) PlayerPool {
 	pool := PlayerPool{}
 	pool.pool = make([]*Player, size)
 
 	for i := 0; i < len(pool.pool); i++ {
-		pool.pool[i] = NewPlayerFromBytes(audioBytes)
+		pool.pool[i] = NewPlayer(audioName)
 	}
 
 	pool.volume = 1
@@ -345,7 +344,7 @@ func (p *PlayerPool) Play() {
 		return
 	}
 
-	p.pool[p.cursor].Seek(0, io.SeekStart)
+	p.pool[p.cursor].SetPosition(0)
 	p.pool[p.cursor].Play()
 	p.cursor++
 	if p.cursor >= len(p.pool) {
@@ -436,9 +435,9 @@ func NewGame(boardWidth, boardHeight, mineCount int) *Game {
 
 	g.Particles = make([]TileParticle, 0, 256)
 
-	g.TileRevealSoundPlayers = NewPlayerPool(10, SoundEffects[SeCut])
+	g.TileRevealSoundPlayers = NewPlayerPool(10, SeCut)
 	g.TileRevealSoundPlayers.SetVolume(0.3)
-	g.BombSoundPlayers = NewPlayerPool(5, SoundEffects[SeUnlinkSummer])
+	g.BombSoundPlayers = NewPlayerPool(5, SeUnlinkSummer)
 	g.BombSoundPlayers.SetVolume(0.3)
 
 	g.ResetBoard(boardWidth, boardHeight, g.mineCount)
