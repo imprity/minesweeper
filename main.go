@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"minesweeper/sound"
 	"os"
 
 	_ "github.com/silbinarywolf/preferdiscretegpu"
@@ -53,6 +54,11 @@ func NewApp() *App {
 }
 
 func (a *App) Update() error {
+	// TEST TEST TEST TEST TEST
+	{
+		c := new(sound.Context)
+	}
+	// TEST TEST TEST TEST TEST
 	ClearDebugMsgs()
 
 	// ==========================
