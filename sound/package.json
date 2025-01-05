@@ -1,0 +1,9 @@
+{
+  "name": "sound",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sound module for Go minesweeper",
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}

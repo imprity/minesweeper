@@ -3,10 +3,10 @@
 package sound
 
 import (
+	"fmt"
 	"runtime"
 	"syscall/js"
 	"time"
-	"fmt"
 )
 
 var jsFunctionMap map[string]js.Value = make(map[string]js.Value)
@@ -19,7 +19,7 @@ func NewContext(sampleRate int) (*Context, chan struct{}, error) {
 	c := new(Context)
 	c.sampleRate = sampleRate
 
-	jsFuncNames := []string {
+	jsFuncNames := []string{
 		"initAudioContext",
 		"newBufferFromAudioFile",
 		"newPlayer",
@@ -41,7 +41,7 @@ func NewContext(sampleRate int) (*Context, chan struct{}, error) {
 
 	readyChan := make(chan struct{})
 	var onReadyFunc js.Func
-	onReadyFunc = js.FuncOf(func(this js.Value, args []js.Value) any{
+	onReadyFunc = js.FuncOf(func(this js.Value, args []js.Value) any {
 		close(readyChan)
 		onReadyFunc.Release()
 		return nil
@@ -87,7 +87,7 @@ func (c *Context) RegisterAudio(
 }
 
 type Player struct {
-	playerId js.Value
+	playerId    js.Value
 	playerIdInt int
 }
 

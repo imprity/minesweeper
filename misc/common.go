@@ -56,3 +56,20 @@ func CheckExeExists(exe string) bool {
 	_, err := exec.LookPath(exe)
 	return err == nil
 }
+
+func CopyFile(src, dst string, perm os.FileMode) error {
+	src = filepath.Clean(src)
+	dst = filepath.Clean(dst)
+
+	var err error
+	var srcFile []byte
+	if srcFile, err = os.ReadFile(src); err != nil {
+		return err
+	}
+
+	if err = os.WriteFile(dst, srcFile, perm); err != nil {
+		return err
+	}
+
+	return nil
+}

@@ -4,13 +4,14 @@ package main
 
 import (
 	"fmt"
-	"minesweeper/misc"
 	"os"
 	"os/exec"
 	"runtime"
 	"slices"
 	"strings"
 	"unicode/utf8"
+
+	"minesweeper/misc"
 )
 
 const SettingsPath = "build-settings.txt"
@@ -31,6 +32,7 @@ func init() {
 	setDefault("dev", false, "Enable dev related features like debugging.")
 	setDefault("opt", true, "Optimize and inline.")
 	setDefault("wasm-opt", false, "Optimize wasm (requires wasm-opt from https://github.com/WebAssembly/binaryen).")
+	setDefault("tsc", false, "Build typescript module.")
 	setDefault("no-vcs", false, "Stop Go compiler from stamp binary with version control information.")
 }
 
@@ -151,6 +153,14 @@ func main() {
 			fmt.Printf("  %v : %v\n", name, value)
 		}
 		fmt.Printf("\n")
+	}
+
+	if settings["tsc"] {
+		err, errcode := BuildTsc()
+		if err != nil {
+			misc.ErrLogger.Printf("failed to build for typescript module: %v", err)
+			os.Exit(errcode)
+		}
 	}
 
 	misc.InfoLogger.Printf("building %s", buildTarget)
@@ -330,7 +340,7 @@ func BuildApp(settings map[string]bool, buildWeb bool) (error, int) {
 		cmd.Env = append(cmd.Env, "GOARCH=wasm")
 	}
 
-	misc.InfoLogger.Printf("%s", strings.Join(cmd.Args, " "))
+	misc.InfoLogger.Printf("%s", cmd.String())
 
 	fmt.Printf("\n")
 	err := cmd.Run()
@@ -359,7 +369,7 @@ func BuildApp(settings map[string]bool, buildWeb bool) (error, int) {
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 
-		misc.InfoLogger.Printf("%s", strings.Join(cmd.Args, " "))
+		misc.InfoLogger.Printf("%s", cmd.String())
 
 		fmt.Printf("\n")
 		err := cmd.Run()
@@ -377,6 +387,77 @@ func BuildApp(settings map[string]bool, buildWeb bool) (error, int) {
 		if err != nil {
 			return err, 1
 		}
+	}
+
+	return nil, 0
+}
+
+func BuildTsc() (error, int) {
+	if !misc.CheckExeExists("npm") {
+		return fmt.Errorf("couldn't find npm"), 1
+	}
+
+	// ==============
+	// npm install
+	// ==============
+	cmd := exec.Command(
+		"npm",
+		"install",
+	)
+
+	cmd.Dir = "./sound"
+
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	misc.InfoLogger.Printf("%s", cmd.String())
+
+	err := cmd.Run()
+
+	if err != nil {
+		return err, err.(*exec.ExitError).ExitCode()
+	}
+
+	// ================
+	// run typescript
+	// ================
+	if !misc.CheckExeExists("npx") {
+		return fmt.Errorf("couldn't find npx"), 1
+	}
+
+	cmd = exec.Command(
+		"npx",
+		"tsc",
+	)
+
+	cmd.Dir = "./sound"
+
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	misc.InfoLogger.Printf("%s", cmd.String())
+
+	fmt.Printf("\n")
+	err = cmd.Run()
+	fmt.Printf("\n")
+
+	if err != nil {
+		return err, err.(*exec.ExitError).ExitCode()
+	}
+
+	// ================
+	// copy file
+	// ================
+	const copySrc = "./sound/sound.js"
+	const copyDst = "./web_build/sound.js"
+
+	misc.InfoLogger.Printf("copying %s to %s", copySrc, copyDst)
+
+	err = misc.CopyFile(
+		copySrc, copyDst, 0664,
+	)
+	if err != nil {
+		return err, 1
 	}
 
 	return nil, 0
