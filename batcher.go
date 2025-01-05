@@ -142,8 +142,6 @@ func main() {
 		}
 	}
 
-	// ffmpeg -i .\tmps\test-sounds\UI_SFX_Set\click1.wav -vn -ar 44100 -ac 2 -q:a 2 ./meme/test.ogg
-
 	// ======================================
 	// convert audio
 	// ======================================

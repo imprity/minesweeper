@@ -33,9 +33,6 @@ declare var ON_AUDIO_RESUME : ()=>void
     callback = () => {
         AUDIO_CONTEXT.resume().then(()=>{
             if (typeof ON_AUDIO_RESUME === 'function') {
-                // TEST TEST TEST TEST
-                console.log('from js : ON_AUDIO_RESUME')
-                // TEST TEST TEST TEST
                 ON_AUDIO_RESUME()
             }
             removeCallbacks()
