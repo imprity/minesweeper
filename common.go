@@ -1,5 +1,9 @@
 package main
 
+import (
+	"fmt"
+)
+
 type CircularQueue[T any] struct {
 	End    int
 	Start  int
@@ -118,4 +122,43 @@ func (q *Queue[T]) PeekLast() T {
 
 func (q *Queue[T]) Clear() {
 	q.Data = q.Data[:0]
+}
+
+type Array2D[T any] struct {
+	Width  int
+	Height int
+
+	Data []T
+}
+
+func New2DArray[T any](width, height int) Array2D[T] {
+	arr := Array2D[T]{
+		Width:  width,
+		Height: height,
+		Data:   make([]T, width*height),
+	}
+
+	return arr
+}
+
+func (a *Array2D[T]) Get(x, y int) T {
+	if x < 0 || y < 0 || x >= a.Width || y >= a.Height {
+		msg := fmt.Sprintf(
+			"%d, %d is out side of %d, %d",
+			x, y, a.Width, a.Height,
+		)
+		panic(msg)
+	}
+	return a.Data[x+y*a.Width]
+}
+
+func (a *Array2D[T]) Set(x, y int, t T) {
+	if x < 0 || y < 0 || x >= a.Width || y >= a.Height {
+		msg := fmt.Sprintf(
+			"%d, %d is out side of %d, %d",
+			x, y, a.Width, a.Height,
+		)
+		panic(msg)
+	}
+	a.Data[x+y*a.Width] = t
 }

@@ -12,10 +12,10 @@ type Board struct {
 	Width  int
 	Height int
 
-	Mines [][]bool
+	Mines Array2D[bool]
 
-	Revealed [][]bool
-	Flags    [][]bool
+	Revealed Array2D[bool]
+	Flags    Array2D[bool]
 }
 
 func NewBoard(width int, height int) Board {
@@ -67,7 +67,8 @@ func (board *Board) PlaceMines(count, exceptX, exceptY int) {
 	}
 
 	for i := 0; i < count; i++ {
-		board.Mines[minePlaces[i][0]][minePlaces[i][1]] = true
+		//board.Mines[minePlaces[i][0]][minePlaces[i][1]] = true
+		board.Mines.Set(minePlaces[i][0], minePlaces[i][1], true)
 	}
 }
 
@@ -79,9 +80,12 @@ func (board *Board) Copy() Board {
 	for iterator.HasNext() {
 		x, y := iterator.GetNext()
 
-		copy.Mines[x][y] = board.Mines[x][y]
-		copy.Revealed[x][y] = board.Revealed[x][y]
-		copy.Flags[x][y] = board.Flags[x][y]
+		//copy.Mines[x][y] = board.Mines[x][y]
+		copy.Mines.Set(x, y, board.Mines.Get(x, y))
+		//copy.Revealed[x][y] = board.Revealed[x][y]
+		copy.Revealed.Set(x, y, board.Revealed.Get(x, y))
+		//copy.Flags[x][y] = board.Flags[x][y]
+		copy.Flags.Set(x, y, board.Flags.Get(x, y))
 	}
 
 	return copy
@@ -97,9 +101,12 @@ func (board *Board) SaveTo(targetBoard Board) {
 	for iterator.HasNext() {
 		x, y := iterator.GetNext()
 
-		targetBoard.Mines[x][y] = board.Mines[x][y]
-		targetBoard.Revealed[x][y] = board.Revealed[x][y]
-		targetBoard.Flags[x][y] = board.Flags[x][y]
+		//targetBoard.Mines[x][y] = board.Mines[x][y]
+		targetBoard.Mines.Set(x, y, board.Mines.Get(x, y))
+		//targetBoard.Revealed[x][y] = board.Revealed[x][y]
+		targetBoard.Revealed.Set(x, y, board.Revealed.Get(x, y))
+		//targetBoard.Flags[x][y] = board.Flags[x][y]
+		targetBoard.Flags.Set(x, y, board.Flags.Get(x, y))
 	}
 }
 
@@ -112,21 +119,21 @@ func (board *Board) SpreadSafeArea(posX int, posY int) {
 		return
 	}
 
-	if board.Revealed[posX][posY] {
+	if board.Revealed.Get(posX, posY) {
 		return
 	}
 
-	if board.Mines[posX][posY] {
+	if board.Mines.Get(posX, posY) {
 		return
 	}
 
-	board.Revealed[posX][posY] = true
+	board.Revealed.Set(posX, posY, true)
 
 	if board.GetNeighborMineCount(posX, posY) > 0 {
 		return
 	}
 
-	board.Flags[posX][posY] = false
+	board.Flags.Set(posX, posY, false)
 
 	iterator := NewBoardIterator(posX-1, posY-1, posX+1, posY+1)
 	for iterator.HasNext() {
@@ -141,7 +148,7 @@ func (board *Board) GetNeighborMineCount(posX int, posY int) int {
 	var mineCount int = 0
 	for x := posX - 1; x <= posX+1; x++ {
 		for y := posY - 1; y <= posY+1; y++ {
-			if board.IsPosInBoard(x, y) && board.Mines[x][y] {
+			if board.IsPosInBoard(x, y) && board.Mines.Get(x, y) {
 				mineCount += 1
 			}
 		}
@@ -154,7 +161,7 @@ func (board *Board) GetNeighborFlagCount(posX int, posY int) int {
 	var flagCount int = 0
 	for x := max(posX-1, 0); x < min(posX+2, board.Width); x++ {
 		for y := max(posY-1, 0); y < min(posY+2, board.Height); y++ {
-			if board.Flags[x][y] {
+			if board.Flags.Get(x, y) {
 				flagCount += 1
 			}
 		}
@@ -166,7 +173,7 @@ func (board *Board) GetNeighborFlagCount(posX int, posY int) int {
 func (board *Board) HasNoMines() bool {
 	for x := range board.Width {
 		for y := range board.Height {
-			if board.Mines[x][y] {
+			if board.Mines.Get(x, y) {
 				return false
 			}
 		}
@@ -181,7 +188,7 @@ func (board *Board) IsAllSafeTileRevealed() bool {
 
 	for iter.HasNext() {
 		x, y := iter.GetNext()
-		if !board.Revealed[x][y] && !board.Mines[x][y] {
+		if !board.Revealed.Get(x, y) && !board.Mines.Get(x, y) {
 			return false
 		}
 	}
@@ -266,8 +273,8 @@ func (board *Board) InteractAt(posX int, posY int, interaction BoardInteractionT
 		// remove flags where it's revealed
 		for x := 0; x < board.Width; x++ {
 			for y := 0; y < board.Height; y++ {
-				if board.Revealed[x][y] {
-					board.Flags[x][y] = false
+				if board.Revealed.Get(x, y) {
+					board.Flags.Set(x, y, false)
 				}
 			}
 		}
@@ -279,11 +286,11 @@ func (board *Board) InteractAt(posX int, posY int, interaction BoardInteractionT
 			if board.HasNoMines() {
 				board.PlaceMines(minesToSpawn, posX, posY)
 			}
-			if !board.Revealed[posX][posY] {
-				if board.Flags[posX][posY] { // if flag is up, ignore step
+			if !board.Revealed.Get(posX, posY) {
+				if board.Flags.Get(posX, posY) { // if flag is up, ignore step
 					return GameStatePlaying
 				}
-				if board.Mines[posX][posY] {
+				if board.Mines.Get(posX, posY) {
 					return GameStateLost // user stepped on a mine
 				}
 				//we have to spread out
@@ -297,14 +304,15 @@ func (board *Board) InteractAt(posX int, posY int, interaction BoardInteractionT
 		}
 	case InteractionTypeFlag:
 		{
-			if !board.Revealed[posX][posY] {
-				board.Flags[posX][posY] = !board.Flags[posX][posY]
+			if !board.Revealed.Get(posX, posY) {
+				//board.Flags[posX][posY] = !board.Flags[posX][posY]
+				board.Flags.Set(posX, posY, !board.Flags.Get(posX, posY))
 			}
 			return GameStatePlaying
 		}
 	case InteractionTypeCheck:
 		{
-			if board.Revealed[posX][posY] && board.GetNeighborMineCount(posX, posY) > 0 {
+			if board.Revealed.Get(posX, posY) && board.GetNeighborMineCount(posX, posY) > 0 {
 				var flagCount int = board.GetNeighborFlagCount(posX, posY)
 				if board.GetNeighborMineCount(posX, posY) == flagCount {
 					//check if user flagged it correctly
@@ -313,7 +321,7 @@ func (board *Board) InteractAt(posX int, posY int, interaction BoardInteractionT
 					for iterator.HasNext() {
 						x, y := iterator.GetNext()
 						if board.IsPosInBoard(x, y) {
-							if board.Flags[x][y] && !board.Mines[x][y] {
+							if board.Flags.Get(x, y) && !board.Mines.Get(x, y) {
 								return GameStateLost
 							}
 						}

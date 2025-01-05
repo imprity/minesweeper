@@ -61,14 +61,6 @@ func ImageSizeFPt(img image.Image) FPoint {
 	return FPoint{f64(bound.Dx()), f64(bound.Dy())}
 }
 
-func New2DArray[T any](width, height int) [][]T {
-	var arr = make([][]T, width)
-	for i := 0; i < width; i++ {
-		arr[i] = make([]T, height)
-	}
-	return arr
-}
-
 func ExecutablePath() (string, error) {
 	path, err := os.Executable()
 

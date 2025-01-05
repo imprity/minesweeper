@@ -8,6 +8,8 @@ import (
 	"minesweeper/sound"
 )
 
+var _ = fmt.Printf
+
 const SampleRate = 44100
 const BytesPerSample = 4
 
@@ -76,13 +78,15 @@ func UpdateSound() {
 	}
 
 	// TEST TEST TEST TEST TEST
-	totalPlayers := 0
-	for i, soundName := range SoundSrcs {
-		DebugPrint(fmt.Sprintf("sound %02d", i), len(sm.tmpPlayers[soundName]))
-		totalPlayers += len(sm.tmpPlayers[soundName])
-	}
-	totalPlayers += len(sm.players)
-	DebugPrint("total players", totalPlayers)
+	/*
+		totalPlayers := 0
+		for i, soundName := range SoundSrcs {
+			DebugPrint(fmt.Sprintf("sound %02d", i), len(sm.tmpPlayers[soundName]))
+			totalPlayers += len(sm.tmpPlayers[soundName])
+		}
+		totalPlayers += len(sm.players)
+		DebugPrint("total players", totalPlayers)
+	*/
 	// TEST TEST TEST TEST TEST
 
 	sm.prevVolume = sm.volume
