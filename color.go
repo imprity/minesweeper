@@ -118,7 +118,7 @@ func ColorToNRGBA(clr color.Color) color.NRGBA {
 		return color.NRGBA{}
 	}
 	switch clr.(type) {
-	case  color.NRGBA:
+	case color.NRGBA:
 		return clr.(color.NRGBA)
 	case ColorTableIndex:
 		return TheColorTable[clr.(ColorTableIndex)]

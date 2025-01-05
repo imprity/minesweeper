@@ -10,7 +10,7 @@ import (
 )
 
 type Sprite struct {
-	*eb.Image
+	Image *eb.Image
 
 	Width, Height int
 
@@ -28,7 +28,8 @@ func SpriteRect(sprite Sprite, spriteN int) image.Rectangle {
 	w := sprite.Width + sprite.Margin
 	h := sprite.Height + sprite.Margin
 
-	spriteW, spriteH := ImageSize(sprite)
+	imgRect := sprite.Image.Bounds()
+	spriteW, spriteH := imgRect.Dx(), imgRect.Dy()
 
 	colCount := spriteW / w
 	rowCount := spriteH / h
@@ -43,7 +44,7 @@ func SpriteRect(sprite Sprite, spriteN int) image.Rectangle {
 	col := spriteN % colCount
 	row := spriteN / colCount
 
-	imageMin := sprite.Bounds().Min
+	imageMin := sprite.Image.Bounds().Min
 
 	return image.Rectangle{
 		Min: image.Pt(col*w, row*h).Add(imageMin),
@@ -67,7 +68,7 @@ func SpriteSubView(sprite Sprite, spriteN int) SubView {
 }
 
 func SpriteSubImage(sprite Sprite, spriteN int) *eb.Image {
-	return sprite.SubImage(SpriteRect(sprite, spriteN)).(*eb.Image)
+	return sprite.Image.SubImage(SpriteRect(sprite, spriteN)).(*eb.Image)
 }
 
 type spriteJsonMetadata struct {

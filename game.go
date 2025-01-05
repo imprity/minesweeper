@@ -306,7 +306,7 @@ type StyleModifier func(
 	interaction BoardInteractionType,
 	stateChanged bool, // GameState or board has changed
 	prevGameState, gameState GameState,
-	tileStyles [][]TileStyle, // modify these to change style
+	tileStyles Array2D[TileStyle], // modify these to change style
 ) bool
 
 type PlayerPool struct {
@@ -360,10 +360,10 @@ type Game struct {
 	OnGameEnd          func(didWin bool)
 	OnFirstInteraction func()
 
-	BaseTileStyles   [][]TileStyle
-	RenderTileStyles [][]TileStyle
+	BaseTileStyles   Array2D[TileStyle]
+	RenderTileStyles Array2D[TileStyle]
 
-	TileAnimations [][]CircularQueue[CallbackAnimation]
+	TileAnimations Array2D[*CircularQueue[CallbackAnimation]]
 
 	GameAnimations CircularQueue[CallbackAnimation]
 
@@ -467,18 +467,19 @@ func (g *Game) ResetBoardWithNoStyles(width, height, mineCount int) {
 	g.BaseTileStyles = New2DArray[TileStyle](width, height)
 	g.RenderTileStyles = New2DArray[TileStyle](width, height)
 
-	g.TileAnimations = New2DArray[CircularQueue[CallbackAnimation]](width, height)
+	g.TileAnimations = New2DArray[*CircularQueue[CallbackAnimation]](width, height)
 	for x := range width {
 		for y := range height {
 			// TODO : do we need this much queued animation?
-			g.TileAnimations[x][y] = NewCircularQueue[CallbackAnimation](5)
+			queue := NewCircularQueue[CallbackAnimation](5)
+			g.TileAnimations.Set(x, y, &queue)
 		}
 	}
 
 	for x := range width {
 		for y := range height {
-			g.BaseTileStyles[x][y] = NewTileStyle()
-			g.RenderTileStyles[x][y] = NewTileStyle()
+			g.BaseTileStyles.Set(x, y, NewTileStyle())
+			g.RenderTileStyles.Set(x, y, NewTileStyle())
 		}
 	}
 
@@ -495,8 +496,8 @@ func (g *Game) ResetBoard(width, height, mineCount int) {
 	for x := range width {
 		for y := range height {
 			targetStyle := GetAnimationTargetTileStyle(g.board, x, y)
-			g.BaseTileStyles[x][y] = targetStyle
-			g.RenderTileStyles[x][y] = targetStyle
+			g.BaseTileStyles.Set(x, y, targetStyle)
+			g.RenderTileStyles.Set(x, y, targetStyle)
 		}
 	}
 }
@@ -541,17 +542,17 @@ func (g *Game) Update() {
 			DIFF_CHECK:
 				for x := range g.board.Width {
 					for y := range g.board.Height {
-						if g.board.Mines[x][y] != g.prevBoard.Mines[x][y] {
+						if g.board.Mines.Get(x, y) != g.prevBoard.Mines.Get(x, y) {
 							stateChanged = true
 							break DIFF_CHECK
 						}
 
-						if g.board.Flags[x][y] != g.prevBoard.Flags[x][y] {
+						if g.board.Flags.Get(x, y) != g.prevBoard.Flags.Get(x, y) {
 							stateChanged = true
 							break DIFF_CHECK
 						}
 
-						if g.board.Revealed[x][y] != g.prevBoard.Revealed[x][y] {
+						if g.board.Revealed.Get(x, y) != g.prevBoard.Revealed.Get(x, y) {
 							stateChanged = true
 							break DIFF_CHECK
 						}
@@ -587,7 +588,7 @@ func (g *Game) Update() {
 	REVEAL_CHECK:
 		for x := range g.board.Width {
 			for y := range g.board.Height {
-				if g.board.Revealed[x][y] && !g.prevBoard.Revealed[x][y] {
+				if g.board.Revealed.Get(x, y) && !g.prevBoard.Revealed.Get(x, y) {
 					// on reveal
 					g.QueueRevealAnimation(
 						g.prevBoard.Revealed, g.board.Revealed, ms.BoardX, ms.BoardY)
@@ -601,8 +602,8 @@ func (g *Game) Update() {
 		// update flag
 		for x := range g.board.Width {
 			for y := range g.board.Height {
-				if g.prevBoard.Flags[x][y] != g.board.Flags[x][y] {
-					if g.board.Flags[x][y] {
+				if g.prevBoard.Flags.Get(x, y) != g.board.Flags.Get(x, y) {
+					if g.board.Flags.Get(x, y) {
 						g.QueueAddFlagAnimation(x, y)
 					} else {
 						g.QueueRemoveFlagAnimation(x, y)
@@ -657,14 +658,14 @@ func (g *Game) Update() {
 	// update BaseTileStyles
 	for x := range g.board.Width {
 		for y := range g.board.Height {
-			AnimationQueueUpdate(&g.TileAnimations[x][y])
+			AnimationQueueUpdate(g.TileAnimations.Get(x, y))
 		}
 	}
 
 	// copy it over to RenderTileStyles
 	for x := range g.board.Width {
 		for y := range g.board.Height {
-			g.RenderTileStyles[x][y] = g.BaseTileStyles[x][y]
+			g.RenderTileStyles.Set(x, y, g.BaseTileStyles.Get(x, y))
 		}
 	}
 
@@ -676,7 +677,7 @@ func (g *Game) Update() {
 	REDRAW_CHECK_LOOP:
 		for x := range g.board.Width {
 			for y := range g.board.Height {
-				if !g.TileAnimations[x][y].IsEmpty() {
+				if !g.TileAnimations.Get(x, y).IsEmpty() {
 					SetRedraw()
 					break REDRAW_CHECK_LOOP
 				}
@@ -812,7 +813,7 @@ func (g *Game) FlagCount() int {
 	flagCount := 0
 	for x := range g.board.Width {
 		for y := range g.board.Height {
-			if g.board.Flags[x][y] {
+			if g.board.Flags.Get(x, y) {
 				flagCount++
 			}
 		}
@@ -824,7 +825,7 @@ func (g *Game) FlagCount() int {
 func forEachBgTile(
 	board Board,
 	boardRect FRectangle,
-	tileStyles [][]TileStyle,
+	tileStyles Array2D[TileStyle],
 	callback func(x, y int, style TileStyle, bgTileRect FRectangle),
 ) {
 	iter := NewBoardIterator(0, 0, board.Width-1, board.Height-1)
@@ -832,7 +833,7 @@ func forEachBgTile(
 	for iter.HasNext() {
 		x, y := iter.GetNext()
 
-		style := tileStyles[x][y]
+		style := tileStyles.Get(x, y)
 
 		ogTileRect := GetBoardTileRect(boardRect, board.Width, board.Height, x, y)
 
@@ -854,20 +855,54 @@ func isTileFirmlyPlaced(style TileStyle) bool {
 		style.TileAlpha > e
 }
 
+var isForEachTileCacheValid bool
+
+type forEachTileCache struct {
+	strokeRect FRectangle
+	fillRect   FRectangle
+	isRound    [4]bool
+}
+
+var forEachTileCacheArray Array2D[forEachTileCache]
+
 func forEachTile(
 	board Board,
 	boardRect FRectangle,
-	tileStyles [][]TileStyle,
+	tileStyles Array2D[TileStyle],
 	callback func(x, y int, style TileStyle, strokeRect, fillRect FRectangle, isRound [4]bool),
 ) {
 	iter := NewBoardIterator(0, 0, board.Width-1, board.Height-1)
+
+	if isForEachTileCacheValid {
+		for iter.HasNext() {
+			x, y := iter.GetNext()
+			cache := forEachTileCacheArray.Get(x, y)
+			callback(
+				x, y,
+				tileStyles.Get(x, y),
+				cache.strokeRect,
+				cache.fillRect,
+				cache.isRound,
+			)
+		}
+		return
+	}
+
+	// resize forEachTileCacheArray
+	{
+		resizeCache := forEachTileCacheArray.Width < board.Width
+		resizeCache = resizeCache || forEachTileCacheArray.Height < board.Height
+		if resizeCache {
+			forEachTileCacheArray = New2DArray[forEachTileCache](board.Width, board.Height)
+		}
+	}
 
 	tileSizeW, tileSizeH := GetBoardTileSize(boardRect, board.Width, board.Height)
 
 	for iter.HasNext() {
 		x, y := iter.GetNext()
 
-		style := tileStyles[x][y]
+		style := tileStyles.Get(x, y)
 
 		ogTileRect := GetBoardTileRect(boardRect, board.Width, board.Height, x, y)
 
@@ -915,7 +950,7 @@ func forEachTile(
 				}
 
 				if 0 <= rx && rx < board.Width && 0 <= ry && ry < board.Height {
-					if isTileFirmlyPlaced(tileStyles[rx][ry]) {
+					if isTileFirmlyPlaced(tileStyles.Get(rx, ry)) {
 						isRound[i] = false
 						isRound[(i+1)%4] = false
 					}
@@ -923,14 +958,23 @@ func forEachTile(
 			}
 		}
 
+		cache := forEachTileCache{
+			strokeRect: strokeRect,
+			fillRect:   fillRect,
+			isRound:    isRound,
+		}
+		forEachTileCacheArray.Set(x, y, cache)
+
 		callback(x, y, style, strokeRect, fillRect, isRound)
 	}
+
+	isForEachTileCacheValid = true
 }
 
 func forEachFgTile(
 	board Board,
 	boardRect FRectangle,
-	tileStyles [][]TileStyle,
+	tileStyles Array2D[TileStyle],
 	callback func(x, y int, style TileStyle, fgRect FRectangle),
 ) {
 	forEachTile(
@@ -969,7 +1013,7 @@ func GetAnimationTargetTileStyle(board Board, x, y int) TileStyle {
 	}
 
 	if board.IsPosInBoard(x, y) {
-		if board.Revealed[x][y] {
+		if board.Revealed.Get(x, y) {
 			style.DrawTile = true
 
 			style.TileFillColor = ColorTileRevealed1
@@ -987,7 +1031,7 @@ func GetAnimationTargetTileStyle(board Board, x, y int) TileStyle {
 			}
 		}
 
-		if board.Flags[x][y] {
+		if board.Flags.Get(x, y) {
 			style.FgType = TileFgTypeFlag
 			style.FgColor = ColorFlag
 		}
@@ -1326,7 +1370,7 @@ func DrawBoard(
 
 	board Board,
 	boardRect FRectangle,
-	tileStyles [][]TileStyle,
+	tileStyles Array2D[TileStyle],
 
 	// params for water effect
 	doWaterEffect bool,
@@ -1336,6 +1380,7 @@ func DrawBoard(
 
 	viBuffers [3]*VIBuffer,
 ) {
+	isForEachTileCacheValid = false
 	// TODO : we need flagSpriteBuf only because flag animations are stored in different image
 	// merge flag sprite with other sprites.
 
@@ -1359,13 +1404,13 @@ func DrawBoard(
 		r1, g1, b1, a1 := faded.RGBA()
 		r2, g2, b2, a2 := hlFaded.RGBA()
 
-		r1, g1, b1, a1 = r1 >> 8, g1 >> 8, b1 >> 8, a1 >> 8
-		r2, g2, b2, a2 = r2 >> 8, g2 >> 8, b2 >> 8, a2 >> 8
+		r1, g1, b1, a1 = r1>>8, g1>>8, b1>>8, a1>>8
+		r2, g2, b2, a2 = r2>>8, g2>>8, b2>>8, a2>>8
 
-		r3 := r2 + (r1 * (255 - a2)) * 255 / (255 * 255)
-		g3 := g2 + (g1 * (255 - a2)) * 255 / (255 * 255)
-		b3 := b2 + (b1 * (255 - a2)) * 255 / (255 * 255)
-		a3 := a2 + (a1 * (255 - a2)) * 255 / (255 * 255)
+		r3 := r2 + (r1*(255-a2))*255/(255*255)
+		g3 := g2 + (g1*(255-a2))*255/(255*255)
+		b3 := b2 + (b1*(255-a2))*255/(255*255)
+		a3 := a2 + (a1*(255-a2))*255/(255*255)
 
 		return color.RGBA{
 			uint8(r3), uint8(g3), uint8(b3), uint8(a3),
@@ -1644,7 +1689,7 @@ func DrawDummyBgBoard(
 
 	for x := range boardWidth {
 		for y := range boardHeight {
-			dummyStyles[x][y] = GetAnimationTargetTileStyle(dummyBoard, x, y)
+			dummyStyles.Set(x, y, GetAnimationTargetTileStyle(dummyBoard, x, y))
 		}
 	}
 
@@ -1716,8 +1761,8 @@ func NewTileHighlightModifier() StyleModifier {
 		return (a+b)*(a+b+1)/2 + b
 	}
 
-	highlightTile := func(tileStyles [][]TileStyle, x, y int) {
-		tileStyles[x][y].Highlight = 1
+	highlightTile := func(tileStyles Array2D[TileStyle], x, y int) {
+		tileStyles.Data[x+tileStyles.Width*y].Highlight = 1
 
 		pairN := pair(u64(x), u64(y))
 
@@ -1736,7 +1781,7 @@ func NewTileHighlightModifier() StyleModifier {
 		interaction BoardInteractionType,
 		stateChanged bool, // GameState or board has changed
 		prevGameState, gameState GameState,
-		tileStyles [][]TileStyle, // modify these to change style
+		tileStyles Array2D[TileStyle], // modify these to change style
 	) bool {
 		DebugPrint("hlTiles len", len(hlTiles))
 
@@ -1756,7 +1801,7 @@ func NewTileHighlightModifier() StyleModifier {
 
 		goWide := interaction == InteractionTypeCheck
 		goWide = goWide && board.IsPosInBoard(ms.BoardX, ms.BoardY)
-		goWide = goWide && prevBoard.Revealed[ms.BoardX][ms.BoardY]
+		goWide = goWide && prevBoard.Revealed.Get(ms.BoardX, ms.BoardY)
 		goWide = goWide && !stateChanged
 
 		if goWide {
@@ -1787,9 +1832,9 @@ func NewTileHighlightModifier() StyleModifier {
 				continue
 			}
 
-			if !board.Revealed[x][y] {
+			if !board.Revealed.Get(x, y) {
 				if hlWide {
-					if !board.Flags[x][y] {
+					if !board.Flags.Get(x, y) {
 						highlightTile(tileStyles, x, y)
 					}
 				} else {
@@ -1798,7 +1843,7 @@ func NewTileHighlightModifier() StyleModifier {
 			}
 		}
 
-		if board.IsPosInBoard(hlX, hlY) && board.Revealed[hlX][hlY] && board.GetNeighborMineCount(hlX, hlY) > 0 {
+		if board.IsPosInBoard(hlX, hlY) && board.Revealed.Get(hlX, hlY) && board.GetNeighborMineCount(hlX, hlY) > 0 {
 			highlightTile(tileStyles, hlX, hlY)
 		}
 
@@ -1834,7 +1879,7 @@ func NewFgClickModifier() StyleModifier {
 		interaction BoardInteractionType,
 		stateChanged bool,
 		prevGameState, gameState GameState,
-		tileStyles [][]TileStyle,
+		tileStyles Array2D[TileStyle],
 	) bool {
 		if gameState != GameStatePlaying { // only do this when we are actually playing
 			return gameState != prevGameState
@@ -1845,7 +1890,7 @@ func NewFgClickModifier() StyleModifier {
 		ms := GetMouseState(board, boardRect)
 
 		cursorOnFg := board.IsPosInBoard(ms.BoardX, ms.BoardY)
-		cursorOnFg = cursorOnFg && tileStyles[ms.BoardX][ms.BoardY].DrawFg
+		cursorOnFg = cursorOnFg && tileStyles.Get(ms.BoardX, ms.BoardY).DrawFg
 
 		if cursorOnFg && ms.JustPressedAny() {
 			clickTimer.Current = clickTimer.Duration
@@ -1868,7 +1913,7 @@ func NewFgClickModifier() StyleModifier {
 
 		if clickTimer.Current > 0 {
 			if board.IsPosInBoard(clickX, clickY) {
-				tileStyles[clickX][clickY].FgScale *= 1 + clickTimer.Normalize()*0.07
+				tileStyles.Data[clickX+clickY*tileStyles.Width].FgScale *= 1 + clickTimer.Normalize()*0.07
 			}
 		}
 
@@ -1876,7 +1921,7 @@ func NewFgClickModifier() StyleModifier {
 	}
 }
 
-func (g *Game) QueueRevealAnimation(revealsBefore, revealsAfter [][]bool, originX, originy int) {
+func (g *Game) QueueRevealAnimation(revealsBefore, revealsAfter Array2D[bool], originX, originy int) {
 	g.SkipAllAnimations()
 
 	fw, fh := f64(g.board.Width-1), f64(g.board.Height-1)
@@ -1892,7 +1937,7 @@ func (g *Game) QueueRevealAnimation(revealsBefore, revealsAfter [][]bool, origin
 
 	for x := range g.board.Width {
 		for y := range g.board.Height {
-			if !revealsBefore[x][y] && revealsAfter[x][y] {
+			if !revealsBefore.Get(x, y) && revealsAfter.Get(x, y) {
 				pos := FPt(f64(x), f64(y))
 				dist := pos.Sub(originP).Length()
 				d := time.Duration(f64(maxDuration) * (dist / maxDist))
@@ -1915,7 +1960,7 @@ func (g *Game) QueueRevealAnimation(revealsBefore, revealsAfter [][]bool, origin
 				soundEffectCounter++
 
 				anim.Update = func() {
-					style := g.BaseTileStyles[x][y]
+					style := g.BaseTileStyles.Get(x, y)
 					timer.TickUp()
 
 					t := timer.Normalize()
@@ -1940,7 +1985,7 @@ func (g *Game) QueueRevealAnimation(revealsBefore, revealsAfter [][]bool, origin
 						style.DrawFg = false
 					}
 
-					g.BaseTileStyles[x][y] = style
+					g.BaseTileStyles.Set(x, y, style)
 				}
 
 				anim.Skip = func() {
@@ -1962,7 +2007,7 @@ func (g *Game) QueueRevealAnimation(revealsBefore, revealsAfter [][]bool, origin
 					soundEffectCounter = 0
 				}
 
-				g.TileAnimations[x][y].Enqueue(anim)
+				g.TileAnimations.Get(x, y).Enqueue(anim)
 			}
 		}
 	}
@@ -1978,7 +2023,7 @@ func (g *Game) QueueAddFlagAnimation(flagX, flagY int) {
 	anim.Tag = AnimationTagAddFlag
 
 	anim.Update = func() {
-		style := g.BaseTileStyles[flagX][flagY]
+		style := g.BaseTileStyles.Get(flagX, flagY)
 
 		style.DrawFg = true
 		style.FgType = TileFgTypeFlag
@@ -1990,7 +2035,7 @@ func (g *Game) QueueAddFlagAnimation(flagX, flagY int) {
 
 		style.FlagAnim = t
 
-		g.BaseTileStyles[flagX][flagY] = style
+		g.BaseTileStyles.Set(flagX, flagY, style)
 	}
 
 	anim.Skip = func() {
@@ -2003,14 +2048,14 @@ func (g *Game) QueueAddFlagAnimation(flagX, flagY int) {
 	}
 
 	anim.AfterDone = func() {
-		style := g.BaseTileStyles[flagX][flagY]
+		style := g.BaseTileStyles.Get(flagX, flagY)
 
 		style.FlagAnim = 1
 
-		g.BaseTileStyles[flagX][flagY] = style
+		g.BaseTileStyles.Set(flagX, flagY, style)
 	}
 
-	g.TileAnimations[flagX][flagY].Enqueue(anim)
+	g.TileAnimations.Get(flagX, flagY).Enqueue(anim)
 }
 
 func (g *Game) QueueRemoveFlagAnimation(flagX, flagY int) {
@@ -2022,7 +2067,7 @@ func (g *Game) QueueRemoveFlagAnimation(flagX, flagY int) {
 	done := false
 
 	anim.Update = func() {
-		style := g.BaseTileStyles[flagX][flagY]
+		style := g.BaseTileStyles.Get(flagX, flagY)
 
 		style.DrawFg = false
 		style.FgType = TileFgTypeNone
@@ -2053,7 +2098,7 @@ func (g *Game) QueueRemoveFlagAnimation(flagX, flagY int) {
 
 		done = true
 
-		g.BaseTileStyles[flagX][flagY] = style
+		g.BaseTileStyles.Set(flagX, flagY, style)
 	}
 
 	anim.Skip = func() {
@@ -2064,7 +2109,7 @@ func (g *Game) QueueRemoveFlagAnimation(flagX, flagY int) {
 		return done
 	}
 
-	g.TileAnimations[flagX][flagY].Enqueue(anim)
+	g.TileAnimations.Get(flagX, flagY).Enqueue(anim)
 }
 
 func (g *Game) QueueDefeatAnimation(originX, originY int) {
@@ -2074,7 +2119,7 @@ func (g *Game) QueueDefeatAnimation(originX, originY int) {
 
 	for x := range g.board.Width {
 		for y := range g.board.Height {
-			if g.board.Mines[x][y] && !g.board.Flags[x][y] {
+			if g.board.Mines.Get(x, y) && !g.board.Flags.Get(x, y) {
 				minePoses = append(minePoses, image.Point{X: x, Y: y})
 			}
 		}
@@ -2123,7 +2168,7 @@ func (g *Game) QueueDefeatAnimation(originX, originY int) {
 		playedSound := false
 
 		anim.Update = func() {
-			style := g.BaseTileStyles[p.X][p.Y]
+			style := g.BaseTileStyles.Get(p.X, p.Y)
 
 			if timer.Current > 0 && !playedSound {
 				playedSound = true
@@ -2133,7 +2178,7 @@ func (g *Game) QueueDefeatAnimation(originX, originY int) {
 			timer.TickUp()
 			style.BgBombAnim = timer.Normalize()
 
-			g.BaseTileStyles[p.X][p.Y] = style
+			g.BaseTileStyles.Set(p.X, p.Y, style)
 		}
 
 		anim.Skip = func() {
@@ -2149,7 +2194,7 @@ func (g *Game) QueueDefeatAnimation(originX, originY int) {
 		anim.AfterDone = func() {
 		}
 
-		g.TileAnimations[p.X][p.Y].Enqueue(anim)
+		g.TileAnimations.Get(p.X, p.Y).Enqueue(anim)
 	}
 
 	defeatDuration += time.Millisecond * 10
@@ -2216,7 +2261,7 @@ func (g *Game) QueueWinAnimation(originX, originY int) {
 			var ogFgColor color.Color
 
 			anim.Update = func() {
-				style := g.BaseTileStyles[x][y]
+				style := g.BaseTileStyles.Get(x, y)
 				timer.TickUp()
 
 				scaleT := timer.NormalizeUnclamped() * 0.8
@@ -2236,7 +2281,7 @@ func (g *Game) QueueWinAnimation(originX, originY int) {
 					ogFgColor = style.FgColor
 				}
 
-				if g.board.Revealed[x][y] {
+				if g.board.Revealed.Get(x, y) {
 					style.FgColor = LerpColorRGBA(ogFgColor, ColorElementWon, colorT)
 				} else {
 					style.FgAlpha = 1 - colorT
@@ -2244,7 +2289,7 @@ func (g *Game) QueueWinAnimation(originX, originY int) {
 
 				style.BgAlpha = 1 - colorT
 
-				g.BaseTileStyles[x][y] = style
+				g.BaseTileStyles.Set(x, y, style)
 			}
 
 			anim.Skip = func() {
@@ -2257,15 +2302,15 @@ func (g *Game) QueueWinAnimation(originX, originY int) {
 			}
 
 			anim.AfterDone = func() {
-				style := g.BaseTileStyles[x][y]
-				if !g.board.Revealed[x][y] {
+				style := g.BaseTileStyles.Get(x, y)
+				if !g.board.Revealed.Get(x, y) {
 					style.DrawFg = false
 				}
 				style.DrawBg = false
-				g.BaseTileStyles[x][y] = style
+				g.BaseTileStyles.Set(x, y, style)
 			}
 
-			g.TileAnimations[x][y].Enqueue(anim)
+			g.TileAnimations.Get(x, y).Enqueue(anim)
 		}
 	}
 
@@ -2343,7 +2388,7 @@ func (g *Game) QueueRetryButtonAnimation() {
 		anim.Tag = AnimationTagRetryButtonReveal
 
 		anim.Update = func() {
-			style := g.BaseTileStyles[p.X][p.Y]
+			style := g.BaseTileStyles.Get(p.X, p.Y)
 			timer.TickUp()
 
 			t := timer.Normalize()
@@ -2369,7 +2414,7 @@ func (g *Game) QueueRetryButtonAnimation() {
 			style.BgScale = (1 - bgT)
 			style.BgOffsetY = bgT * 3
 
-			g.BaseTileStyles[p.X][p.Y] = style
+			g.BaseTileStyles.Set(p.X, p.Y, style)
 		}
 
 		anim.Skip = func() {
@@ -2382,14 +2427,14 @@ func (g *Game) QueueRetryButtonAnimation() {
 		}
 
 		anim.AfterDone = func() {
-			style := g.BaseTileStyles[p.X][p.Y]
+			style := g.BaseTileStyles.Get(p.X, p.Y)
 			style.DrawBg = false
 			style.DrawTile = false
 			style.DrawFg = false
-			g.BaseTileStyles[p.X][p.Y] = style
+			g.BaseTileStyles.Set(p.X, p.Y, style)
 		}
 
-		g.TileAnimations[p.X][p.Y].Enqueue(anim)
+		g.TileAnimations.Get(p.X, p.Y).Enqueue(anim)
 
 		maxDuration = max(maxDuration, timer.Duration-timer.Current)
 	}
@@ -2456,7 +2501,7 @@ func (g *Game) QueueResetBoardAnimation() {
 			anim.Tag = AnimationTagHideBoard
 
 			anim.Update = func() {
-				style := g.BaseTileStyles[x][y]
+				style := g.BaseTileStyles.Get(x, y)
 
 				timer.TickUp()
 
@@ -2481,7 +2526,7 @@ func (g *Game) QueueResetBoardAnimation() {
 				style.BgScale = Clamp(sizeT, 0, 1)
 				style.BgScale *= style.BgScale
 
-				g.BaseTileStyles[x][y] = style
+				g.BaseTileStyles.Set(x, y, style)
 			}
 
 			anim.Skip = func() {
@@ -2494,14 +2539,14 @@ func (g *Game) QueueResetBoardAnimation() {
 			}
 
 			anim.AfterDone = func() {
-				style := g.BaseTileStyles[x][y]
+				style := g.BaseTileStyles.Get(x, y)
 				style.DrawBg = false
 				style.DrawTile = false
 				style.DrawFg = false
-				g.BaseTileStyles[x][y] = style
+				g.BaseTileStyles.Set(x, y, style)
 			}
 
-			g.TileAnimations[x][y].Enqueue(anim)
+			g.TileAnimations.Get(x, y).Enqueue(anim)
 
 			tileAnimationTotal = max(tileAnimationTotal, timer.Duration-timer.Current)
 		}
@@ -2600,7 +2645,7 @@ func (g *Game) QueueShowBoardAnimation(originX, originy int) {
 				targetStyle.BgAlpha = alphaT
 				targetStyle.BgScale = scaleT
 
-				g.BaseTileStyles[x][y] = targetStyle
+				g.BaseTileStyles.Set(x, y, targetStyle)
 			}
 
 			anim.Skip = func() {
@@ -2612,7 +2657,7 @@ func (g *Game) QueueShowBoardAnimation(originX, originy int) {
 				return timer.Current >= timer.Duration
 			}
 
-			g.TileAnimations[x][y].Enqueue(anim)
+			g.TileAnimations.Get(x, y).Enqueue(anim)
 
 			tileAnimationTotal = max(tileAnimationTotal, timer.Duration-timer.Current)
 		}
@@ -2650,7 +2695,7 @@ func (g *Game) QueueShowBoardAnimation(originX, originy int) {
 func (g *Game) SkipAllAnimations() {
 	for x := range g.board.Width {
 		for y := range g.board.Height {
-			AnimationQueueSkipAll(&g.TileAnimations[x][y])
+			AnimationQueueSkipAll(g.TileAnimations.Get(x, y))
 		}
 	}
 
@@ -2660,7 +2705,7 @@ func (g *Game) SkipAllAnimations() {
 func (g *Game) SkipAllAnimationsUntilTag(tags ...AnimationTag) {
 	for x := range g.board.Width {
 		for y := range g.board.Height {
-			AnimationQueueSkipUntilTag(&g.TileAnimations[x][y], tags...)
+			AnimationQueueSkipUntilTag(g.TileAnimations.Get(x, y), tags...)
 		}
 	}
 
@@ -2896,13 +2941,13 @@ func (g *Game) SetDebugBoardForDecoration() {
 
 			switch char {
 			case '@':
-				g.board.Revealed[x][y] = true
+				g.board.Revealed.Set(x, y, true)
 			case '*':
-				g.board.Mines[x][y] = true
+				g.board.Mines.Set(x, y, true)
 				g.mineCount++
 			case '+':
-				g.board.Mines[x][y] = true
-				g.board.Flags[x][y] = true
+				g.board.Mines.Set(x, y, true)
+				g.board.Flags.Set(x, y, true)
 			}
 		}
 	}
@@ -2914,8 +2959,8 @@ func (g *Game) SetDebugBoardForDecoration() {
 			continue
 		}
 
-		if rand.Int64N(100) < 30 && !g.board.Mines[x][y] {
-			g.board.Mines[x][y] = true
+		if rand.Int64N(100) < 30 && !g.board.Mines.Get(x, y) {
+			g.board.Mines.Set(x, y, true)
 			g.mineCount++
 		}
 	}
@@ -2925,14 +2970,14 @@ func (g *Game) SetDebugBoardForDecoration() {
 	for iter.HasNext() {
 		x, y := iter.GetNext()
 
-		if !g.board.Mines[x][y] {
+		if !g.board.Mines.Get(x, y) {
 			if rand.Int64N(100) < 30 {
 				// flag the surrounding
 				innerIter := NewBoardIterator(x-1, y-1, x+1, y+1)
 				for innerIter.HasNext() {
 					inX, inY := innerIter.GetNext()
-					if g.board.IsPosInBoard(inX, inY) && g.board.Mines[inX][inY] {
-						g.board.Flags[inX][inY] = true
+					if g.board.IsPosInBoard(inX, inY) && g.board.Mines.Get(inX, inY) {
+						g.board.Flags.Set(inX, inY, true)
 					}
 				}
 
@@ -2952,7 +2997,7 @@ func (g *Game) SetBoardForInstantWin() {
 	tilesToReveal := 0
 	for x := range g.board.Width {
 		for y := range g.board.Height {
-			if !g.board.Mines[x][y] && !g.board.Revealed[x][y] {
+			if !g.board.Mines.Get(x, y) && !g.board.Revealed.Get(x, y) {
 				tilesToReveal++
 			}
 		}
@@ -2965,8 +3010,8 @@ REVEAL_LOOP:
 			if tilesToReveal <= 1 {
 				break REVEAL_LOOP
 			}
-			if !g.board.Mines[x][y] && !g.board.Revealed[x][y] {
-				g.board.Revealed[x][y] = true
+			if !g.board.Mines.Get(x, y) && !g.board.Revealed.Get(x, y) {
+				g.board.Revealed.Set(x, y, true)
 				tilesToReveal--
 			}
 		}
