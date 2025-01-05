@@ -854,16 +854,6 @@ func isTileFirmlyPlaced(style TileStyle) bool {
 		style.TileAlpha > e
 }
 
-var isForEachTileCacheValid bool
-
-type forEachTileCache struct {
-	strokeRect FRectangle
-	fillRect   FRectangle
-	isRound    [4]bool
-}
-
-var forEachTileCacheArray Array2D[forEachTileCache]
-
 func forEachTile(
 	board Board,
 	boardRect FRectangle,
@@ -871,30 +861,6 @@ func forEachTile(
 	callback func(x, y int, style TileStyle, strokeRect, fillRect FRectangle, isRound [4]bool),
 ) {
 	iter := NewBoardIterator(0, 0, board.Width-1, board.Height-1)
-
-	if isForEachTileCacheValid {
-		for iter.HasNext() {
-			x, y := iter.GetNext()
-			cache := forEachTileCacheArray.Get(x, y)
-			callback(
-				x, y,
-				tileStyles.Get(x, y),
-				cache.strokeRect,
-				cache.fillRect,
-				cache.isRound,
-			)
-		}
-		return
-	}
-
-	// resize forEachTileCacheArray
-	{
-		resizeCache := forEachTileCacheArray.Width < board.Width
-		resizeCache = resizeCache || forEachTileCacheArray.Height < board.Height
-		if resizeCache {
-			forEachTileCacheArray = New2DArray[forEachTileCache](board.Width, board.Height)
-		}
-	}
 
 	tileSizeW, tileSizeH := GetBoardTileSize(boardRect, board.Width, board.Height)
 
@@ -957,17 +923,8 @@ func forEachTile(
 			}
 		}
 
-		cache := forEachTileCache{
-			strokeRect: strokeRect,
-			fillRect:   fillRect,
-			isRound:    isRound,
-		}
-		forEachTileCacheArray.Set(x, y, cache)
-
 		callback(x, y, style, strokeRect, fillRect, isRound)
 	}
-
-	isForEachTileCacheValid = true
 }
 
 func forEachFgTile(
@@ -1379,7 +1336,6 @@ func DrawBoard(
 
 	viBuffers [3]*VIBuffer,
 ) {
-	isForEachTileCacheValid = false
 	// TODO : we need flagSpriteBuf only because flag animations are stored in different image
 	// merge flag sprite with other sprites.
 
@@ -1426,14 +1382,6 @@ func DrawBoard(
 
 		func(x, y int, style TileStyle, bgTileRect FRectangle) {
 			if ShouldDrawBgTile(style) {
-				/*
-					VIaddRect(
-						shapeBuf,
-						bgTileRect,
-						// ColorFade(style.BgFillColor, style.BgAlpha),
-						modColor(style.BgFillColor, style.BgAlpha, style.Highlight, ColorBgHighLight),
-					)
-				*/
 				VIaddRectTile(
 					shapeBuf,
 					bgTileRect,
@@ -1460,18 +1408,6 @@ func DrawBoard(
 
 					innerRect = innerRect.Add(FPt(0, innerMargin))
 
-					/*
-						VIaddRoundRect(
-							shapeBuf,
-							outerRect, outerRadius, true, segments,
-							modColor(ColorMineBg1, style.BgAlpha, style.Highlight, ColorBgHighLight),
-						)
-						VIaddRoundRect(
-							shapeBuf,
-							innerRect, innerRadius, true, segments,
-							modColor(ColorMineBg2, style.BgAlpha, style.Highlight, ColorBgHighLight),
-						)
-					*/
 					VIaddAllRoundTile(
 						shapeBuf,
 						outerRect,
@@ -1513,14 +1449,6 @@ func DrawBoard(
 					isRound,
 					strokeColor,
 				)
-
-				/*
-					VIaddRoundRectEx(
-						shapeBuf,
-						strokeRect, radiusPx, true, [4]int{segments, segments, segments, segments},
-						strokeColor,
-					)
-				*/
 			}
 		},
 	)
@@ -1541,14 +1469,6 @@ func DrawBoard(
 					isRound,
 					fillColor,
 				)
-
-				/*
-					VIaddRoundRectEx(
-						shapeBuf,
-						fillRect, radiusPx, true, [4]int{segments, segments, segments, segments},
-						fillColor,
-					)
-				*/
 			}
 		},
 	)
@@ -1568,7 +1488,6 @@ func DrawBoard(
 							fgRect,
 							style.FgScale,
 							style.FgOffsetX, style.FgOffsetY,
-							// ColorFade(fgColor, style.FgAlpha),
 							modColor(fgColor, style.FgAlpha, style.Highlight, ColorFgHighLight),
 							GetNumberTile(count),
 						)
@@ -1673,34 +1592,6 @@ func DrawBoard(
 		EndAntiAlias()
 		EndFilter()
 	}
-}
-
-func DrawDummyBgBoard(
-	dst *eb.Image,
-	boardWidth, boardHeight int,
-	boardRect FRectangle,
-	buffers [3]*VIBuffer,
-) {
-	// TODO: this is fucking stupid. We are creating a dummy board only to throw it away
-	// each time we draw
-	dummyBoard := NewBoard(boardWidth, boardHeight)
-	dummyStyles := New2DArray[TileStyle](boardWidth, boardHeight)
-
-	for x := range boardWidth {
-		for y := range boardHeight {
-			dummyStyles.Set(x, y, GetAnimationTargetTileStyle(dummyBoard, x, y))
-		}
-	}
-
-	DrawBoard(
-		dst,
-
-		dummyBoard, boardRect,
-		dummyStyles,
-
-		false, nil, 0, 0,
-		buffers,
-	)
 }
 
 func DrawParticles(
