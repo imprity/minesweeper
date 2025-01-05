@@ -80,11 +80,8 @@ func (board *Board) Copy() Board {
 	for iterator.HasNext() {
 		x, y := iterator.GetNext()
 
-		//copy.Mines[x][y] = board.Mines[x][y]
 		copy.Mines.Set(x, y, board.Mines.Get(x, y))
-		//copy.Revealed[x][y] = board.Revealed[x][y]
 		copy.Revealed.Set(x, y, board.Revealed.Get(x, y))
-		//copy.Flags[x][y] = board.Flags[x][y]
 		copy.Flags.Set(x, y, board.Flags.Get(x, y))
 	}
 
@@ -101,11 +98,8 @@ func (board *Board) SaveTo(targetBoard Board) {
 	for iterator.HasNext() {
 		x, y := iterator.GetNext()
 
-		//targetBoard.Mines[x][y] = board.Mines[x][y]
 		targetBoard.Mines.Set(x, y, board.Mines.Get(x, y))
-		//targetBoard.Revealed[x][y] = board.Revealed[x][y]
 		targetBoard.Revealed.Set(x, y, board.Revealed.Get(x, y))
-		//targetBoard.Flags[x][y] = board.Flags[x][y]
 		targetBoard.Flags.Set(x, y, board.Flags.Get(x, y))
 	}
 }

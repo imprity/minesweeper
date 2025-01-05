@@ -162,3 +162,17 @@ func (a *Array2D[T]) Set(x, y int, t T) {
 	}
 	a.Data[x+y*a.Width] = t
 }
+
+func (a *Array2D[T]) Resize(newWidth, newHeight int) {
+	dataCap := cap(a.Data)
+	requiredDataLen := newWidth * newHeight
+
+	if requiredDataLen > dataCap {
+		a.Data = make([]T, requiredDataLen)
+	} else {
+		a.Data = a.Data[:requiredDataLen]
+	}
+
+	a.Width = newWidth
+	a.Height = newHeight
+}

@@ -404,11 +404,6 @@ type Game struct {
 func NewGame(boardWidth, boardHeight, mineCount int) *Game {
 	g := new(Game)
 
-	// NOTE : hard coded number based on previous run
-	g.viBuffers[0] = NewVIBuffer(4096, 16384)
-	g.viBuffers[1] = NewVIBuffer(2048, 2048)
-	g.viBuffers[2] = NewVIBuffer(2048, 2048)
-
 	g.mineCount = mineCount
 
 	g.WaterRenderTarget = eb.NewImage(int(ScreenWidth), int(ScreenHeight))
@@ -782,8 +777,6 @@ func (g *Game) Draw(dst *eb.Image) {
 		g.RenderTileStyles,
 
 		doWaterEffect, g.WaterRenderTarget, g.WaterAlpha, g.WaterFlowOffset,
-
-		g.viBuffers,
 	)
 
 	if g.DrawRetryButton {
@@ -821,30 +814,6 @@ func (g *Game) FlagCount() int {
 	return flagCount
 }
 
-func forEachBgTile(
-	board Board,
-	boardRect FRectangle,
-	tileStyles Array2D[TileStyle],
-	callback func(x, y int, style TileStyle, bgTileRect FRectangle),
-) {
-	iter := NewBoardIterator(0, 0, board.Width-1, board.Height-1)
-
-	for iter.HasNext() {
-		x, y := iter.GetNext()
-
-		style := tileStyles.Get(x, y)
-
-		ogTileRect := GetBoardTileRect(boardRect, board.Width, board.Height, x, y)
-
-		// draw background tile
-		bgTileRect := ogTileRect
-		bgTileRect = bgTileRect.Add(FPt(style.BgOffsetX, style.BgOffsetY))
-		bgTileRect = FRectScaleCentered(bgTileRect, style.BgScale, style.BgScale)
-
-		callback(x, y, style, bgTileRect)
-	}
-}
-
 func isTileFirmlyPlaced(style TileStyle) bool {
 	const e = 0.08
 	return style.DrawTile &&
@@ -852,95 +821,6 @@ func isTileFirmlyPlaced(style TileStyle) bool {
 		CloseToEx(style.TileOffsetX, 0, e) &&
 		CloseToEx(style.TileOffsetY, 0, e) &&
 		style.TileAlpha > e
-}
-
-func forEachTile(
-	board Board,
-	boardRect FRectangle,
-	tileStyles Array2D[TileStyle],
-	callback func(x, y int, style TileStyle, strokeRect, fillRect FRectangle, isRound [4]bool),
-) {
-	iter := NewBoardIterator(0, 0, board.Width-1, board.Height-1)
-
-	tileSizeW, tileSizeH := GetBoardTileSize(boardRect, board.Width, board.Height)
-
-	for iter.HasNext() {
-		x, y := iter.GetNext()
-
-		style := tileStyles.Get(x, y)
-
-		ogTileRect := GetBoardTileRect(boardRect, board.Width, board.Height, x, y)
-
-		tileRect := ogTileRect
-
-		tileRect = tileRect.Add(FPt(style.TileOffsetX, style.TileOffsetY))
-		tileRect = FRectScaleCentered(tileRect, style.TileScale, style.TileScale)
-
-		tileInset := math.Round(min(tileSizeW, tileSizeH) * 0.065)
-		tileOffsetY := math.Round(min(tileSizeW, tileSizeH) * 0.015)
-
-		tileInset = max(tileInset, 2)
-		tileOffsetY = max(tileOffsetY, 1)
-
-		strokeRect := tileRect.Inset(-tileInset)
-		fillRect := tileRect.Add(FPt(0, -tileOffsetY))
-
-		isRound := [4]bool{
-			true,
-			true,
-			true,
-			true,
-		}
-
-		if isTileFirmlyPlaced(style) {
-			for i := range 4 {
-				rx := x
-				ry := y
-
-				//   0
-				//   |
-				// 3- -1
-				//   |
-				//   2
-
-				switch i {
-				case 0:
-					ry -= 1
-				case 1:
-					rx += 1
-				case 2:
-					ry += 1
-				case 3:
-					rx -= 1
-				}
-
-				if 0 <= rx && rx < board.Width && 0 <= ry && ry < board.Height {
-					if isTileFirmlyPlaced(tileStyles.Get(rx, ry)) {
-						isRound[i] = false
-						isRound[(i+1)%4] = false
-					}
-				}
-			}
-		}
-
-		callback(x, y, style, strokeRect, fillRect, isRound)
-	}
-}
-
-func forEachFgTile(
-	board Board,
-	boardRect FRectangle,
-	tileStyles Array2D[TileStyle],
-	callback func(x, y int, style TileStyle, fgRect FRectangle),
-) {
-	forEachTile(
-		board, boardRect, tileStyles,
-
-		func(x, y int, style TileStyle, strokeRect, fillRect FRectangle, isRound [4]bool) {
-			fgRect := fillRect
-			callback(x, y, style, fgRect)
-		},
-	)
 }
 
 func ShouldDrawBgTile(style TileStyle) bool {
@@ -1321,6 +1201,29 @@ func VIaddSubViewInRect(
 	VIaddSubView(buffer, view, op)
 }
 
+var DBC = struct { // DrawBoard cache
+	VIBuffers [3]*VIBuffer
+
+	ShouldDrawBgTile Array2D[bool]
+	ShouldDrawTile   Array2D[bool]
+	ShouldDrawFgTile Array2D[bool]
+
+	BgTileRects Array2D[FRectangle]
+
+	TileStrokeRects Array2D[FRectangle]
+	TileFillRects   Array2D[FRectangle]
+
+	TileFirmlyPlaced Array2D[bool]
+	TileRoundness    Array2D[[4]bool]
+}{}
+
+func init() {
+	// NOTE : hard coded number based on previous run
+	DBC.VIBuffers[0] = NewVIBuffer(4096, 16384)
+	DBC.VIBuffers[1] = NewVIBuffer(2048, 2048)
+	DBC.VIBuffers[2] = NewVIBuffer(2048, 2048)
+}
+
 func DrawBoard(
 	dst *eb.Image,
 
@@ -1333,19 +1236,9 @@ func DrawBoard(
 	waterRenderTarget *eb.Image,
 	waterAlpha float64,
 	waterFlowOffset time.Duration,
-
-	viBuffers [3]*VIBuffer,
 ) {
 	// TODO : we need flagSpriteBuf only because flag animations are stored in different image
 	// merge flag sprite with other sprites.
-
-	shapeBuf := viBuffers[0]
-	spriteBuf := viBuffers[1]
-	flagSpriteBuf := viBuffers[2]
-
-	shapeBuf.Reset()
-	spriteBuf.Reset()
-	flagSpriteBuf.Reset()
 
 	modColor := func(
 		c color.Color,
@@ -1372,139 +1265,276 @@ func DrawBoard(
 		}
 	}
 
+	iter := NewBoardIterator(0, 0, board.Width-1, board.Height-1)
+
+	// ======================
+	// reset VIBuffers
+	// ======================
+	for i := range DBC.VIBuffers {
+		DBC.VIBuffers[i].Reset()
+	}
+
+	// ===============================
+	// resize cache
+	// ===============================
+	DBC.ShouldDrawBgTile.Resize(board.Width, board.Height)
+	DBC.ShouldDrawTile.Resize(board.Width, board.Height)
+	DBC.ShouldDrawFgTile.Resize(board.Width, board.Height)
+
+	DBC.BgTileRects.Resize(board.Width, board.Height)
+
+	DBC.TileStrokeRects.Resize(board.Width, board.Height)
+	DBC.TileFillRects.Resize(board.Width, board.Height)
+
+	DBC.TileRoundness.Resize(board.Width, board.Height)
+	DBC.TileFirmlyPlaced.Resize(board.Width, board.Height)
+
+	// ===============================
+	// recalculate cache
+	// ===============================
+	{
+		tileSizeW, tileSizeH := GetBoardTileSize(boardRect, board.Width, board.Height)
+
+		for iter.HasNext() {
+			x, y := iter.GetNext()
+
+			ogTileRect := GetBoardTileRect(boardRect, board.Width, board.Height, x, y)
+			style := tileStyles.Get(x, y)
+
+			DBC.ShouldDrawBgTile.Set(x, y, ShouldDrawBgTile(style))
+			DBC.ShouldDrawTile.Set(x, y, ShouldDrawTile(style))
+			DBC.ShouldDrawFgTile.Set(x, y, ShouldDrawFgTile(style))
+
+			// BgTileRects
+			if DBC.ShouldDrawBgTile.Get(x, y) {
+				// draw background tile
+				bgTileRect := ogTileRect
+				bgTileRect = bgTileRect.Add(FPt(style.BgOffsetX, style.BgOffsetY))
+				bgTileRect = FRectScaleCentered(bgTileRect, style.BgScale, style.BgScale)
+
+				DBC.BgTileRects.Set(x, y, bgTileRect)
+			}
+
+			// TileFillRects
+			// TileStrokeRects
+			if DBC.ShouldDrawTile.Get(x, y) || DBC.ShouldDrawFgTile.Get(x, y) {
+				tileRect := ogTileRect
+
+				tileRect = tileRect.Add(FPt(style.TileOffsetX, style.TileOffsetY))
+				tileRect = FRectScaleCentered(tileRect, style.TileScale, style.TileScale)
+
+				tileInset := math.Round(min(tileSizeW, tileSizeH) * 0.065)
+				tileOffsetY := math.Round(min(tileSizeW, tileSizeH) * 0.015)
+
+				tileInset = max(tileInset, 2)
+				tileOffsetY = max(tileOffsetY, 1)
+
+				strokeRect := tileRect.Inset(-tileInset)
+				fillRect := tileRect.Add(FPt(0, -tileOffsetY))
+
+				DBC.TileStrokeRects.Set(x, y, strokeRect)
+				DBC.TileFillRects.Set(x, y, fillRect)
+			}
+
+			// TileFirmlyPlaced
+			{
+				DBC.TileFirmlyPlaced.Set(x, y, isTileFirmlyPlaced(style))
+			}
+
+			// TileRoundness
+			{
+				isRound := [4]bool{
+					true,
+					true,
+					true,
+					true,
+				}
+
+				if DBC.TileFirmlyPlaced.Get(x, y) {
+					for i := range 4 {
+						rx := x
+						ry := y
+
+						//   0
+						//   |
+						// 3- -1
+						//   |
+						//   2
+
+						switch i {
+						case 0:
+							ry -= 1
+						case 1:
+							rx += 1
+						case 2:
+							ry += 1
+						case 3:
+							rx -= 1
+						}
+
+						if 0 <= rx && rx < board.Width && 0 <= ry && ry < board.Height {
+							if DBC.TileFirmlyPlaced.Get(rx, ry) {
+								isRound[i] = false
+								isRound[(i+1)%4] = false
+							}
+						}
+					}
+				}
+
+				DBC.TileRoundness.Set(x, y, isRound)
+			}
+		}
+	}
+
+	shapeBuf := DBC.VIBuffers[0]
+	spriteBuf := DBC.VIBuffers[1]
+	flagSpriteBuf := DBC.VIBuffers[2]
+
 	const segments = 6
 
 	// ============================
 	// draw background tiles
 	// ============================
-	forEachBgTile(
-		board, boardRect, tileStyles,
+	iter.Reset()
+	for iter.HasNext() {
+		x, y := iter.GetNext()
+		style := tileStyles.Get(x, y)
 
-		func(x, y int, style TileStyle, bgTileRect FRectangle) {
-			if ShouldDrawBgTile(style) {
-				VIaddRectTile(
-					shapeBuf,
-					bgTileRect,
-					// ColorFade(style.BgFillColor, style.BgAlpha),
-					modColor(style.BgFillColor, style.BgAlpha, style.Highlight, ColorBgHighLight),
-				)
+		if !DBC.ShouldDrawBgTile.Get(x, y) {
+			continue
+		}
 
-				// draw bomb animation
-				if style.BgBombAnim > 0 {
-					t := Clamp(style.BgBombAnim, 0, 1)
+		bgTileRect := DBC.BgTileRects.Get(x, y)
 
-					tileW := bgTileRect.Dx()
-					tileH := bgTileRect.Dy()
+		VIaddRectTile(
+			shapeBuf,
+			bgTileRect,
+			modColor(style.BgFillColor, style.BgAlpha, style.Highlight, ColorBgHighLight),
+		)
 
-					outerMargin := min(tileW, tileH) * 0.04
-					innerMargin := min(tileW, tileH) * 0.06
+		// draw bomb animation
+		if style.BgBombAnim > 0 {
+			t := Clamp(style.BgBombAnim, 0, 1)
 
-					outerMargin = max(outerMargin, 1)
-					innerMargin = max(innerMargin, 1)
+			tileW := bgTileRect.Dx()
+			tileH := bgTileRect.Dy()
 
-					outerRect := bgTileRect.Inset(outerMargin)
-					outerRect = outerRect.Inset(min(outerRect.Dx(), outerRect.Dy()) * 0.5 * (1 - t))
-					innerRect := outerRect.Inset(innerMargin)
+			outerMargin := min(tileW, tileH) * 0.04
+			innerMargin := min(tileW, tileH) * 0.06
 
-					innerRect = innerRect.Add(FPt(0, innerMargin))
+			outerMargin = max(outerMargin, 1)
+			innerMargin = max(innerMargin, 1)
 
-					VIaddAllRoundTile(
-						shapeBuf,
-						outerRect,
-						modColor(ColorMineBg1, style.BgAlpha, style.Highlight, ColorBgHighLight),
-					)
-					VIaddAllRoundTile(
-						shapeBuf,
-						innerRect,
-						modColor(ColorMineBg2, style.BgAlpha, style.Highlight, ColorBgHighLight),
-					)
+			outerRect := bgTileRect.Inset(outerMargin)
+			outerRect = outerRect.Inset(min(outerRect.Dx(), outerRect.Dy()) * 0.5 * (1 - t))
+			innerRect := outerRect.Inset(innerMargin)
 
-					VIaddSubViewInRect(
-						spriteBuf,
-						innerRect,
-						1,
-						0, 0,
-						modColor(ColorMine, style.BgAlpha, style.Highlight, ColorBgHighLight),
-						GetMineTile(),
-					)
-				}
-			}
-		},
-	)
+			innerRect = innerRect.Add(FPt(0, innerMargin))
+
+			VIaddAllRoundTile(
+				shapeBuf,
+				outerRect,
+				modColor(ColorMineBg1, style.BgAlpha, style.Highlight, ColorBgHighLight),
+			)
+			VIaddAllRoundTile(
+				shapeBuf,
+				innerRect,
+				modColor(ColorMineBg2, style.BgAlpha, style.Highlight, ColorBgHighLight),
+			)
+
+			VIaddSubViewInRect(
+				spriteBuf,
+				innerRect,
+				1,
+				0, 0,
+				modColor(ColorMine, style.BgAlpha, style.Highlight, ColorBgHighLight),
+				GetMineTile(),
+			)
+		}
+	}
 
 	// ============================
 	// draw tiles
 	// ============================
+	iter.Reset()
+	for iter.HasNext() {
+		x, y := iter.GetNext()
+		style := tileStyles.Get(x, y)
 
-	forEachTile(
-		board, boardRect, tileStyles,
+		if !DBC.ShouldDrawTile.Get(x, y) {
+			continue
+		}
 
-		func(x, y int, style TileStyle, strokeRect, fillRect FRectangle, isRound [4]bool) {
-			if ShouldDrawTile(style) {
-				strokeColor := ColorFade(style.TileStrokeColor, style.TileAlpha)
+		strokeColor := ColorFade(style.TileStrokeColor, style.TileAlpha)
 
-				VIaddRoundTile(
-					shapeBuf,
-					strokeRect,
-					isRound,
-					strokeColor,
+		VIaddRoundTile(
+			shapeBuf,
+			DBC.TileStrokeRects.Get(x, y),
+			DBC.TileRoundness.Get(x, y),
+			strokeColor,
+		)
+	}
+
+	iter.Reset()
+	for iter.HasNext() {
+		x, y := iter.GetNext()
+		style := tileStyles.Get(x, y)
+
+		if !DBC.ShouldDrawTile.Get(x, y) {
+			continue
+		}
+
+		fillColor := modColor(
+			style.TileFillColor,
+			style.TileAlpha, style.Highlight, ColorTileHighLight,
+		)
+
+		VIaddRoundTile(
+			shapeBuf,
+			DBC.TileFillRects.Get(x, y),
+			DBC.TileRoundness.Get(x, y),
+			fillColor,
+		)
+	}
+
+	// ============================
+	// draw foreground tiles
+	// ============================
+	iter.Reset()
+	for iter.HasNext() {
+		x, y := iter.GetNext()
+		style := tileStyles.Get(x, y)
+
+		if !DBC.ShouldDrawFgTile.Get(x, y) {
+			continue
+		}
+
+		fgRect := DBC.TileFillRects.Get(x, y)
+		fgColor := style.FgColor
+
+		if style.FgType == TileFgTypeNumber {
+			count := board.GetNeighborMineCount(x, y)
+			if 1 <= count && count <= 8 {
+				VIaddSubViewInRect(
+					spriteBuf,
+					fgRect,
+					style.FgScale,
+					style.FgOffsetX, style.FgOffsetY,
+					modColor(fgColor, style.FgAlpha, style.Highlight, ColorFgHighLight),
+					GetNumberTile(count),
 				)
 			}
-		},
-	)
-
-	forEachTile(
-		board, boardRect, tileStyles,
-
-		func(x, y int, style TileStyle, strokeRect, fillRect FRectangle, isRound [4]bool) {
-			if ShouldDrawTile(style) {
-				fillColor := modColor(
-					style.TileFillColor,
-					style.TileAlpha, style.Highlight, ColorTileHighLight,
-				)
-
-				VIaddRoundTile(
-					shapeBuf,
-					fillRect,
-					isRound,
-					fillColor,
-				)
-			}
-		},
-	)
-
-	forEachFgTile(
-		board, boardRect, tileStyles,
-
-		func(x, y int, style TileStyle, fgRect FRectangle) {
-			if ShouldDrawFgTile(style) {
-				fgColor := style.FgColor
-
-				if style.FgType == TileFgTypeNumber {
-					count := board.GetNeighborMineCount(x, y)
-					if 1 <= count && count <= 8 {
-						VIaddSubViewInRect(
-							spriteBuf,
-							fgRect,
-							style.FgScale,
-							style.FgOffsetX, style.FgOffsetY,
-							modColor(fgColor, style.FgAlpha, style.Highlight, ColorFgHighLight),
-							GetNumberTile(count),
-						)
-					}
-				} else if style.FgType == TileFgTypeFlag {
-					VIaddSubViewInRect(
-						flagSpriteBuf,
-						fgRect,
-						style.FgScale,
-						style.FgOffsetX, style.FgOffsetY,
-						modColor(fgColor, style.FgAlpha, style.Highlight, ColorFgHighLight),
-						GetFlagTile(style.FlagAnim),
-					)
-				}
-			}
-		},
-	)
+		} else if style.FgType == TileFgTypeFlag {
+			VIaddSubViewInRect(
+				flagSpriteBuf,
+				fgRect,
+				style.FgScale,
+				style.FgOffsetX, style.FgOffsetY,
+				modColor(fgColor, style.FgAlpha, style.Highlight, ColorFgHighLight),
+				GetFlagTile(style.FlagAnim),
+			)
+		}
+	}
 
 	// ====================
 	// flush buffers
