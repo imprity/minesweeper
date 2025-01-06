@@ -52,12 +52,14 @@ func (b *BaseButton) Update() {
 			if HandleMouseButtonRepeat(
 				b.FirstRate, b.RepeatRate, eb.MouseButtonLeft,
 			) {
+				b.State = ButtonStateDown
 				if b.OnPress != nil {
 					b.OnPress(IsMouseButtonJustPressed(eb.MouseButtonLeft))
 				}
 			}
 		} else {
 			if IsMouseButtonJustPressed(eb.MouseButtonLeft) {
+				b.State = ButtonStateDown
 				b.readyToCallOnRelease = true
 				if b.OnPress != nil {
 					b.OnPress(true)
@@ -73,11 +75,8 @@ func (b *BaseButton) Update() {
 		}
 	}
 
-	// handle button state
 	if inRect {
-		if IsMouseButtonPressed(eb.MouseButtonLeft) {
-			b.State = ButtonStateDown
-		} else {
+		if b.State != ButtonStateDown {
 			b.State = ButtonStateHover
 		}
 	} else {

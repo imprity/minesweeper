@@ -425,8 +425,8 @@ func NewGame(boardWidth, boardHeight, mineCount int) *Game {
 	}
 
 	g.RetryButton.OnRelease = func() {
-		g.QueueResetBoardAnimation()
 		PlaySoundBytes(SeCut, 0.8)
+		g.QueueResetBoardAnimation()
 	}
 
 	g.GameAnimations = NewCircularQueue[CallbackAnimation](10)
@@ -457,6 +457,7 @@ func (g *Game) ResetBoardWithNoStyles(width, height, mineCount int) {
 	g.mineCount = mineCount
 
 	g.DrawRetryButton = false
+	g.RetryButton.Disabled = true
 	g.RetryButtonScale = 1
 	g.RetryButtonOffsetX = 0
 	g.RetryButtonOffsetY = 0
@@ -757,10 +758,10 @@ func (g *Game) Update() {
 	// update RetryButton
 	// ===================================
 	g.RetryButton.Rect = g.TransformedRetryButtonRect()
-	g.RetryButton.Update()
 	if !g.DrawRetryButton {
 		g.RetryButton.Disabled = true
 	}
+	g.RetryButton.Update()
 }
 
 func (g *Game) Draw(dst *eb.Image) {
@@ -3011,10 +3012,10 @@ func (rb *RetryButton) Draw(dst *eb.Image) {
 	topRect = FRectMoveTo(topRect, rb.Rect.Min.X, rb.Rect.Min.Y)
 	bottomRect = FRectMoveTo(bottomRect, rb.Rect.Min.X, rb.Rect.Max.Y-bottomRect.Dy())
 
-	if rb.State == ButtonStateDown {
+	if rb.State == ButtonStateDown || rb.Disabled {
 		topRect = FRectMoveTo(topRect, bottomRect.Min.X, bottomRect.Min.Y)
 	} else if rb.State == ButtonStateHover {
-		topRect = topRect.Add(FPt(0, -topRect.Dy()*0.025*rb.ButtonHoverOffset))
+		topRect = topRect.Add(FPt(0, -topRect.Dy()*0.04*rb.ButtonHoverOffset))
 	}
 
 	// calculate colors
