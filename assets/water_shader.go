@@ -11,6 +11,8 @@ var Time float
 var Offset vec2
 var Colors [4]vec4
 
+var ScreenHeight float
+
 func colorRamp(t float) vec4 {
 	if t < 0.25 {
 		return mix(Colors[0], Colors[1], t/0.25)
@@ -45,7 +47,7 @@ func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
 	time := Time * 5
 	_ = time
 
-	pos := (dstPos.xy + Offset - imageDstOrigin()) / imageDstSize().y
+	pos := (dstPos.xy + Offset - imageDstOrigin()) / ScreenHeight
 
 	scale1 := 2.0
 	pos1 := pos * vec2(scale1, scale1*3)

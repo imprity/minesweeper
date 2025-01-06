@@ -406,7 +406,10 @@ func NewGame(boardWidth, boardHeight, mineCount int) *Game {
 
 	g.mineCount = mineCount
 
-	g.WaterRenderTarget = eb.NewImage(int(ScreenWidth), int(ScreenHeight))
+	g.WaterRenderTarget = eb.NewImageWithOptions(
+		RectWH(int(ScreenWidth), int(ScreenHeight)),
+		&eb.NewImageOptions{Unmanaged: true},
+	)
 
 	g.StyleModifiers = append(g.StyleModifiers, NewTileHighlightModifier())
 	g.StyleModifiers = append(g.StyleModifiers, NewFgClickModifier())
@@ -425,8 +428,6 @@ func NewGame(boardWidth, boardHeight, mineCount int) *Game {
 		g.QueueResetBoardAnimation()
 		PlaySoundBytes(SeCut, 0.8)
 	}
-
-	g.RetryButton.WaterRenderTarget = g.WaterRenderTarget
 
 	g.GameAnimations = NewCircularQueue[CallbackAnimation](10)
 
@@ -782,7 +783,6 @@ func (g *Game) Draw(dst *eb.Image) {
 	)
 
 	if g.DrawRetryButton {
-		g.RetryButton.WaterRenderTarget = g.WaterRenderTarget
 		g.RetryButton.DoWaterEffect = doWaterEffect
 		g.RetryButton.WaterAlpha = g.WaterAlpha
 		g.RetryButton.WaterFlowOffset = g.WaterFlowOffset
@@ -800,7 +800,11 @@ func (g *Game) Draw(dst *eb.Image) {
 
 func (g *Game) Layout(outsideWidth, outsideHeight int) {
 	if g.WaterRenderTarget.Bounds().Dx() != outsideWidth || g.WaterRenderTarget.Bounds().Dy() != outsideHeight {
-		g.WaterRenderTarget = eb.NewImage(outsideWidth, outsideHeight)
+		g.WaterRenderTarget.Dispose()
+		g.WaterRenderTarget = eb.NewImageWithOptions(
+			RectWH(int(ScreenWidth), int(ScreenHeight)),
+			&eb.NewImageOptions{Unmanaged: true},
+		)
 	}
 }
 
@@ -2803,6 +2807,8 @@ func DrawWaterRect(
 		c4[0], c4[1], c4[2], c4[3],
 	}
 
+	op.Uniforms["ScreenHeight"] = ScreenHeight
+
 	imgRect := WaterShaderImage1.Bounds()
 	imgFRect := RectToFRect(imgRect)
 
@@ -2958,11 +2964,15 @@ type RetryButton struct {
 	WaterAlpha      float64
 	WaterFlowOffset time.Duration
 
-	WaterRenderTarget *eb.Image
+	waterRenderTarget *eb.Image
 }
 
 func NewRetryButton() *RetryButton {
 	rb := new(RetryButton)
+	rb.waterRenderTarget = eb.NewImageWithOptions(
+		RectWH(256, 256),
+		&eb.NewImageOptions{Unmanaged: true},
+	)
 
 	return rb
 }
@@ -3007,16 +3017,7 @@ func (rb *RetryButton) Draw(dst *eb.Image) {
 		topRect = topRect.Add(FPt(0, -topRect.Dy()*0.025*rb.ButtonHoverOffset))
 	}
 
-	const segments = 6
-	const radius = 0.4
-
-	renderTarget := dst
-
-	if rb.DoWaterEffect {
-		rb.WaterRenderTarget.Clear()
-		renderTarget = rb.WaterRenderTarget
-	}
-
+	// calculate colors
 	colorT := Clamp(rb.WaterAlpha, 0, 1)
 	if !rb.DoWaterEffect {
 		colorT = 0
@@ -3026,60 +3027,84 @@ func (rb *RetryButton) Draw(dst *eb.Image) {
 	color3 := LerpColorRGBA(ColorRetryA3, ColorRetryB3, colorT)
 	color4 := LerpColorRGBA(ColorRetryA4, ColorRetryB4, colorT)
 
-	FillRoundRectFast(
-		renderTarget,
-		bottomRect,
-		radius,
-		false,
-		segments,
-		color1,
-		//color.NRGBA{0, 0, 0, 255},
-	)
-
-	FillRoundRectFast(
-		renderTarget,
-		topRect,
-		radius,
-		false,
-		segments,
-		color2,
-		//color.NRGBA{105, 223, 145, 255},
-	)
+	const segments = 6
+	const radius = 0.4
 
 	if rb.DoWaterEffect {
-		rect := bottomRect.Union(topRect)
-		rect = rect.Inset(-3)
+		const renderMargin = 3
+		union := bottomRect.Union(topRect).Inset(-renderMargin)
+		union = RectToFRect(FRectToRect(union))
 
-		colors := [4]color.Color{
+		// resize waterRenderTarget if needed
+		if union.Dx() > f64(rb.waterRenderTarget.Bounds().Dx()) || union.Dy() > f64(rb.waterRenderTarget.Bounds().Dy()) {
+			newW := rb.waterRenderTarget.Bounds().Dx()
+			newH := rb.waterRenderTarget.Bounds().Dy()
+
+			for f64(newW) < union.Dx() || f64(newH) < union.Dy() {
+				newW *= 2
+				newH *= 2
+			}
+
+			rb.waterRenderTarget.Dispose()
+			rb.waterRenderTarget = eb.NewImageWithOptions(
+				RectWH(newW, newH),
+				&eb.NewImageOptions{Unmanaged: true},
+			)
+		}
+
+		DebugPrint("rw", rb.waterRenderTarget.Bounds().Dx())
+		DebugPrint("rh", rb.waterRenderTarget.Bounds().Dy())
+
+		rb.waterRenderTarget.Clear()
+
+		bottomRectW := bottomRect.Sub(union.Min)
+		topRectW := topRect.Sub(union.Min)
+
+		FillRoundRectFast(
+			rb.waterRenderTarget, bottomRectW, radius, false, segments, color1)
+
+		FillRoundRectFast(
+			rb.waterRenderTarget, topRectW, radius, false, segments, color2)
+
+		waterColors := [4]color.Color{
 			ColorRetryWater1,
 			ColorRetryWater2,
 			ColorRetryWater3,
 			ColorRetryWater4,
 		}
 
-		for i, c := range colors {
+		for i, c := range waterColors {
 			nrgba := ColorToNRGBA(c)
-			colors[i] = color.NRGBA{nrgba.R, nrgba.G, nrgba.B, uint8(f64(nrgba.A) * rb.WaterAlpha)}
+			waterColors[i] = color.NRGBA{nrgba.R, nrgba.G, nrgba.B, uint8(f64(nrgba.A) * rb.WaterAlpha)}
 		}
 
 		BeginBlend(eb.BlendSourceAtop)
 		DrawWaterRect(
-			rb.WaterRenderTarget,
-			rect,
+			rb.waterRenderTarget,
+			FRectMoveTo(union, 0, 0),
 			GlobalTimerNow()+rb.WaterFlowOffset,
-			colors,
-			FPt(0, 0),
+			waterColors,
+			union.Min,
 		)
 		EndBlend()
 
 		// draw waterRenderTarget
+		op := &DrawImageOptions{}
+		op.GeoM.Translate(union.Min.X, union.Min.Y)
+
 		BeginAntiAlias(false)
 		BeginFilter(eb.FilterNearest)
 		BeginMipMap(false)
-		DrawImage(dst, rb.WaterRenderTarget, nil)
+		DrawImage(dst, rb.waterRenderTarget, op)
 		EndMipMap()
 		EndAntiAlias()
 		EndFilter()
+	} else {
+		FillRoundRectFast(
+			dst, bottomRect, radius, false, segments, color1)
+
+		FillRoundRectFast(
+			dst, topRect, radius, false, segments, color2)
 	}
 
 	imgRect := RectToFRect(RetryButtonImage.Bounds())
@@ -3091,14 +3116,12 @@ func (rb *RetryButton) Draw(dst *eb.Image) {
 	op := &DrawImageOptions{}
 	op.GeoM.Concat(TransformToCenter(imgRect.Dx(), imgRect.Dy(), scale, scale, 0))
 	op.GeoM.Translate(center.X, center.Y-topRect.Dy()*0.02)
-	//op.ColorScale.ScaleWithColor(color.NRGBA{0, 0, 0, 255})
 	op.ColorScale.ScaleWithColor(color3)
 
 	DrawImage(dst, RetryButtonImage, op)
 
 	op.GeoM.Translate(0, topRect.Dy()*0.02*2)
 	op.ColorScale.Reset()
-	//op.ColorScale.ScaleWithColor(color.NRGBA{255, 255, 255, 255})
 	op.ColorScale.ScaleWithColor(color4)
 
 	DrawImage(dst, RetryButtonImage, op)
