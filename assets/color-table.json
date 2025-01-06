@@ -95,6 +95,78 @@
         "B": 51,
         "A": 255
     },
+    "ColorRetryA1": {
+        "R": 0,
+        "G": 0,
+        "B": 0,
+        "A": 255
+    },
+    "ColorRetryA2": {
+        "R": 105,
+        "G": 223,
+        "B": 145,
+        "A": 255
+    },
+    "ColorRetryA3": {
+        "R": 0,
+        "G": 0,
+        "B": 0,
+        "A": 255
+    },
+    "ColorRetryA4": {
+        "R": 255,
+        "G": 255,
+        "B": 255,
+        "A": 255
+    },
+    "ColorRetryB1": {
+        "R": 0,
+        "G": 0,
+        "B": 0,
+        "A": 255
+    },
+    "ColorRetryB2": {
+        "R": 64,
+        "G": 171,
+        "B": 220,
+        "A": 255
+    },
+    "ColorRetryB3": {
+        "R": 32,
+        "G": 48,
+        "B": 42,
+        "A": 255
+    },
+    "ColorRetryB4": {
+        "R": 255,
+        "G": 255,
+        "B": 255,
+        "A": 255
+    },
+    "ColorRetryWater1": {
+        "R": 32,
+        "G": 255,
+        "B": 158,
+        "A": 237
+    },
+    "ColorRetryWater2": {
+        "R": 85,
+        "G": 149,
+        "B": 127,
+        "A": 226
+    },
+    "ColorRetryWater3": {
+        "R": 76,
+        "G": 255,
+        "B": 194,
+        "A": 191
+    },
+    "ColorRetryWater4": {
+        "R": 53,
+        "G": 122,
+        "B": 190,
+        "A": 97
+    },
     "ColorTileHighLight": {
         "R": 34,
         "G": 43,

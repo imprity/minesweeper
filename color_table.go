@@ -55,6 +55,21 @@ const (
 	ColorWater3
 	ColorWater4
 
+	ColorRetryA1
+	ColorRetryA2
+	ColorRetryA3
+	ColorRetryA4
+
+	ColorRetryB1
+	ColorRetryB2
+	ColorRetryB3
+	ColorRetryB4
+
+	ColorRetryWater1
+	ColorRetryWater2
+	ColorRetryWater3
+	ColorRetryWater4
+
 	ColorTableSize
 )
 
@@ -111,6 +126,21 @@ func init() {
 	setColor(ColorWater2, color.NRGBA{0x4F, 0x75, 0xFF, 0xFF})
 	setColor(ColorWater3, color.NRGBA{0x00, 0xCC, 0xDD, 0xFF})
 	setColor(ColorWater4, color.NRGBA{0x7C, 0xF5, 0xFF, 0xFF})
+
+	setColor(ColorRetryA1, color.NRGBA{0, 0, 0, 255})
+	setColor(ColorRetryA2, color.NRGBA{105, 223, 145, 255})
+	setColor(ColorRetryA3, color.NRGBA{0, 0, 0, 255})
+	setColor(ColorRetryA4, color.NRGBA{255, 255, 255, 255})
+
+	setColor(ColorRetryB1, color.NRGBA{0, 0, 0, 255})
+	setColor(ColorRetryB2, color.NRGBA{105, 223, 145, 255})
+	setColor(ColorRetryB3, color.NRGBA{0, 0, 0, 255})
+	setColor(ColorRetryB4, color.NRGBA{255, 255, 255, 255})
+
+	setColor(ColorRetryWater1, color.NRGBA{0x64, 0x39, 0xFF, 0xFF})
+	setColor(ColorRetryWater2, color.NRGBA{0x4F, 0x75, 0xFF, 0xFF})
+	setColor(ColorRetryWater3, color.NRGBA{0x00, 0xCC, 0xDD, 0xFF})
+	setColor(ColorRetryWater4, color.NRGBA{0x7C, 0xF5, 0xFF, 0xFF})
 
 	for i := ColorTableIndex(0); i < ColorTableSize; i++ {
 		if !colorSet[i] {

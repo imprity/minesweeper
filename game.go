@@ -426,6 +426,8 @@ func NewGame(boardWidth, boardHeight, mineCount int) *Game {
 		PlaySoundBytes(SeCut, 0.8)
 	}
 
+	g.RetryButton.WaterRenderTarget = g.WaterRenderTarget
+
 	g.GameAnimations = NewCircularQueue[CallbackAnimation](10)
 
 	g.Particles = make([]TileParticle, 0, 256)
@@ -780,6 +782,11 @@ func (g *Game) Draw(dst *eb.Image) {
 	)
 
 	if g.DrawRetryButton {
+		g.RetryButton.WaterRenderTarget = g.WaterRenderTarget
+		g.RetryButton.DoWaterEffect = doWaterEffect
+		g.RetryButton.WaterAlpha = g.WaterAlpha
+		g.RetryButton.WaterFlowOffset = g.WaterFlowOffset
+
 		g.RetryButton.Draw(dst)
 	}
 
@@ -1587,10 +1594,10 @@ func DrawBoard(
 		)
 		EndBlend()
 
+		// draw waterRenderTarget
 		BeginAntiAlias(false)
 		BeginFilter(eb.FilterNearest)
 		BeginMipMap(false)
-		// draw waterRenderTarget
 		DrawImage(dst, waterRenderTarget, nil)
 		EndMipMap()
 		EndAntiAlias()
@@ -1703,8 +1710,6 @@ func NewTileHighlightModifier() StyleModifier {
 		prevGameState, gameState GameState,
 		tileStyles Array2D[TileStyle], // modify these to change style
 	) bool {
-		DebugPrint("hlTiles len", len(hlTiles))
-
 		if gameState != GameStatePlaying {
 			hlTiles = hlTiles[:0]
 			prevHlTiles = prevHlTiles[:0]
@@ -2946,6 +2951,14 @@ type RetryButton struct {
 	BaseButton
 
 	ButtonHoverOffset float64
+
+	// water stuff
+	DoWaterEffect bool
+
+	WaterAlpha      float64
+	WaterFlowOffset time.Duration
+
+	WaterRenderTarget *eb.Image
 }
 
 func NewRetryButton() *RetryButton {
@@ -2997,23 +3010,77 @@ func (rb *RetryButton) Draw(dst *eb.Image) {
 	const segments = 6
 	const radius = 0.4
 
+	renderTarget := dst
+
+	if rb.DoWaterEffect {
+		rb.WaterRenderTarget.Clear()
+		renderTarget = rb.WaterRenderTarget
+	}
+
+	colorT := Clamp(rb.WaterAlpha, 0, 1)
+	if !rb.DoWaterEffect {
+		colorT = 0
+	}
+	color1 := LerpColorRGBA(ColorRetryA1, ColorRetryB1, colorT)
+	color2 := LerpColorRGBA(ColorRetryA2, ColorRetryB2, colorT)
+	color3 := LerpColorRGBA(ColorRetryA3, ColorRetryB3, colorT)
+	color4 := LerpColorRGBA(ColorRetryA4, ColorRetryB4, colorT)
+
 	FillRoundRectFast(
-		dst,
+		renderTarget,
 		bottomRect,
 		radius,
 		false,
 		segments,
-		color.NRGBA{0, 0, 0, 255},
+		color1,
+		//color.NRGBA{0, 0, 0, 255},
 	)
 
 	FillRoundRectFast(
-		dst,
+		renderTarget,
 		topRect,
 		radius,
 		false,
 		segments,
-		color.NRGBA{105, 223, 145, 255},
+		color2,
+		//color.NRGBA{105, 223, 145, 255},
 	)
+
+	if rb.DoWaterEffect {
+		rect := bottomRect.Union(topRect)
+		rect = rect.Inset(-3)
+
+		colors := [4]color.Color{
+			ColorRetryWater1,
+			ColorRetryWater2,
+			ColorRetryWater3,
+			ColorRetryWater4,
+		}
+
+		for i, c := range colors {
+			nrgba := ColorToNRGBA(c)
+			colors[i] = color.NRGBA{nrgba.R, nrgba.G, nrgba.B, uint8(f64(nrgba.A) * rb.WaterAlpha)}
+		}
+
+		BeginBlend(eb.BlendSourceAtop)
+		DrawWaterRect(
+			rb.WaterRenderTarget,
+			rect,
+			GlobalTimerNow()+rb.WaterFlowOffset,
+			colors,
+			FPt(0, 0),
+		)
+		EndBlend()
+
+		// draw waterRenderTarget
+		BeginAntiAlias(false)
+		BeginFilter(eb.FilterNearest)
+		BeginMipMap(false)
+		DrawImage(dst, rb.WaterRenderTarget, nil)
+		EndMipMap()
+		EndAntiAlias()
+		EndFilter()
+	}
 
 	imgRect := RectToFRect(RetryButtonImage.Bounds())
 	scale := min(topRect.Dx(), topRect.Dy()) / max(imgRect.Dx(), imgRect.Dy())
@@ -3024,13 +3091,15 @@ func (rb *RetryButton) Draw(dst *eb.Image) {
 	op := &DrawImageOptions{}
 	op.GeoM.Concat(TransformToCenter(imgRect.Dx(), imgRect.Dy(), scale, scale, 0))
 	op.GeoM.Translate(center.X, center.Y-topRect.Dy()*0.02)
-	op.ColorScale.ScaleWithColor(color.NRGBA{0, 0, 0, 255})
+	//op.ColorScale.ScaleWithColor(color.NRGBA{0, 0, 0, 255})
+	op.ColorScale.ScaleWithColor(color3)
 
 	DrawImage(dst, RetryButtonImage, op)
 
 	op.GeoM.Translate(0, topRect.Dy()*0.02*2)
 	op.ColorScale.Reset()
-	op.ColorScale.ScaleWithColor(color.NRGBA{255, 255, 255, 255})
+	//op.ColorScale.ScaleWithColor(color.NRGBA{255, 255, 255, 255})
+	op.ColorScale.ScaleWithColor(color4)
 
 	DrawImage(dst, RetryButtonImage, op)
 }
