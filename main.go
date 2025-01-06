@@ -150,7 +150,11 @@ func main() {
 	eb.SetWindowTitle("Minesweeper")
 	eb.SetScreenClearedEveryFrame(false)
 
-	op := &eb.RunGameOptions{}
+	op := &eb.RunGameOptions{
+		// NOTE: I have no idea why, but I think there is a bug
+		// that only happens when multithreaded...
+		SingleThread: true,
+	}
 
 	if err := eb.RunGameWithOptions(app, op); err != nil {
 		panic(err)

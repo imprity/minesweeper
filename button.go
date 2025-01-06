@@ -76,7 +76,7 @@ func (b *BaseButton) Update() {
 	}
 
 	if inRect {
-		if b.State != ButtonStateDown {
+		if b.State != ButtonStateDown || !IsMouseButtonPressed(eb.MouseButtonLeft) {
 			b.State = ButtonStateHover
 		}
 	} else {
