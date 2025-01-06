@@ -421,14 +421,16 @@ func NewGame(boardWidth, boardHeight, mineCount int) *Game {
 	g.RetryButton.OnPress = func(justPressed bool) {
 		if justPressed {
 			PlaySoundBytes(SeSwitch38, 0.8)
+			g.RetryButton.Disabled = true
+			g.QueueResetBoardAnimation()
 		}
 	}
 
-	g.RetryButton.OnRelease = func() {
-		PlaySoundBytes(SeCut, 0.8)
-		g.RetryButton.Disabled = true
-		g.QueueResetBoardAnimation()
-	}
+	/*
+		g.RetryButton.OnRelease = func() {
+			PlaySoundBytes(SeCut, 0.8)
+		}
+	*/
 
 	g.GameAnimations = NewCircularQueue[CallbackAnimation](10)
 
