@@ -5,20 +5,24 @@ package sound
 import (
 	"bytes"
 	"io"
+	"log"
+	"os"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/ebitengine/oto/v3"
+	eba "github.com/hajimehoshi/ebiten/v2/audio"
 
 	"github.com/hajimehoshi/ebiten/v2/audio/mp3"
 	"github.com/hajimehoshi/ebiten/v2/audio/vorbis"
 	"github.com/hajimehoshi/ebiten/v2/audio/wav"
 )
 
+var errLogger = log.New(os.Stderr, "[ FAIL ]: ", log.Lshortfile)
+
 type Context struct {
 	sampleRate int
-	otoContext *oto.Context
+	context    *eba.Context
 
 	audioMap     map[string][]byte
 	audioMapLock sync.Mutex
@@ -29,17 +33,14 @@ func NewContext(sampleRate int) (*Context, chan struct{}, error) {
 	c.sampleRate = sampleRate
 	c.audioMap = make(map[string][]byte)
 
-	op := &oto.NewContextOptions{
-		SampleRate:   sampleRate,
-		ChannelCount: 2,
-		Format:       oto.FormatSignedInt16LE,
-	}
+	var readyChan = make(chan struct{})
 
-	var readyChan chan struct{}
-	var err error
-	c.otoContext, readyChan, err = oto.NewContext(op)
+	// it'll be ready on start since it's not on browser
+	close(readyChan)
 
-	return c, readyChan, err
+	c.context = eba.NewContext(sampleRate)
+
+	return c, readyChan, nil
 }
 
 func (c *Context) SampleRate() int {
@@ -104,14 +105,21 @@ func (c *Context) NewPlayer(audioName string) *Player {
 	c.audioMapLock.Unlock()
 
 	p := new(Player)
-	p.player = c.otoContext.NewPlayer(bytes.NewReader(audioBytes))
+	var err error
+	p.player, err = c.context.NewPlayer(bytes.NewReader(audioBytes))
+
+	if err != nil {
+		// TODO: actually handle error instead of catching fire lol
+		errLogger.Fatalf("NewPlayer failed for %s : %v", audioName, err)
+	}
+
 	p.sampleRate = c.SampleRate()
 
 	return p
 }
 
 type Player struct {
-	player     *oto.Player
+	player     *eba.Player
 	sampleRate int
 }
 
@@ -128,12 +136,7 @@ func (p *Player) Play() {
 }
 
 func (p *Player) SetPosition(offset time.Duration) {
-	const bytesPerSample = 4
-
-	o := int64(offset) * bytesPerSample * int64(p.sampleRate) / int64(time.Second)
-	o -= o % bytesPerSample
-
-	p.player.Seek(o, io.SeekStart)
+	p.player.SetPosition(offset)
 }
 
 func (p *Player) SetVolume(volume float64) {
