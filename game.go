@@ -23,14 +23,6 @@ import (
 
 var _ = fmt.Printf
 
-type GameState int
-
-const (
-	GameStatePlaying GameState = iota
-	GameStateWon
-	GameStateLost
-)
-
 type MouseState struct {
 	JustPressedL bool
 	JustPressedR bool
@@ -389,6 +381,8 @@ type Game struct {
 	TileRevealSoundPlayers PlayerPool
 	BombSoundPlayers       PlayerPool
 
+	Seed [32]byte
+
 	board     Board
 	prevBoard Board
 
@@ -397,6 +391,8 @@ type Game struct {
 	mineCount int
 
 	placedMinesOnBoard bool
+
+	noteCounter int
 
 	viBuffers [3]*VIBuffer
 }
@@ -420,24 +416,21 @@ func NewGame(boardWidth, boardHeight, mineCount int) *Game {
 
 	g.RetryButton.OnPress = func(justPressed bool) {
 		if justPressed {
+			g.SkipAllAnimationsUntilTag(AnimationTagHideBoard)
 			PlaySoundBytes(SeSwitch38, 0.8)
 			g.RetryButton.Disabled = true
 			g.QueueResetBoardAnimation()
 		}
 	}
 
-	/*
-		g.RetryButton.OnRelease = func() {
-			PlaySoundBytes(SeCut, 0.8)
-		}
-	*/
+	g.Seed = GetSeed()
 
 	g.GameAnimations = NewCircularQueue[CallbackAnimation](10)
 
 	g.Particles = make([]TileParticle, 0, 256)
 
-	g.TileRevealSoundPlayers = NewPlayerPool(10, SeCut)
-	g.TileRevealSoundPlayers.SetVolume(0.3)
+	g.TileRevealSoundPlayers = NewPlayerPool(20, SeNewCut)
+	g.TileRevealSoundPlayers.SetVolume(0.6)
 	g.BombSoundPlayers = NewPlayerPool(5, SeUnlinkSummer)
 	g.BombSoundPlayers.SetVolume(0.3)
 
@@ -446,7 +439,12 @@ func NewGame(boardWidth, boardHeight, mineCount int) *Game {
 	return g
 }
 
-func (g *Game) ResetBoardWithNoStyles(width, height, mineCount int) {
+func (g *Game) ResetBoardNotStylesEx(width, height, mineCount int, newSeed bool) {
+	if newSeed {
+		g.Seed = GetSeed()
+	}
+	InfoLogger.Printf("resetting, seed : %s", SeedToString(g.Seed))
+
 	g.shouldCallOnFirstInteraction = true
 
 	g.placedMinesOnBoard = false
@@ -486,13 +484,15 @@ func (g *Game) ResetBoardWithNoStyles(width, height, mineCount int) {
 
 	g.Particles = g.Particles[:0]
 
+	g.noteCounter = 0
+
 	if g.OnBoardReset != nil {
 		g.OnBoardReset()
 	}
 }
 
-func (g *Game) ResetBoard(width, height, mineCount int) {
-	g.ResetBoardWithNoStyles(width, height, mineCount)
+func (g *Game) ResetBoardEx(width, height, mineCount int, newSeed bool) {
+	g.ResetBoardNotStylesEx(width, height, mineCount, newSeed)
 
 	for x := range width {
 		for y := range height {
@@ -501,6 +501,14 @@ func (g *Game) ResetBoard(width, height, mineCount int) {
 			g.RenderTileStyles.Set(x, y, targetStyle)
 		}
 	}
+}
+
+func (g *Game) ResetBoardNotStyles(width, height, mineCount int) {
+	g.ResetBoardNotStylesEx(width, height, mineCount, true)
+}
+
+func (g *Game) ResetBoard(width, height, mineCount int) {
+	g.ResetBoardEx(width, height, mineCount, true)
 }
 
 func (g *Game) Update() {
@@ -514,6 +522,9 @@ func (g *Game) Update() {
 	prevState := g.GameState
 	g.board.SaveTo(g.prevBoard)
 
+	var needToCheckStateChange bool = false
+
+	// true if board or game state has changed
 	var stateChanged bool = false
 
 	var interaction BoardInteractionType = InteractionTypeNone
@@ -529,37 +540,10 @@ func (g *Game) Update() {
 		}
 
 		if interaction != InteractionTypeNone {
-			g.GameState = g.board.InteractAt(ms.BoardX, ms.BoardY, interaction, g.mineCount)
+			g.GameState = g.board.InteractAt(
+				ms.BoardX, ms.BoardY, interaction, g.GameState, g.mineCount, g.Seed)
 
-			// ==============================
-			// check if state has changed
-			// ==============================
-
-			// first check game state
-			stateChanged = prevState != g.GameState
-
-			// then check board state
-			if !stateChanged {
-			DIFF_CHECK:
-				for x := range g.board.Width {
-					for y := range g.board.Height {
-						if g.board.Mines.Get(x, y) != g.prevBoard.Mines.Get(x, y) {
-							stateChanged = true
-							break DIFF_CHECK
-						}
-
-						if g.board.Flags.Get(x, y) != g.prevBoard.Flags.Get(x, y) {
-							stateChanged = true
-							break DIFF_CHECK
-						}
-
-						if g.board.Revealed.Get(x, y) != g.prevBoard.Revealed.Get(x, y) {
-							stateChanged = true
-							break DIFF_CHECK
-						}
-					}
-				}
-			}
+			needToCheckStateChange = true
 		}
 	}
 
@@ -568,60 +552,95 @@ func (g *Game) Update() {
 	// ======================================
 	if IsKeyJustPressed(SetToDecoBoardKey) {
 		g.SetDebugBoardForDecoration()
-		g.QueueRevealAnimation(
-			g.prevBoard.Revealed, g.board.Revealed, 0, 0)
-		stateChanged = true
+		needToCheckStateChange = true
 	}
 	if IsKeyJustPressed(InstantWinKey) {
 		g.SetBoardForInstantWin()
-		g.QueueRevealAnimation(
-			g.prevBoard.Revealed, g.board.Revealed, 0, 0)
-		stateChanged = true
+		needToCheckStateChange = true
+	}
+
+	// ==============================
+	// check if state has changed
+	// ==============================
+	if needToCheckStateChange {
+		// first check game state
+		stateChanged = prevState != g.GameState
+
+		// then check board state
+		iter := NewBoardIterator(0, 0, g.board.Width-1, g.board.Height-1)
+
+		for iter.HasNext() {
+			x, y := iter.GetNext()
+
+			if g.board.Mines.Get(x, y) != g.prevBoard.Mines.Get(x, y) {
+				stateChanged = true
+				break
+			}
+
+			if g.board.Flags.Get(x, y) != g.prevBoard.Flags.Get(x, y) {
+				stateChanged = true
+				break
+			}
+
+			if g.board.Revealed.Get(x, y) != g.prevBoard.Revealed.Get(x, y) {
+				stateChanged = true
+				break
+			}
+		}
 	}
 
 	// ==============================
 	// on state changes
 	// ==============================
+	// skipping animations
+	if prevState == GameStateLost || prevState == GameStateWon {
+		// all animations are skippable except AnimationTagRetryButtonReveal
+		if ms.JustPressedAny() {
+			g.SkipAllAnimationsUntilTag(AnimationTagRetryButtonReveal)
+		}
+	}
+
 	if stateChanged {
+		g.SkipAllAnimations()
+
 		SetRedraw() // just do it!!
 
-		// check if we board has been revealed
-	REVEAL_CHECK:
-		for x := range g.board.Width {
-			for y := range g.board.Height {
-				if g.board.Revealed.Get(x, y) && !g.prevBoard.Revealed.Get(x, y) {
-					// on reveal
-					g.QueueRevealAnimation(
-						g.prevBoard.Revealed, g.board.Revealed, ms.BoardX, ms.BoardY)
-					//PlaySoundBytes(SoundEffects[15], 0.5)
+		iter := NewBoardIterator(0, 0, g.board.Width-1, g.board.Height-1)
 
-					break REVEAL_CHECK
+		// update flag
+		iter.Reset()
+		for iter.HasNext() {
+			x, y := iter.GetNext()
+			if g.prevBoard.Flags.Get(x, y) != g.board.Flags.Get(x, y) {
+				if g.board.Flags.Get(x, y) {
+					g.QueueAddFlagAnimation(x, y)
+				} else {
+					g.QueueRemoveFlagAnimation(x, y)
 				}
 			}
 		}
 
-		// update flag
-		for x := range g.board.Width {
-			for y := range g.board.Height {
-				if g.prevBoard.Flags.Get(x, y) != g.board.Flags.Get(x, y) {
-					if g.board.Flags.Get(x, y) {
-						g.QueueAddFlagAnimation(x, y)
-					} else {
-						g.QueueRemoveFlagAnimation(x, y)
-					}
-				}
+		// check if we board has been revealed
+		iter.Reset()
+		for iter.HasNext() {
+			x, y := iter.GetNext()
+			if g.board.Revealed.Get(x, y) && !g.prevBoard.Revealed.Get(x, y) {
+				// on reveal
+				g.QueueRevealAnimation(
+					g.prevBoard.Revealed, g.board.Revealed,
+					Clamp(ms.BoardX, 0, g.board.Width-1),
+					Clamp(ms.BoardY, 0, g.board.Height-1),
+				)
+				break
 			}
 		}
 
 		if prevState != g.GameState {
 			if g.GameState == GameStateLost { // on loss
-				PlaySoundBytes(SeLinkSummer, 0.7)
 				g.QueueDefeatAnimation(ms.BoardX, ms.BoardY)
 			} else if g.GameState == GameStateWon { // on win
 				g.QueueWinAnimation(ms.BoardX, ms.BoardY)
 				PlaySoundBytes(SeWobble2, 0.6)
-				//PlaySoundBytes(SoundEffects[SeWobble3], 0.6)
-				//PlaySoundBytes(SoundEffects[SeSave], 0.6)
 			}
 		}
 
@@ -704,14 +723,6 @@ func (g *Game) Update() {
 		}
 	}
 
-	// skipping animations
-	if prevState == GameStateLost || prevState == GameStateWon {
-		// all animations are skippable except AnimationTagRetryButtonReveal
-		if ms.JustPressedAny() {
-			g.SkipAllAnimationsUntilTag(AnimationTagRetryButtonReveal)
-		}
-	}
-
 	// =================================
 	// update particles
 	// =================================
@@ -765,6 +776,15 @@ func (g *Game) Update() {
 		g.RetryButton.Disabled = true
 	}
 	g.RetryButton.Update()
+
+	if IsKeyJustPressed(ResetBoardKey) {
+		g.ResetBoard(g.board.Width, g.board.Height, g.mineCount)
+		SetRedraw()
+	}
+	if IsKeyJustPressed(ResetToSameBoardKey) {
+		g.ResetBoardEx(g.board.Width, g.board.Height, g.mineCount, false)
+		SetRedraw()
+	}
 }
 
 func (g *Game) Draw(dst *eb.Image) {
@@ -1854,101 +1874,165 @@ func NewFgClickModifier() StyleModifier {
 	}
 }
 
-func (g *Game) QueueRevealAnimation(revealsBefore, revealsAfter Array2D[bool], originX, originy int) {
-	g.SkipAllAnimations()
+func (g *Game) QueueRevealAnimation(revealsBefore, revealsAfter Array2D[bool], originX, originY int) {
+	iter := NewBoardIterator(0, 0, g.board.Width-1, g.board.Height-1)
+
+	distSquaredMax := 0
+	tileDistMax := 0
+	revealedTileCount := 0
+
+	iter.Reset()
+	for iter.HasNext() {
+		x, y := iter.GetNext()
+		if !revealsBefore.Get(x, y) && revealsAfter.Get(x, y) {
+			diffX, diffY := Abs(originX-x), Abs(originY-y)
+
+			distSquared := diffX*diffX + diffY*diffY
+			tileDist := max(diffX, diffY)
+
+			distSquaredMax = max(distSquaredMax, distSquared)
+			tileDistMax = max(tileDistMax, tileDist)
+
+			revealedTileCount++
+		}
+	}
 
 	fw, fh := f64(g.board.Width-1), f64(g.board.Height-1)
-
-	originP := FPt(f64(originX), f64(originy))
 
 	maxDist := math.Sqrt(fw*fw + fh*fh)
 
 	const maxDuration = time.Millisecond * 900
 	const minDuration = time.Millisecond * 20
 
-	soundEffectCounter := 0
+	playedFirstSound := false
+	playedLastSound := false
 
-	for x := range g.board.Width {
-		for y := range g.board.Height {
-			if !revealsBefore.Get(x, y) && revealsAfter.Get(x, y) {
-				pos := FPt(f64(x), f64(y))
-				dist := pos.Sub(originP).Length()
-				d := time.Duration(f64(maxDuration) * (dist / maxDist))
+	var playedAt time.Time
+	playSound := func() {
+		if g.GameState != GameStatePlaying {
+			return
+		}
+		now := time.Now()
+		if now.Sub(playedAt) > time.Millisecond*30 {
+			PlaySoundBytes(SeCut, 0.6)
+			playedAt = now
+		}
+	}
 
-				var timer Timer
+	iter.Reset()
+	for iter.HasNext() {
+		x, y := iter.GetNext()
 
-				timer.Duration = max(d, minDuration)
-				timer.Current = 0
+		if !revealsAfter.Get(x, y) {
+			continue
+		}
 
-				targetStyle := GetAnimationTargetTileStyle(g.board, x, y)
+		if revealsBefore.Get(x, y) {
+			continue
+		}
 
-				var anim CallbackAnimation
-				anim.Tag = AnimationTagTileReveal
+		diffX, diffY := Abs(originX-x), Abs(originY-y)
+		tileDist := max(diffX, diffY)
+		_ = tileDist
+		distSquared := diffX*diffX + diffY*diffY
 
-				playedSound := false
+		dist := math.Sqrt(f64(distSquared))
 
-				if soundEffectCounter%5 != 0 {
-					playedSound = true
-				}
-				soundEffectCounter++
+		duration := time.Duration(f64(maxDuration) * (dist / maxDist))
 
-				anim.Update = func() {
-					style := g.BaseTileStyles.Get(x, y)
-					timer.TickUp()
+		var timer Timer
 
-					t := timer.Normalize()
-					t = t * t
+		timer.Duration = max(duration, minDuration)
+		timer.Current = 0
 
-					const limit = 0.4
+		targetStyle := GetAnimationTargetTileStyle(g.board, x, y)
 
-					if t > limit {
-						style = targetStyle
+		var anim CallbackAnimation
+		anim.Tag = AnimationTagTileReveal
 
-						t = ((t - limit) / (1 - limit))
-						t = Clamp(t, 0, 1)
+		anim.Update = func() {
+			style := g.BaseTileStyles.Get(x, y)
+			timer.TickUp()
 
-						style.TileScale = Lerp(1.2, 1.0, t)
+			t := timer.Normalize()
+			t = t * t
 
-						if !playedSound {
-							playedSound = true
-							g.TileRevealSoundPlayers.Play()
-						}
-					} else {
-						style.DrawTile = false
-						style.DrawFg = false
+			const limit = 0.4
+
+			if t > limit {
+				if revealedTileCount == 1 {
+					if !playedFirstSound {
+						playedFirstSound = true
+						playSound()
+					}
+				} else {
+					if !playedFirstSound {
+						playSound()
+						playedFirstSound = true
 					}
 
-					g.BaseTileStyles.Set(x, y, style)
-				}
-
-				anim.Skip = func() {
-					playedSound = true
-					timer.Current = timer.Duration
-					anim.Update()
-				}
-
-				anim.Done = func() bool {
-					return timer.Current >= timer.Duration
-				}
-
-				anim.AfterDone = func() {
-					// always play sound at the end
-					// if you didn't play sound before
-					if soundEffectCounter >= 2 {
-						g.TileRevealSoundPlayers.Play()
+					if !playedLastSound && distSquared == distSquaredMax {
+						playSound()
+						playedLastSound = true
 					}
-					soundEffectCounter = 0
 				}
 
-				g.TileAnimations.Get(x, y).Enqueue(anim)
+				style = targetStyle
+
+				t = ((t - limit) / (1 - limit))
+				t = Clamp(t, 0, 1)
+
+				style.TileScale = Lerp(1.2, 1.0, t)
+			} else {
+				style.DrawTile = false
+				style.DrawFg = false
+			}
+
+			g.BaseTileStyles.Set(x, y, style)
+		}
+
+		anim.Skip = func() {
+			playedFirstSound = true
+			playedLastSound = true
+			timer.Current = timer.Duration
+			anim.Update()
+		}
+
+		anim.Done = func() bool {
+			return timer.Current >= timer.Duration
+		}
+
+		g.TileAnimations.Get(x, y).Enqueue(anim)
+	}
+
+	if revealedTileCount >= 3 {
+		var gameAnim CallbackAnimation
+		gameAnim.Tag = AnimationTagTileReveal
+
+		var repeatSoundTimer Timer
+
+		gameAnim.Update = func() {
+			if playedFirstSound && !playedLastSound {
+				repeatSoundTimer.TickUp()
+				if repeatSoundTimer.Current > time.Millisecond*60 {
+					playSound()
+					repeatSoundTimer.Current = 0
+				}
 			}
 		}
+
+		gameAnim.Skip = func() {
+		}
+
+		gameAnim.Done = func() bool {
+			return playedFirstSound && playedLastSound
+		}
+
+		g.GameAnimations.Enqueue(gameAnim)
 	}
 }
 
 func (g *Game) QueueAddFlagAnimation(flagX, flagY int) {
-	g.SkipAllAnimations()
-
 	var timer Timer
 	timer.Duration = time.Millisecond * 110
 
@@ -1992,8 +2076,6 @@ func (g *Game) QueueAddFlagAnimation(flagX, flagY int) {
 }
 
 func (g *Game) QueueRemoveFlagAnimation(flagX, flagY int) {
-	g.SkipAllAnimations()
-
 	var anim CallbackAnimation
 	anim.Tag = AnimationTagRemoveFlag
 
@@ -2002,8 +2084,11 @@ func (g *Game) QueueRemoveFlagAnimation(flagX, flagY int) {
 	anim.Update = func() {
 		style := g.BaseTileStyles.Get(flagX, flagY)
 
-		style.DrawFg = false
-		style.FgType = TileFgTypeNone
+		if style.DrawFg && style.FgType == TileFgTypeFlag {
+			style.DrawFg = false
+			style.FgType = TileFgTypeNone
+			g.BaseTileStyles.Set(flagX, flagY, style)
+		}
 
 		velocityX := RandF(0.02, 0.06)
 		if rand.IntN(100) > 50 {
@@ -2030,8 +2115,6 @@ func (g *Game) QueueRemoveFlagAnimation(flagX, flagY int) {
 		g.Particles = AppendTileParticle(g.Particles, p)
 
 		done = true
-
-		g.BaseTileStyles.Set(flagX, flagY, style)
 	}
 
 	anim.Skip = func() {
@@ -2046,8 +2129,6 @@ func (g *Game) QueueRemoveFlagAnimation(flagX, flagY int) {
 }
 
 func (g *Game) QueueDefeatAnimation(originX, originY int) {
-	g.SkipAllAnimations()
-
 	var minePoses []image.Point
 
 	for x := range g.board.Width {
@@ -2079,6 +2160,19 @@ func (g *Game) QueueDefeatAnimation(originX, originY int) {
 	firstPos := minePoses[0]
 	recordDist := distFromOriginSquared(firstPos)
 
+	notes := []string{
+		SeNoteC2,
+		SeNoteB,
+		SeNoteA,
+		SeNoteG,
+		SeNoteF,
+		SeNoteE,
+		SeNoteD,
+		SeNoteC,
+	}
+	_ = notes
+	noteCounter := 0
+
 	for _, p := range minePoses {
 		var timer Timer
 
@@ -2105,7 +2199,10 @@ func (g *Game) QueueDefeatAnimation(originX, originY int) {
 
 			if timer.Current > 0 && !playedSound {
 				playedSound = true
-				g.BombSoundPlayers.Play()
+				//g.BombSoundPlayers.Play()
+				//PlaySoundBytes(notes[rand.Int() % len(notes)], 1)
+				PlaySoundBytes(SePop2, 0.3)
+				noteCounter++
 			}
 
 			timer.TickUp()
@@ -2159,8 +2256,6 @@ func (g *Game) QueueDefeatAnimation(originX, originY int) {
 }
 
 func (g *Game) QueueWinAnimation(originX, originY int) {
-	g.SkipAllAnimations()
-
 	fw, fh := f64(g.board.Width), f64(g.board.Height)
 
 	originP := FPt(f64(originX), f64(originY))
@@ -2285,8 +2380,6 @@ func (g *Game) QueueWinAnimation(originX, originY int) {
 }
 
 func (g *Game) QueueRetryButtonAnimation() {
-	g.SkipAllAnimations()
-
 	buttonRect := g.RetryButtonRect()
 	buttonRect = buttonRect.Inset(-max(buttonRect.Dx(), buttonRect.Dy()) * 0.03)
 
@@ -2408,8 +2501,6 @@ func (g *Game) QueueRetryButtonAnimation() {
 }
 
 func (g *Game) QueueResetBoardAnimation() {
-	g.SkipAllAnimations()
-
 	fw, fh := f64(g.board.Width), f64(g.board.Height)
 
 	centerP := FPt(f64(g.board.Width-1)*0.5, f64(g.board.Height-1)*0.5)
@@ -2523,7 +2614,7 @@ func (g *Game) QueueResetBoardAnimation() {
 
 		anim.AfterDone = func() {
 			g.DrawRetryButton = true
-			g.ResetBoardWithNoStyles(g.board.Width, g.board.Height, g.mineCount)
+			g.ResetBoardNotStyles(g.board.Width, g.board.Height, g.mineCount)
 			g.QueueShowBoardAnimation(
 				g.board.Width/2,
 				g.board.Height/2,
@@ -2535,8 +2626,6 @@ func (g *Game) QueueResetBoardAnimation() {
 }
 
 func (g *Game) QueueShowBoardAnimation(originX, originy int) {
-	g.SkipAllAnimations()
-
 	originP := FPt(f64(originX), f64(originy))
 
 	var maxDist float64
@@ -2924,7 +3013,7 @@ func (g *Game) SetDebugBoardForDecoration() {
 
 func (g *Game) SetBoardForInstantWin() {
 	if !g.placedMinesOnBoard {
-		g.board.PlaceMines(g.mineCount, g.board.Width-1, g.board.Height-1)
+		g.board.PlaceMines(g.mineCount, g.board.Width-1, g.board.Height-1, GetSeed())
 	}
 	g.placedMinesOnBoard = true
 

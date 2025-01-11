@@ -89,11 +89,27 @@ func main() {
 				}
 			}
 
+			audioFileExts := []string{
+				".mp3",
+				".ogg",
+				".wav",
+				".flac",
+			}
+
 			if info.IsDir() {
 				dirents = append(dirents, path)
 			} else if info.Mode().IsRegular() {
 				low := strings.ToLower(path)
-				if strings.HasSuffix(low, ".mp3") || strings.HasSuffix(low, ".ogg") || strings.HasSuffix(low, ".wav") {
+				hasExt := false
+
+				for _, ext := range audioFileExts {
+					if strings.HasSuffix(low, ext) {
+						hasExt = true
+						break
+					}
+				}
+
+				if hasExt {
 					audioFiles = append(audioFiles, path)
 				}
 			}

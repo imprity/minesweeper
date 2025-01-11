@@ -1,7 +1,7 @@
 package main
 
 import (
-	"math/rand"
+	"math/rand/v2"
 )
 
 //==============================================
@@ -31,7 +31,7 @@ func NewBoard(width int, height int) Board {
 	return board
 }
 
-func (board *Board) PlaceMines(count, exceptX, exceptY int) {
+func (board *Board) PlaceMines(count, exceptX, exceptY int, seed [32]byte) {
 	tilesTotal := board.Width * board.Height
 
 	maxCount := tilesTotal - 1
@@ -39,6 +39,8 @@ func (board *Board) PlaceMines(count, exceptX, exceptY int) {
 	count = min(count, maxCount)
 
 	minePlaces := make([][2]int, 0, count)
+
+	rng := rand.New(rand.NewChaCha8(seed))
 
 	for x := range board.Width {
 		for y := range board.Height {
@@ -61,7 +63,7 @@ func (board *Board) PlaceMines(count, exceptX, exceptY int) {
 	}
 
 	for range 4 {
-		rand.Shuffle(len(minePlaces), func(i, j int) {
+		rng.Shuffle(len(minePlaces), func(i, j int) {
 			minePlaces[i], minePlaces[j] = minePlaces[j], minePlaces[i]
 		})
 	}
@@ -255,7 +257,26 @@ const (
 	InteractionTypeCheck
 )
 
-func (board *Board) InteractAt(posX int, posY int, interaction BoardInteractionType, minesToSpawn int) GameState {
+type GameState int
+
+const (
+	GameStatePlaying GameState = iota
+	GameStateWon
+	GameStateLost
+)
+
+func (board *Board) InteractAt(
+	posX int, posY int,
+	interaction BoardInteractionType,
+	gameState GameState,
+
+	// information needed to spawn mines
+	minesToSpawn int, seed [32]byte,
+) GameState {
+	if gameState != GameStatePlaying {
+		return gameState
+	}
+
 	if interaction == InteractionTypeNone {
 		return GameStatePlaying
 	}
@@ -278,7 +299,7 @@ func (board *Board) InteractAt(posX int, posY int, interaction BoardInteractionT
 	case InteractionTypeStep:
 		{
 			if board.HasNoMines() {
-				board.PlaceMines(minesToSpawn, posX, posY)
+				board.PlaceMines(minesToSpawn, posX, posY, seed)
 			}
 			if !board.Revealed.Get(posX, posY) {
 				if board.Flags.Get(posX, posY) { // if flag is up, ignore step

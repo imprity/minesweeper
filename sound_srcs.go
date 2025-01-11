@@ -23,6 +23,30 @@ const (
 	SeWobble       = "tmps/converted/wobble.wav"
 	SeWobble2      = "tmps/converted/wobble2.wav"
 	SeWobble3      = "tmps/converted/wobble3.wav"
+	SeNoteC        = "tmps/converted/note_sounds/note-sounds-c.wav"
+	SeNoteD        = "tmps/converted/note_sounds/note-sounds-d.wav"
+	SeNoteE        = "tmps/converted/note_sounds/note-sounds-e.wav"
+	SeNoteF        = "tmps/converted/note_sounds/note-sounds-f.wav"
+	SeNoteG        = "tmps/converted/note_sounds/note-sounds-g.wav"
+	SeNoteA        = "tmps/converted/note_sounds/note-sounds-a.wav"
+	SeNoteB        = "tmps/converted/note_sounds/note-sounds-b.wav"
+	SeNoteC2       = "tmps/converted/note_sounds/note-sounds-c-2.wav"
+	SeBigHit       = "tmps/converted/note_sounds/big-hit.wav"
+	SeBigHit2      = "tmps/converted/note_sounds/big-hit2.wav"
+	SeBigHit3      = "tmps/converted/note_sounds/big-hit3.wav"
+	SeTile         = "tmps/converted/tile-sound.wav"
+	SeTile2        = "tmps/converted/tile-sound2.wav"
+	SeDomino       = "tmps/converted/domino.wav"
+	SeDomino2      = "tmps/converted/domino2.wav"
+	SeDomino3      = "tmps/converted/domino3.wav"
+	SeDomino4      = "tmps/converted/domino4.wav"
+	SeDomino5      = "tmps/converted/domino5.wav"
+	SeDomino6      = "tmps/converted/domino6.wav"
+	SePop1         = "tmps/converted/pop/244652__greenvwbeetle__pop-4.ogg"
+	SePop2         = "tmps/converted/pop/260614__kwahmah_02__pop.ogg"
+	SePop3         = "tmps/converted/pop/463393__vilkas_sound__vs-pop_7.ogg"
+	SeNewCut       = "tmps/converted/new-cut.wav"
+	SeNewCut2      = "tmps/converted/new-cut2.wav"
 )
 
 var SoundSrcs = []string{
@@ -45,4 +69,28 @@ var SoundSrcs = []string{
 	"tmps/converted/wobble.wav",
 	"tmps/converted/wobble2.wav",
 	"tmps/converted/wobble3.wav",
+	"tmps/converted/note_sounds/note-sounds-c.wav",
+	"tmps/converted/note_sounds/note-sounds-d.wav",
+	"tmps/converted/note_sounds/note-sounds-e.wav",
+	"tmps/converted/note_sounds/note-sounds-f.wav",
+	"tmps/converted/note_sounds/note-sounds-g.wav",
+	"tmps/converted/note_sounds/note-sounds-a.wav",
+	"tmps/converted/note_sounds/note-sounds-b.wav",
+	"tmps/converted/note_sounds/note-sounds-c-2.wav",
+	"tmps/converted/note_sounds/big-hit.wav",
+	"tmps/converted/note_sounds/big-hit2.wav",
+	"tmps/converted/note_sounds/big-hit3.wav",
+	"tmps/converted/tile-sound.wav",
+	"tmps/converted/tile-sound2.wav",
+	"tmps/converted/domino.wav",
+	"tmps/converted/domino2.wav",
+	"tmps/converted/domino3.wav",
+	"tmps/converted/domino4.wav",
+	"tmps/converted/domino5.wav",
+	"tmps/converted/domino6.wav",
+	"tmps/converted/pop/244652__greenvwbeetle__pop-4.ogg",
+	"tmps/converted/pop/260614__kwahmah_02__pop.ogg",
+	"tmps/converted/pop/463393__vilkas_sound__vs-pop_7.ogg",
+	"tmps/converted/new-cut.wav",
+	"tmps/converted/new-cut2.wav",
 }

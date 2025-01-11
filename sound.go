@@ -146,8 +146,9 @@ func PlaySoundBytes(audioName string, volume float64) {
 
 	for _, player := range sm.tmpPlayers[audioName] {
 		if !player.IsPlaying() {
-			player.SetVolume(volume)
+			player.Pause()
 			player.SetPosition(0)
+			player.SetVolume(volume)
 			player.Play()
 			return
 		}

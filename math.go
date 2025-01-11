@@ -1,10 +1,13 @@
 package main
 
 import (
+	crand "crypto/rand"
+	"fmt"
 	"golang.org/x/exp/constraints"
 	"image"
 	"math"
 	"math/rand/v2"
+	"strings"
 
 	eb "github.com/hajimehoshi/ebiten/v2"
 )
@@ -438,6 +441,58 @@ func CloseToEx(a, b, errorMargin float64) bool {
 
 func RandF(minV, maxV float64) float64 {
 	return minV + rand.Float64()*(maxV-minV)
+}
+
+func GetSeed() [32]byte {
+	var seed [32]byte
+	cryptoFailed := false
+
+	seedSlice := seed[:0]
+
+	for len(seedSlice) < cap(seed) {
+		buf := seedSlice[len(seedSlice):cap(seed)]
+		readAmound, err := crand.Reader.Read(buf)
+		seedSlice = seedSlice[:len(seedSlice)+readAmound]
+		if err != nil {
+			cryptoFailed = true
+			WarnLogger.Printf("secure random failed, using arbitrary number")
+			break
+		}
+	}
+
+	// just use arbitrary numbers
+	if cryptoFailed {
+		gt := GlobalTimerNow()
+		mx, my := eb.CursorPosition()
+		whSum := math.Float64bits(ScreenWidth + ScreenHeight)
+
+		offset := 0
+
+		assignToSeed := func(n uint64) {
+			for i := range 8 {
+				seed[i+offset] = byte(n & 0xff)
+				n = n >> 8
+			}
+			offset += 8
+		}
+
+		assignToSeed(uint64(gt))
+		assignToSeed(uint64(mx))
+		assignToSeed(uint64(my))
+		assignToSeed(uint64(whSum))
+	}
+
+	return seed
+}
+
+func SeedToString(seed [32]byte) string {
+	sb := strings.Builder{}
+
+	for i := range 32 {
+		sb.WriteString(fmt.Sprintf("%x", seed[i]))
+	}
+
+	return sb.String()
 }
 
 // ========================

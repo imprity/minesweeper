@@ -26,6 +26,7 @@ func SetRedraw() {
 }
 
 var ErrLogger *log.Logger = log.New(os.Stderr, "ERROR: ", log.Lshortfile)
+var WarnLogger *log.Logger = log.New(os.Stderr, "WARN: ", log.Lshortfile)
 var InfoLogger *log.Logger = log.New(os.Stdout, "INFO: ", log.Lshortfile)
 
 var FlagHotReload bool
