@@ -1877,6 +1877,9 @@ func NewFgClickModifier() StyleModifier {
 func (g *Game) QueueRevealAnimation(revealsBefore, revealsAfter Array2D[bool], originX, originY int) {
 	iter := NewBoardIterator(0, 0, g.board.Width-1, g.board.Height-1)
 
+	// =======================
+	// collect general info
+	// =======================
 	distSquaredMax := 0
 	tileDistMax := 0
 	revealedTileCount := 0
@@ -1897,9 +1900,11 @@ func (g *Game) QueueRevealAnimation(revealsBefore, revealsAfter Array2D[bool], o
 		}
 	}
 
+	// ======================================
+	// queue animation for revealed tiles
+	// ======================================
 	fw, fh := f64(g.board.Width-1), f64(g.board.Height-1)
-
-	maxDist := math.Sqrt(fw*fw + fh*fh)
+	distMax := math.Sqrt(fw*fw + fh*fh)
 
 	const maxDuration = time.Millisecond * 900
 	const minDuration = time.Millisecond * 20
@@ -1938,7 +1943,7 @@ func (g *Game) QueueRevealAnimation(revealsBefore, revealsAfter Array2D[bool], o
 
 		dist := math.Sqrt(f64(distSquared))
 
-		duration := time.Duration(f64(maxDuration) * (dist / maxDist))
+		duration := time.Duration(f64(maxDuration) * (dist / distMax))
 
 		var timer Timer
 
@@ -2005,6 +2010,10 @@ func (g *Game) QueueRevealAnimation(revealsBefore, revealsAfter Array2D[bool], o
 		g.TileAnimations.Get(x, y).Enqueue(anim)
 	}
 
+	// =========================================
+	// play tile reveal sound effect repeatedly
+	// until animation ends
+	//=========================================
 	if revealedTileCount >= 3 {
 		var gameAnim CallbackAnimation
 		gameAnim.Tag = AnimationTagTileReveal
@@ -2129,13 +2138,29 @@ func (g *Game) QueueRemoveFlagAnimation(flagX, flagY int) {
 }
 
 func (g *Game) QueueDefeatAnimation(originX, originY int) {
+	// =================================
+	// remove wrongly placed flags
+	// =================================
+	iter := NewBoardIterator(0, 0, g.board.Width-1, g.board.Height-1)
+
+	iter.Reset()
+	for iter.HasNext() {
+		x, y := iter.GetNext()
+		if g.board.Flags.Get(x, y) && !g.board.Mines.Get(x, y) {
+			g.QueueRemoveFlagAnimation(x, y)
+		}
+	}
+
+	// =================================
+	// collect mine positions
+	// =================================
 	var minePoses []image.Point
 
-	for x := range g.board.Width {
-		for y := range g.board.Height {
-			if g.board.Mines.Get(x, y) && !g.board.Flags.Get(x, y) {
-				minePoses = append(minePoses, image.Point{X: x, Y: y})
-			}
+	iter.Reset()
+	for iter.HasNext() {
+		x, y := iter.GetNext()
+		if g.board.Mines.Get(x, y) && !g.board.Flags.Get(x, y) {
+			minePoses = append(minePoses, image.Point{X: x, Y: y})
 		}
 	}
 
@@ -2143,90 +2168,97 @@ func (g *Game) QueueDefeatAnimation(originX, originY int) {
 		return
 	}
 
-	distFromOriginSquared := func(pos image.Point) int {
-		return (pos.X-originX)*(pos.X-originX) + (pos.Y-originY)*(pos.Y-originY)
+	// =================================
+	// queue animation where mines are
+	// =================================
+	getDist := func(pos image.Point) int {
+		diffX := originX - pos.X
+		diffY := originY - pos.Y
+		return diffX*diffX + diffY*diffY
 	}
 
 	slices.SortFunc(minePoses, func(a, b image.Point) int {
-		distA := distFromOriginSquared(a)
-		distB := distFromOriginSquared(b)
+		distA := getDist(a)
+		distB := getDist(b)
 
 		return distA - distB
 	})
 
 	var defeatDuration time.Duration
+
 	var offset time.Duration
+	const offsetInterval time.Duration = -time.Millisecond * 100
 
-	firstPos := minePoses[0]
-	recordDist := distFromOriginSquared(firstPos)
+	var useLongerOffset bool = true
 
-	notes := []string{
-		SeNoteC2,
-		SeNoteB,
-		SeNoteA,
-		SeNoteG,
-		SeNoteF,
-		SeNoteE,
-		SeNoteD,
-		SeNoteC,
-	}
-	_ = notes
-	noteCounter := 0
+	for i := 0; i < len(minePoses); i++ {
+		dist := getDist(minePoses[i])
+		playSound := true
 
-	for _, p := range minePoses {
-		var timer Timer
+		for ; i < len(minePoses); i++ {
+			p := minePoses[i]
+			otherDist := getDist(p)
 
-		timer.Duration = time.Millisecond * 150
-
-		dist := distFromOriginSquared(p)
-		if dist > recordDist {
-			recordDist = dist
-			offset -= time.Millisecond * 100
-		}
-		timer.Current = offset
-
-		// calculate defeatDuration
-		defeatDuration = max(defeatDuration, timer.Duration-timer.Current)
-
-		// add new animation
-		var anim CallbackAnimation
-		anim.Tag = AnimationTagDefeat
-
-		playedSound := false
-
-		anim.Update = func() {
-			style := g.BaseTileStyles.Get(p.X, p.Y)
-
-			if timer.Current > 0 && !playedSound {
-				playedSound = true
-				//g.BombSoundPlayers.Play()
-				//PlaySoundBytes(notes[rand.Int() % len(notes)], 1)
-				PlaySoundBytes(SePop2, 0.3)
-				noteCounter++
+			if otherDist > dist {
+				if useLongerOffset {
+					useLongerOffset = false
+					offset += offsetInterval * 16 / 6
+				} else {
+					offset += offsetInterval
+				}
+				i -= 1
+				break
 			}
 
-			timer.TickUp()
-			style.BgBombAnim = timer.Normalize()
+			var timer Timer
+			timer.Duration = time.Millisecond * 150
+			timer.Current = offset
 
-			g.BaseTileStyles.Set(p.X, p.Y, style)
+			// update defeatDuration
+			defeatDuration = max(defeatDuration, timer.Duration-timer.Current)
+
+			// add new animation
+			var anim CallbackAnimation
+			anim.Tag = AnimationTagDefeat
+
+			playSoundCopy := playSound // needed for closure
+			playSound = false
+
+			anim.Update = func() {
+				style := g.BaseTileStyles.Get(p.X, p.Y)
+
+				if timer.Current > 0 && playSoundCopy {
+					playSoundCopy = false
+					PlaySoundBytes(SePop2, 0.3)
+				}
+
+				timer.TickUp()
+				style.BgBombAnim = timer.Normalize()
+
+				g.BaseTileStyles.Set(p.X, p.Y, style)
+			}
+
+			anim.Skip = func() {
+				timer.Current = timer.Duration
+				playSoundCopy = false
+				anim.Update()
+			}
+
+			anim.Done = func() bool {
+				return timer.Current >= timer.Duration
+			}
+
+			anim.AfterDone = func() {
+			}
+
+			g.TileAnimations.Get(p.X, p.Y).Enqueue(anim)
 		}
-
-		anim.Skip = func() {
-			timer.Current = timer.Duration
-			playedSound = true
-			anim.Update()
-		}
-
-		anim.Done = func() bool {
-			return timer.Current >= timer.Duration
-		}
-
-		anim.AfterDone = func() {
-		}
-
-		g.TileAnimations.Get(p.X, p.Y).Enqueue(anim)
 	}
 
+	// =================================
+	// after the defeat animaiton
+	// queue retry button show animation
+	// =================================
 	defeatDuration += time.Millisecond * 10
 
 	var defeatAnimTimer Timer

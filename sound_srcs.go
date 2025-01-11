@@ -47,6 +47,9 @@ const (
 	SePop3         = "tmps/converted/pop/463393__vilkas_sound__vs-pop_7.ogg"
 	SeNewCut       = "tmps/converted/new-cut.wav"
 	SeNewCut2      = "tmps/converted/new-cut2.wav"
+	SeDefeat       = "tmps/converted/defeat.wav"
+	SeDefeat2      = "tmps/converted/defeat2.wav"
+	SeDefeat3      = "tmps/converted/476177__unadamlar__wrong-choice.ogg"
 )
 
 var SoundSrcs = []string{
@@ -93,4 +96,7 @@ var SoundSrcs = []string{
 	"tmps/converted/pop/463393__vilkas_sound__vs-pop_7.ogg",
 	"tmps/converted/new-cut.wav",
 	"tmps/converted/new-cut2.wav",
+	"tmps/converted/defeat.wav",
+	"tmps/converted/defeat2.wav",
+	"tmps/converted/476177__unadamlar__wrong-choice.ogg",
 }
