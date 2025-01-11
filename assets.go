@@ -16,7 +16,6 @@ import (
 )
 
 //go:embed dejavu-fonts-ttf-2.37/ttf/DejaVuSansMono.ttf
-//go:embed tmps/converted
 //go:embed assets
 var EmbeddedAssets embed.FS
 
@@ -307,13 +306,27 @@ func LoadAssets() {
 
 	// load audios
 	audioErrors := make(map[string]<-chan error)
+
 	for _, src := range SoundSrcs {
-		file := mustLoadData(src)
+		var file []byte
+		var err error
+
+		if FlagHotReload {
+			file, err = os.ReadFile(filepath.Join(hotReloadPath, src))
+		} else {
+			file, err = fs.ReadFile(EmbeddedSounds, src)
+		}
+
+		if err != nil {
+			ErrLogger.Fatalf("failed to load %s: %v", src, err)
+		}
 		audioErrors[src] = RegisterAudio(src, file, filepath.Ext(src))
 	}
 
 	for _, errChan := range audioErrors {
-		<-errChan
+		if err := <-errChan; err != nil {
+			ErrLogger.Fatalf("failed to register audio: %v", err)
+		}
 	}
 }
 

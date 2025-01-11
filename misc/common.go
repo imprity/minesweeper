@@ -73,3 +73,37 @@ func CopyFile(src, dst string, perm os.FileMode) error {
 
 	return nil
 }
+
+// permission is set to 0755
+func MkDir(path string) error {
+	path = filepath.Clean(path)
+
+	InfoLogger.Printf("creating %s folder", path)
+
+	if err := os.MkdirAll(path, 0755); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func IsSamePath(pathA, pathB string) (bool, error) {
+	absPathA, err := filepath.Abs(pathA)
+	if err != nil {
+		return false, err
+	}
+	absPathB, err := filepath.Abs(pathB)
+	if err != nil {
+		return false, err
+	}
+
+	return absPathA == absPathB, nil
+}
+
+func IsDir(path string) (bool, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return false, err
+	}
+	return info.IsDir(), nil
+}

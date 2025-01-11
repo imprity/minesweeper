@@ -5,7 +5,9 @@ package main
 import (
 	"bytes"
 	"go/format"
+	"minesweeper/misc"
 	"os"
+	"slices"
 	"strings"
 	"text/template"
 	"unicode"
@@ -17,6 +19,15 @@ var TemplateTxt string = `
 
 package main
 
+import (
+	"embed"
+)
+
+{{- range $_, $path := .Paths}}
+//go:embed "{{$path}}"
+{{- end}}
+var EmbeddedSounds embed.FS
+
 const (
 {{- range .NameAndPaths}}
 	{{.Name}} = "{{.Path}}"
@@ -24,30 +35,135 @@ const (
 )
 
 var SoundSrcs = []string {
-{{- range .NameAndPaths}}
-	"{{.Path}}",
+{{- range $_, $path := .Paths}}
+	"{{$path}}",
 {{- end}}
 }
 `
 
+type NameAndPath struct {
+	Name string
+	Path string
+}
+
 func main() {
-	srcBytes, err := os.ReadFile("sound_srcs.txt")
+	const soundSrcsTxt = "sound_srcs.txt"
+	const soundSrcsLocalTxt = "sound_srcs_local.txt"
+
+	// ================================
+	// check if src files exist
+	// ================================
+	soundSrcsTxtExists, err := misc.CheckFileExists(soundSrcsTxt)
 	if err != nil {
-		panic(err)
+		misc.ErrLogger.Fatal(err)
+	}
+
+	soundSrcsLocalTxtExists, err := misc.CheckFileExists(soundSrcsLocalTxt)
+	if err != nil {
+		misc.ErrLogger.Fatal(err)
+	}
+
+	if !soundSrcsTxtExists && !soundSrcsLocalTxtExists {
+		misc.ErrLogger.Fatalf("needs file %s or %s", soundSrcsTxt, soundSrcsLocalTxt)
+	}
+
+	// ================================
+	// gather nameAndPaths
+	// ================================
+	var nameAndPaths []NameAndPath
+
+	if soundSrcsTxtExists {
+		arr, err := ParseSoundSrcText(soundSrcsTxt)
+		if err != nil {
+			misc.ErrLogger.Fatalf("failed to parse %s: %v", soundSrcsTxt, err)
+		}
+		nameAndPaths = append(nameAndPaths, arr...)
+	}
+
+	if soundSrcsLocalTxtExists {
+		arr, err := ParseSoundSrcText(soundSrcsLocalTxt)
+		if err != nil {
+			misc.ErrLogger.Fatalf("failed to parse %s: %v", soundSrcsLocalTxt, err)
+		}
+
+		for _, newNameAndPath := range arr {
+			doAppend := true
+
+			for i, nameAndPath := range nameAndPaths {
+				if nameAndPath.Name == newNameAndPath.Name {
+					nameAndPaths[i] = newNameAndPath
+					doAppend = false
+				}
+			}
+
+			if doAppend {
+				nameAndPaths = append(nameAndPaths, newNameAndPath)
+			}
+		}
+	}
+
+	var paths []string
+	{
+		pathMap := make(map[string]bool)
+
+		for _, nameAndPath := range nameAndPaths {
+			pathMap[nameAndPath.Path] = true
+		}
+
+		for path := range pathMap {
+			paths = append(paths, path)
+		}
+
+		slices.SortFunc(paths, func(a, b string) int {
+			return strings.Compare(a, b)
+		})
+	}
+
+	// ================================
+	// generate sound_srcs.go
+	// ================================
+	buff := &bytes.Buffer{}
+
+	tmpl, err := template.New("sound_src_template").Parse(TemplateTxt)
+	if err != nil {
+		misc.ErrLogger.Fatal(err)
+	}
+
+	err = tmpl.Execute(buff, struct {
+		NameAndPaths []NameAndPath
+		Paths        []string
+	}{
+		NameAndPaths: nameAndPaths,
+		Paths:        paths,
+	})
+	if err != nil {
+		misc.ErrLogger.Fatal(err)
+	}
+	formatted, err := format.Source(buff.Bytes())
+	if err != nil {
+		misc.ErrLogger.Fatal(err)
+	}
+
+	os.WriteFile("sound_srcs.go", formatted, 0664)
+}
+
+func ParseSoundSrcText(path string) ([]NameAndPath, error) {
+	srcBytes, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
 	}
 	srcTxt := string(srcBytes)
 	srcTxt = strings.ReplaceAll(srcTxt, "\r\n", "\n")
 
-	type nameAndPath struct {
-		Name string
-		Path string
-	}
-
-	var nameAndPaths []nameAndPath
+	var nameAndPaths []NameAndPath
 
 	lines := strings.Split(srcTxt, "\n")
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
+
+		if strings.HasPrefix(line, "//") {
+			continue
+		}
 
 		var name string
 
@@ -67,31 +183,12 @@ func main() {
 		path = strings.ReplaceAll(path, "\\", "/")
 
 		if len(name) > 0 && len(path) > 0 {
-			nameAndPaths = append(nameAndPaths, nameAndPath{
+			nameAndPaths = append(nameAndPaths, NameAndPath{
 				Name: name,
 				Path: path,
 			})
 		}
 	}
 
-	buff := &bytes.Buffer{}
-
-	tmpl, err := template.New("sound_src_template").Parse(TemplateTxt)
-	if err != nil {
-		panic(err)
-	}
-	err = tmpl.Execute(buff, struct {
-		NameAndPaths []nameAndPath
-	}{
-		NameAndPaths: nameAndPaths,
-	})
-	if err != nil {
-		panic(err)
-	}
-	formatted, err := format.Source(buff.Bytes())
-	if err != nil {
-		panic(err)
-	}
-
-	os.WriteFile("sound_srcs.go", formatted, 0664)
+	return nameAndPaths, nil
 }

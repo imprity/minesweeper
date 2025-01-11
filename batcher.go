@@ -14,7 +14,6 @@ package main
 
 import (
 	"bytes"
-	"errors"
 	"flag"
 	"fmt"
 	"io/fs"
@@ -31,12 +30,28 @@ var (
 )
 
 func init() {
+	flag.Usage = func() {
+		out := flag.CommandLine.Output()
+		scriptName := misc.GetScriptName()
+
+		fmt.Fprintf(out, "Usage of %s:\n", scriptName)
+		fmt.Fprintf(out, "\n")
+		fmt.Fprintf(out, "go run %s -s ./audio/input/directory/ -d ./output/directory/\n", scriptName)
+		fmt.Fprintf(out, "\n")
+		fmt.Fprintf(out, "requires ffmpeg\n")
+		fmt.Fprintf(out, "\n")
+		flag.PrintDefaults()
+	}
+
 	flag.StringVar(&SrcDir, "s", "", "source folder")
 	flag.StringVar(&DstDir, "d", "", "destination folder")
 }
 
 func main() {
-	// TODO: check if ffmpeg exists
+	if !misc.CheckExeExists("ffmpeg") {
+		misc.ErrLogger.Fatal("couldn't find ffmpeg")
+	}
+
 	flag.Parse()
 
 	// =========================
@@ -45,23 +60,21 @@ func main() {
 	if len(SrcDir) <= 0 {
 		misc.ErrLogger.Print("no source folder provided")
 		flag.Usage()
-		CrashOnError(ErrorDefault)
+		os.Exit(1)
 	}
 	if len(DstDir) <= 0 {
 		misc.ErrLogger.Print("no destination folder provided")
 		flag.Usage()
-		CrashOnError(ErrorDefault)
+		os.Exit(1)
 	}
 
 	// =============================
 	// check if SrcDir is folder
 	// =============================
-	if isDir, err := IsDir(SrcDir); err != nil {
-		misc.ErrLogger.Printf("failed to check if \"%s\" a folder: %v", SrcDir, err)
-		CrashOnError(SimpleErrorFromError(err))
+	if isDir, err := misc.IsDir(SrcDir); err != nil {
+		misc.ErrLogger.Fatalf("failed to check if \"%s\" a folder: %v", SrcDir, err)
 	} else if !isDir {
-		misc.ErrLogger.Printf("\"%s\" is not a folder", SrcDir)
-		CrashOnError(ErrorDefault)
+		misc.ErrLogger.Fatalf("\"%s\" is not a folder", SrcDir)
 	}
 
 	// =============================
@@ -80,9 +93,8 @@ func main() {
 			}
 
 			if !skippedRoot {
-				if isSame, err := IsSamePath(path, SrcDir); err != nil {
-					misc.ErrLogger.Printf("failed to check if path is source folder: %v", err)
-					CrashOnError(SimpleErrorFromError(err))
+				if isSame, err := misc.IsSamePath(path, SrcDir); err != nil {
+					misc.ErrLogger.Fatalf("failed to check if path is source folder: %v", err)
 				} else if isSame {
 					skippedRoot = true
 					return nil
@@ -134,16 +146,14 @@ func main() {
 	// ======================================
 	for i, dirent := range dirents {
 		if rel, err := filepath.Rel(SrcDir, dirent); err != nil {
-			misc.ErrLogger.Printf("failed to make path local: %v", err)
-			CrashOnError(SimpleErrorFromError(err))
+			misc.ErrLogger.Fatalf("failed to make path local: %v", err)
 		} else {
 			dstDirents[i] = filepath.Join(DstDir, rel)
 		}
 	}
 	for i, file := range audioFiles {
 		if rel, err := filepath.Rel(SrcDir, file); err != nil {
-			misc.ErrLogger.Printf("failed to make path local: %v", err)
-			CrashOnError(SimpleErrorFromError(err))
+			misc.ErrLogger.Fatalf("failed to make path local: %v", err)
 		} else {
 			dstAudioFiles[i] = filepath.Join(DstDir, rel)
 		}
@@ -152,9 +162,12 @@ func main() {
 	// ======================================
 	// create folder structure
 	// ======================================
+	if err := misc.MkDir(DstDir); err != nil {
+		misc.ErrLogger.Fatalf("failed to create directory: %v", err)
+	}
 	for _, dirent := range dstDirents {
-		if err := MkDir(dirent); err.IsFail {
-			CrashOnError(err)
+		if err := misc.MkDir(dirent); err != nil {
+			misc.ErrLogger.Fatalf("failed to create directory: %v", err)
 		}
 	}
 
@@ -206,72 +219,4 @@ func main() {
 			os.Stdout.Write(stderrs[i].Bytes())
 		}
 	}
-}
-
-type SimpleError struct {
-	IsFail   bool
-	ExitCode int
-}
-
-var ErrorDefault = SimpleError{
-	IsFail:   true,
-	ExitCode: 69,
-}
-
-var ErrorOk = SimpleError{
-	IsFail: false,
-}
-
-func SimpleErrorFromError(err error) SimpleError {
-	if err == nil {
-		return SimpleError{}
-	}
-	var exitErr *exec.ExitError
-	if ok := errors.As(err, &exitErr); ok {
-		return SimpleError{
-			IsFail:   true,
-			ExitCode: exitErr.ExitCode(),
-		}
-	} else {
-		return ErrorDefault
-	}
-}
-
-func CrashOnError(err SimpleError) {
-	os.Exit(err.ExitCode)
-}
-
-func IsDir(path string) (bool, error) {
-	info, err := os.Stat(path)
-	if err != nil {
-		return false, err
-	}
-	return info.IsDir(), nil
-}
-
-func IsSamePath(pathA, pathB string) (bool, error) {
-	absPathA, err := filepath.Abs(pathA)
-	if err != nil {
-		return false, err
-	}
-	absPathB, err := filepath.Abs(pathB)
-	if err != nil {
-		return false, err
-	}
-
-	return absPathA == absPathB, nil
-}
-
-// permission is set to 0755
-func MkDir(path string) SimpleError {
-	path = filepath.Clean(path)
-
-	misc.InfoLogger.Printf("creating %s folder", path)
-
-	if err := os.MkdirAll(path, 0755); err != nil {
-		misc.ErrLogger.Printf("failed to create \"%s\" folder : %v", path, err)
-		return SimpleErrorFromError(err)
-	}
-
-	return SimpleError{}
 }

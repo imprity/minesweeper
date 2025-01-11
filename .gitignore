@@ -10,3 +10,6 @@ web_build/minesweeper.wasm.bak
 tmps/
 
 build-settings.txt
+
+sound_srcs_local.txt
+sound_srcs.go

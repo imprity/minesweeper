@@ -300,50 +300,6 @@ type StyleModifier func(
 	tileStyles Array2D[TileStyle], // modify these to change style
 ) bool
 
-type PlayerPool struct {
-	pool   []*Player
-	cursor int
-	volume float64
-}
-
-func NewPlayerPool(size int, audioName string) PlayerPool {
-	pool := PlayerPool{}
-	pool.pool = make([]*Player, size)
-
-	for i := 0; i < len(pool.pool); i++ {
-		pool.pool[i] = NewPlayer(audioName)
-	}
-
-	pool.volume = 1
-
-	return pool
-}
-
-func (p *PlayerPool) SetVolume(volume float64) {
-	volume = Clamp(volume, 0, 1)
-	p.volume = volume
-	for _, p := range p.pool {
-		p.SetVolume(volume)
-	}
-}
-
-func (p *PlayerPool) Volume() float64 {
-	return p.volume
-}
-
-func (p *PlayerPool) Play() {
-	if !IsSoundReady() {
-		return
-	}
-
-	p.pool[p.cursor].SetPosition(0)
-	p.pool[p.cursor].Play()
-	p.cursor++
-	if p.cursor >= len(p.pool) {
-		p.cursor = 0
-	}
-}
-
 type Game struct {
 	Rect FRectangle
 
@@ -377,9 +333,6 @@ type Game struct {
 	WaterRenderTarget *eb.Image
 
 	Particles []TileParticle
-
-	TileRevealSoundPlayers PlayerPool
-	BombSoundPlayers       PlayerPool
 
 	Seed [32]byte
 
@@ -428,11 +381,6 @@ func NewGame(boardWidth, boardHeight, mineCount int) *Game {
 	g.GameAnimations = NewCircularQueue[CallbackAnimation](10)
 
 	g.Particles = make([]TileParticle, 0, 256)
-
-	g.TileRevealSoundPlayers = NewPlayerPool(20, SeNewCut)
-	g.TileRevealSoundPlayers.SetVolume(0.6)
-	g.BombSoundPlayers = NewPlayerPool(5, SeUnlinkSummer)
-	g.BombSoundPlayers.SetVolume(0.3)
 
 	g.ResetBoard(boardWidth, boardHeight, g.mineCount)
 
