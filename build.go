@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"minesweeper/misc"
@@ -155,11 +156,26 @@ func main() {
 		fmt.Printf("\n")
 	}
 
-	if settings["tsc"] {
-		err, errcode := BuildTsc()
-		if err != nil {
-			misc.ErrLogger.Printf("failed to build for typescript module: %v", err)
-			os.Exit(errcode)
+	// build tsc
+	{
+		tscTargets := []string{
+			"./web_build/sound.js",
+		}
+		tscSources := []string{
+			"./sound/sound.ts",
+			"./sound/internalplayer.ts",
+
+			"./sound/package-lock.json",
+			"./sound/package.json",
+			"./sound/tsconfig.json",
+		}
+
+		if settings["tsc"] && NeedToBuild(tscTargets, tscSources) {
+			err, errcode := BuildTsc()
+			if err != nil {
+				misc.ErrLogger.Printf("failed to build for typescript module: %v", err)
+				os.Exit(errcode)
+			}
 		}
 	}
 
@@ -293,6 +309,48 @@ func LoadSettings(path string) (map[string]bool, error) {
 }
 
 func BuildApp(settings map[string]bool, buildWeb bool) (error, int) {
+	// generate sound_srcs.go
+	{
+		var targets = []string{
+			"sound_srcs.go",
+		}
+
+		var srcs = []string{
+			"sound_srcs_gen.go",
+		}
+
+		const soundSrcsTxt = "sound_srcs.txt"
+		const soundSrcsLocalTxt = "sound_srcs_local.txt"
+
+		if exists, err := misc.CheckFileExists(soundSrcsTxt); err != nil {
+			return err, 1
+		} else if exists {
+			srcs = append(srcs, soundSrcsTxt)
+		}
+		if exists, err := misc.CheckFileExists(soundSrcsLocalTxt); err != nil {
+			return err, 1
+		} else if exists {
+			srcs = append(srcs, soundSrcsLocalTxt)
+		}
+
+		if NeedToBuild(targets, srcs) {
+			cmd := exec.Command(
+				"go", "run", "sound_srcs_gen.go",
+			)
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			misc.InfoLogger.Printf("%s", cmd.String())
+
+			fmt.Printf("\n")
+			err := cmd.Run()
+			fmt.Printf("\n")
+
+			if err != nil {
+				return err, err.(*exec.ExitError).ExitCode()
+			}
+		}
+	}
+
 	tags := ""
 
 	if settings["always-draw"] {
@@ -461,4 +519,54 @@ func BuildTsc() (error, int) {
 	}
 
 	return nil, 0
+}
+
+func NeedToBuild(targets []string, srcs []string) bool {
+	// if any of the targets don't exist,
+	// we definitely need to build it
+	for _, target := range targets {
+		if exists, err := misc.CheckFileExists(target); err != nil {
+			misc.ErrLogger.Fatalf("failed to check if %s exists: %v", target, err)
+		} else if !exists {
+			return true
+		}
+	}
+
+	var srcNewest time.Time
+	var targetOldest time.Time
+
+	var srcNewestSet bool = false
+	var targetOldestSet bool = false
+
+	for _, src := range srcs {
+		info, err := os.Stat(src)
+		if err != nil {
+			misc.ErrLogger.Fatalf("failed to check mod time of %s: %v", src, err)
+		}
+		modTime := info.ModTime()
+
+		if !srcNewestSet {
+			srcNewest = modTime
+			srcNewestSet = true
+		} else if srcNewest.Compare(modTime) < 0 {
+			srcNewest = modTime
+		}
+	}
+
+	for _, target := range targets {
+		info, err := os.Stat(target)
+		if err != nil {
+			misc.ErrLogger.Fatalf("failed to check mod time of %s: %v", target, err)
+		}
+		modTime := info.ModTime()
+
+		if !targetOldestSet {
+			targetOldest = modTime
+			targetOldestSet = true
+		} else if targetOldest.Compare(modTime) > 0 {
+			targetOldest = modTime
+		}
+	}
+
+	return srcNewest.Compare(targetOldest) > 0
 }
