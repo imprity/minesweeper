@@ -187,12 +187,9 @@ func main() {
 		cmd := exec.Command(
 			"ffmpeg",
 			"-i", file, // input file
-			"-vn",          // no video
-			"-ar", "44100", // 44100 hz
+			"-vn",      // no video
 			"-ac", "2", // 2 audio channel
-			//"-q:a", "2", // auto bitrate
-			"-b", "192",
-			"-q", "10",
+			"-q:a", "5", // variable bitrate quality 5
 			dstFile,
 		)
 

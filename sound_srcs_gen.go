@@ -4,11 +4,16 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"go/format"
+	"io"
 	"minesweeper/misc"
 	"os"
+	"os/exec"
 	"slices"
+	"strconv"
 	"strings"
+	"sync"
 	"text/template"
 	"unicode"
 )
@@ -20,13 +25,40 @@ var TemplateTxt string = `
 package main
 
 import (
-	"embed"
+	_ "embed"
 )
 
-{{- range $_, $path := .Paths}}
-//go:embed "{{$path}}"
+// ===========================================================
+// Sound files are embedded in EmbeddedSoundsData
+// as a binary blob.
+//
+// And you can access them using EmbeddedSounds.
+//
+// It was done in this way instead of using embed package
+// because I needed to embed audio files in absolute paths
+// for prototyping. And that isn't allowed in embed package.
+// ===========================================================
+
+//go:embed sound_srcs_bin
+var EmbeddedSoundsData []byte
+
+type EmbeddedSound struct {
+	Offset int
+	Len int
+
+	ConvertedToVorbisWithFfmpeg bool
+}
+
+var EmbeddedSounds = map[string]EmbeddedSound {
+{{- range $path, $embeddedSound := .EmbeddedSounds}}
+	{{quote $path}} : {
+		Offset : {{$embeddedSound.Offset}},
+		Len : {{$embeddedSound.Len}},
+
+		ConvertedToVorbisWithFfmpeg : {{$embeddedSound.ConvertedToVorbisWithFfmpeg}},
+	},
 {{- end}}
-var EmbeddedSounds embed.FS
+}
 
 const (
 {{- range .NameAndPaths}}
@@ -44,6 +76,13 @@ var SoundSrcs = []string {
 type NameAndPath struct {
 	Name string
 	Path string
+}
+
+type EmbeddedSound struct {
+	Offset int
+	Len    int
+
+	ConvertedToVorbisWithFfmpeg bool
 }
 
 func main() {
@@ -119,22 +158,42 @@ func main() {
 		})
 	}
 
+	const binOutput = "sound_srcs_bin"
+	var embeddedSounds map[string]EmbeddedSound
+
+	if misc.CheckExeExists("ffmpeg") {
+		misc.InfoLogger.Print("using ffmpeg to converting audio to vorbis ogg")
+		embeddedSounds, err = GenerateEmbeddedSoundsUseFfmpeg(paths, binOutput)
+	} else {
+		misc.WarnLogger.Print("couldn't find ffmpeg, embedding audio directly without converting to vorbis ogg")
+		embeddedSounds, err = GenerateEmbeddedSounds(paths, binOutput)
+	}
+
+	if err != nil {
+		misc.ErrLogger.Fatalf("faile to generate %s: %v", binOutput, err)
+	}
+
 	// ================================
 	// generate sound_srcs.go
 	// ================================
 	buff := &bytes.Buffer{}
 
-	tmpl, err := template.New("sound_src_template").Parse(TemplateTxt)
+	//tmpl, err := template.New("sound_src_template").Parse(TemplateTxt)
+	tmpl := template.New("sound_src_template")
+	tmpl.Funcs(map[string]any{"quote": strconv.Quote})
+	tmpl, err = tmpl.Parse(TemplateTxt)
 	if err != nil {
 		misc.ErrLogger.Fatal(err)
 	}
 
 	err = tmpl.Execute(buff, struct {
-		NameAndPaths []NameAndPath
-		Paths        []string
+		NameAndPaths   []NameAndPath
+		Paths          []string
+		EmbeddedSounds map[string]EmbeddedSound
 	}{
-		NameAndPaths: nameAndPaths,
-		Paths:        paths,
+		NameAndPaths:   nameAndPaths,
+		Paths:          paths,
+		EmbeddedSounds: embeddedSounds,
 	})
 	if err != nil {
 		misc.ErrLogger.Fatal(err)
@@ -191,4 +250,169 @@ func ParseSoundSrcText(path string) ([]NameAndPath, error) {
 	}
 
 	return nameAndPaths, nil
+}
+
+func GenerateEmbeddedSounds(
+	paths []string,
+	binOutput string,
+) (map[string]EmbeddedSound, error) {
+	var sumedFile []byte
+	var offset int
+	embeddedSounds := make(map[string]EmbeddedSound)
+
+	for _, path := range paths {
+		file, err := os.ReadFile(path)
+		if err != nil {
+			return nil, err
+		}
+
+		embeddedSound := EmbeddedSound{
+			Offset: offset,
+			Len:    len(file),
+		}
+		offset += len(file)
+		embeddedSounds[path] = embeddedSound
+
+		sumedFile = append(sumedFile, file...)
+	}
+
+	err := os.WriteFile(binOutput, sumedFile, 0644)
+	if err != nil {
+		return nil, err
+	}
+
+	return embeddedSounds, nil
+}
+
+func GenerateEmbeddedSoundsUseFfmpeg(
+	paths []string,
+	binOutput string,
+) (map[string]EmbeddedSound, error) {
+	type ffmpegThread struct {
+		Path           string
+		ConvertedAudio []byte
+
+		// error when running the command
+		// ExitCode maybe zero even when Error is not nil,
+		// that means we couldn't even run the command
+		Error error
+
+		ExitCode int
+		Stderr   []byte
+	}
+
+	var wg sync.WaitGroup
+	threads := make([]ffmpegThread, len(paths))
+
+	for i, path := range paths {
+		wg.Add(1)
+
+		go func() {
+			thread := ffmpegThread{}
+
+			defer func() {
+				thread.Path = path
+				threads[i] = thread
+				wg.Done()
+			}()
+
+			cmd := exec.Command(
+				"ffmpeg",
+				"-i", path, // input file
+				"-f", "ogg", // container format
+				"-c:a", "libvorbis", // vorbis
+				"-vn",      // no video
+				"-ac", "2", // 2 audio channel
+				"-q:a", "5", // variable bitrate quality 5
+				"pipe:1", // use stdout as pipe
+			)
+			misc.InfoLogger.Printf("%s", cmd.String())
+
+			stdout, err := cmd.StdoutPipe()
+			if err != nil {
+				thread.Error = err
+				return
+			}
+			stderr, err := cmd.StderrPipe()
+			if err != nil {
+				thread.Error = err
+				return
+			}
+
+			err = cmd.Start()
+			if err != nil {
+				thread.Error = err
+				return
+			}
+
+			converted, err := io.ReadAll(stdout)
+			if err != nil {
+				thread.Error = err
+				return
+			}
+			stderrCollected, err := io.ReadAll(stderr)
+			if err != nil {
+				thread.Error = err
+				return
+			}
+
+			err = cmd.Wait()
+			if err != nil {
+				// check if it's exit error
+				if exitErr, ok := err.(*exec.ExitError); ok {
+					// something went wrong on ffmpeg side
+					thread.Error = exitErr
+					thread.ExitCode = exitErr.ExitCode()
+					thread.Stderr = stderrCollected
+				} else {
+					// something went wrong on our side
+					thread.Error = err
+				}
+				return
+			}
+			thread.ConvertedAudio = converted
+		}()
+	}
+
+	wg.Wait()
+
+	failed := false
+
+	for _, thread := range threads {
+		if thread.Error != nil {
+			failed = true
+			if len(thread.Stderr) > 0 {
+				fmt.Fprint(os.Stderr, "\n")
+				misc.ErrLogger.Printf("ffmpeg failed to convert %s", thread.Path)
+				os.Stderr.Write(thread.Stderr)
+			}
+		}
+	}
+
+	if failed {
+		return nil, fmt.Errorf("failed to convert audio using ffmpeg")
+	}
+
+	var sumedFile []byte
+	var offset int
+	embeddedSounds := make(map[string]EmbeddedSound)
+
+	for _, thread := range threads {
+		embeddedSound := EmbeddedSound{
+			Offset:                      offset,
+			Len:                         len(thread.ConvertedAudio),
+			ConvertedToVorbisWithFfmpeg: true,
+		}
+		offset += len(thread.ConvertedAudio)
+		embeddedSounds[thread.Path] = embeddedSound
+
+		sumedFile = append(sumedFile, thread.ConvertedAudio...)
+	}
+
+	err := os.WriteFile(binOutput, sumedFile, 0644)
+	if err != nil {
+		return nil, err
+	}
+
+	return embeddedSounds, nil
 }

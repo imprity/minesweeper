@@ -588,7 +588,6 @@ func (g *Game) Update() {
 				g.QueueDefeatAnimation(ms.BoardX, ms.BoardY)
 			} else if g.GameState == GameStateWon { // on win
 				g.QueueWinAnimation(ms.BoardX, ms.BoardY)
-				PlaySoundBytes(SeWobble2, 0.6)
 			}
 		}
 
@@ -2236,6 +2235,7 @@ func (g *Game) QueueDefeatAnimation(originX, originY int) {
 }
 
 func (g *Game) QueueWinAnimation(originX, originY int) {
+	PlaySoundBytes(SeWobble2, 0.6)
 	fw, fh := f64(g.board.Width), f64(g.board.Height)
 
 	originP := FPt(f64(originX), f64(originY))

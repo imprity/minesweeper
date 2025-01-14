@@ -313,6 +313,7 @@ func BuildApp(settings map[string]bool, buildWeb bool) (error, int) {
 	{
 		var targets = []string{
 			"sound_srcs.go",
+			"sound_srcs_bin",
 		}
 
 		var srcs = []string{
