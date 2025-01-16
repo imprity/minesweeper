@@ -1833,6 +1833,14 @@ func (g *Game) QueueRevealAnimation(revealsBefore, revealsAfter Array2D[bool], o
 	tileDistMax := 0
 	revealedTileCount := 0
 
+	var distMin float64 = math.MaxFloat64 // big number
+	var distMax float64
+
+	{
+		fw, fh := f64(g.board.Width-1), f64(g.board.Height-1)
+		distMax = math.Sqrt(fw*fw + fh*fh)
+	}
+
 	iter.Reset()
 	for iter.HasNext() {
 		x, y := iter.GetNext()
@@ -1841,9 +1849,12 @@ func (g *Game) QueueRevealAnimation(revealsBefore, revealsAfter Array2D[bool], o
 
 			distSquared := diffX*diffX + diffY*diffY
 			tileDist := max(diffX, diffY)
+			dist := math.Sqrt(f64(distSquared))
 
 			distSquaredMax = max(distSquaredMax, distSquared)
 			tileDistMax = max(tileDistMax, tileDist)
+
+			distMin = min(distMin, dist)
 
 			revealedTileCount++
 		}
@@ -1852,8 +1863,6 @@ func (g *Game) QueueRevealAnimation(revealsBefore, revealsAfter Array2D[bool], o
 	// ======================================
 	// queue animation for revealed tiles
 	// ======================================
-	fw, fh := f64(g.board.Width-1), f64(g.board.Height-1)
-	distMax := math.Sqrt(fw*fw + fh*fh)
 
 	const maxDuration = time.Millisecond * 900
 	const minDuration = time.Millisecond * 10
@@ -1892,7 +1901,7 @@ func (g *Game) QueueRevealAnimation(revealsBefore, revealsAfter Array2D[bool], o
 
 		dist := math.Sqrt(f64(distSquared))
 
-		duration := time.Duration(f64(maxDuration) * (dist / distMax))
+		duration := time.Duration(f64(maxDuration) * ((dist - distMin) / distMax))
 
 		var timer Timer
 
