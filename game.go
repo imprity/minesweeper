@@ -345,7 +345,8 @@ type Game struct {
 
 	placedMinesOnBoard bool
 
-	noteCounter int
+	playedAddFlagSound    bool
+	playedRemoveFlagSound bool
 
 	viBuffers [3]*VIBuffer
 }
@@ -370,7 +371,7 @@ func NewGame(boardWidth, boardHeight, mineCount int) *Game {
 	g.RetryButton.OnPress = func(justPressed bool) {
 		if justPressed {
 			g.SkipAllAnimationsUntilTag(AnimationTagHideBoard)
-			PlaySoundBytes(SeSwitch38, 0.8)
+			PlaySoundBytes(SeButtonClick3, 1.0)
 			g.RetryButton.Disabled = true
 			g.QueueResetBoardAnimation()
 		}
@@ -432,8 +433,6 @@ func (g *Game) ResetBoardNotStylesEx(width, height, mineCount int, newSeed bool)
 
 	g.Particles = g.Particles[:0]
 
-	g.noteCounter = 0
-
 	if g.OnBoardReset != nil {
 		g.OnBoardReset()
 	}
@@ -460,6 +459,9 @@ func (g *Game) ResetBoard(width, height, mineCount int) {
 }
 
 func (g *Game) Update() {
+	g.playedAddFlagSound = false
+	g.playedRemoveFlagSound = false
+
 	ms := GetMouseState(g.board, g.Rect)
 
 	// =================================
@@ -1854,7 +1856,7 @@ func (g *Game) QueueRevealAnimation(revealsBefore, revealsAfter Array2D[bool], o
 	distMax := math.Sqrt(fw*fw + fh*fh)
 
 	const maxDuration = time.Millisecond * 900
-	const minDuration = time.Millisecond * 20
+	const minDuration = time.Millisecond * 10
 
 	playedFirstSound := false
 	playedLastSound := false
@@ -1866,7 +1868,7 @@ func (g *Game) QueueRevealAnimation(revealsBefore, revealsAfter Array2D[bool], o
 		}
 		now := time.Now()
 		if now.Sub(playedAt) > time.Millisecond*30 {
-			PlaySoundBytes(SeCut, 0.6)
+			PlaySoundBytes(SeCut, 0.8)
 			playedAt = now
 		}
 	}
@@ -1989,6 +1991,11 @@ func (g *Game) QueueRevealAnimation(revealsBefore, revealsAfter Array2D[bool], o
 }
 
 func (g *Game) QueueAddFlagAnimation(flagX, flagY int) {
+	if !g.playedAddFlagSound {
+		PlaySoundBytes(SeFlagFlap3, 0.6)
+		g.playedAddFlagSound = true
+	}
+
 	var timer Timer
 	timer.Duration = time.Millisecond * 110
 
@@ -2032,6 +2039,11 @@ func (g *Game) QueueAddFlagAnimation(flagX, flagY int) {
 }
 
 func (g *Game) QueueRemoveFlagAnimation(flagX, flagY int) {
+	if !g.playedRemoveFlagSound {
+		PlaySoundBytes(SeUnflag, 0.8)
+		g.playedRemoveFlagSound = true
+	}
+
 	var anim CallbackAnimation
 	anim.Tag = AnimationTagRemoveFlag
 
