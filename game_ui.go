@@ -101,7 +101,7 @@ func (gu *GameUI) Update() {
 
 	gu.TopUI.FlagUI.FlagCount = gu.Game.MineCount() - gu.Game.FlagCount()
 
-	if IsKeyJustPressed(ShowResourceEditorKey) {
+	if IsKeyJustPressed(ShowResourceEditorKey) && InDevMode {
 		gu.ResourceEditor.DoShow = !gu.ResourceEditor.DoShow
 	}
 	if gu.ResourceEditor.DoShow {

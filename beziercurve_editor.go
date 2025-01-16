@@ -1,3 +1,5 @@
+//go:build minedev
+
 package main
 
 import (

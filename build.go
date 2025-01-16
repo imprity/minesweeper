@@ -362,7 +362,6 @@ func BuildApp(settings map[string]bool, buildWeb bool) (error, int) {
 	}
 	if settings["dev"] {
 		tags += "minedev,"
-		misc.WarnLogger.Printf("dev option is not implemented")
 	}
 
 	gcFlags := "-e -l -N"

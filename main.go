@@ -17,9 +17,12 @@ var (
 )
 
 var (
-	alwaysDraw         bool = false
-	redrawFrameCounter int  = 4
+	AlwaysDraw   bool = false
+	InDevMode    bool = false
+	PprofEnabled bool = false
 )
+
+var redrawFrameCounter int = 4
 
 func SetRedraw() {
 	redrawFrameCounter = 4
@@ -80,11 +83,11 @@ func (a *App) Update() error {
 	// ==========================
 	// asset loading and saving
 	// ==========================
-	if IsKeyJustPressed(ReloadAssetsKey) {
+	if IsKeyJustPressed(ReloadAssetsKey) && InDevMode {
 		LoadAssets()
 	}
 
-	if IsKeyJustPressed(SaveAssetsKey) {
+	if IsKeyJustPressed(SaveAssetsKey) && InDevMode {
 		SaveColorTable()
 		SaveBezierTable()
 		SaveHSVmodTable()
@@ -93,7 +96,7 @@ func (a *App) Update() error {
 	// ==========================
 	// debug showing
 	// ==========================
-	if IsKeyJustPressed(ShowDebugConsoleKey) {
+	if IsKeyJustPressed(ShowDebugConsoleKey) && InDevMode {
 		a.ShowDebugConsole = !a.ShowDebugConsole
 	}
 
@@ -103,11 +106,11 @@ func (a *App) Update() error {
 }
 
 func (a *App) Draw(dst *eb.Image) {
-	if redrawFrameCounter > 0 || alwaysDraw {
+	if redrawFrameCounter > 0 || AlwaysDraw {
 		a.Scene.Draw(dst)
 	}
 
-	if redrawFrameCounter > 0 || alwaysDraw {
+	if redrawFrameCounter > 0 || AlwaysDraw {
 		DebugPuts("do redraw", "true ")
 	} else {
 		DebugPuts("do redraw", "false")

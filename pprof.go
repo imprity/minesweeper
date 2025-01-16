@@ -8,6 +8,8 @@ import (
 )
 
 func init() {
+	PprofEnabled = true
+
 	DebugPutsPersist("pprof", "true")
 	go func() {
 		InfoLogger.Print("initializing pprof")

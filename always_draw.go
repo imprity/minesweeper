@@ -3,7 +3,7 @@
 package main
 
 func init() {
-	alwaysDraw = true
+	AlwaysDraw = true
 
 	DebugPutsPersist("always draw", "true")
 }
