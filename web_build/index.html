@@ -1,17 +1,87 @@
 <!DOCTYPE html>
-<script src="sound.js"></script>
-<script src="wasm_exec.js"></script>
-<script>
-// Polyfill
-if (!WebAssembly.instantiateStreaming) {
-    WebAssembly.instantiateStreaming = async (resp, importObject) => {
-        const source = await (await resp).arrayBuffer();
-        return await WebAssembly.instantiate(source, importObject);
-    };
-}
+<html>
 
-const go = new Go();
-WebAssembly.instantiateStreaming(fetch("minesweeper.wasm"), go.importObject).then(result => {
-    go.run(result.instance);
-});
-</script>
+<head>
+    <style>
+        /*margin border padding zero*/
+        .mbp-zero {
+            margin: 0px;
+            border-width : 0px;
+            padding : 0px;
+        }
+
+        body {
+            background-color: black;
+            width : 100vw;
+            height : 100vh;
+        }
+
+        #loading-screen {
+            width: 100%;
+            height: 100%;
+
+            display : flex;
+            flex-direction : column;
+            flex-wrap : nowrap;
+            /*justify-content : space-around;*/
+            justify-content : center;
+            align-items : center;
+            gap : 5vmin
+        }
+
+        #loading-header {
+            color : white;
+            font-size : 7vmin;
+            font-family: Georgia, serif;
+        }
+
+        #progress-bar {
+            background-color : darkgray;
+
+            width : 70vw;
+            height : 2.5vmin;
+            min-height : 10px;
+        }
+        #progress-fill {
+            background-color: white;
+
+            height : 100%;
+            width : 0%;
+        }
+
+        #error-text-box {
+            max-width : 60vw;
+            display : none;
+        }
+        #error-header {
+            color : red;
+            font-size : 1.5rem;
+            font-family: Georgia, serif;
+        }
+        #error-text {
+            color : white;
+            font-family : Arial, Helvetica, sans-serif;
+        }
+    </style>
+</head>
+
+<body class="mbp-zero">
+    <div id="loading-screen" class="mbp-zero">
+        <h1 id="loading-header" class="mbp-zero">Loading</h1>
+
+        <div id="progress-bar" class="mbp-zero">
+            <div id="progress-fill" class="mbp-zero"></div>
+        </div>
+
+        <div id="error-text-box">
+            <h1 id="error-header">Error:</h1>
+            <p id="error-text"></p>
+        </div>
+    </div>
+    <script src="sound.js"></script>
+    <script src="wasm_exec.js"></script>
+    <script src="minesweeper_wasm_size.js"></script>
+    <script src="loader.js"></script>
+</body>
+
+</html>

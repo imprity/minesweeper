@@ -6,6 +6,7 @@ run_web
 
 web_build/minesweeper.wasm
 web_build/minesweeper.wasm.bak
+web_build/minesweeper_wasm_size.js
 
 tmps/
 
@@ -14,3 +15,5 @@ build-settings.txt
 sound_srcs_local.txt
 sound_srcs.go
 sound_srcs_bin
+
+**/tags

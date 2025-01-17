@@ -21,6 +21,17 @@ var SettingsList []string
 var DefaultSettings = make(map[string]bool)
 var SettingsComments = make(map[string]string)
 
+var ReleaseSettings = map[string]bool {
+	"always-draw" : false,
+	"pprof" : false,
+	"dev" : false,
+	"opt" : true,
+	"trimpath" : true,
+	"wasm-opt" : true,
+	"tsc" : true,
+	"no-vcs" : false,
+}
+
 func init() {
 	setDefault := func(name string, value bool, comment string) {
 		SettingsList = append(SettingsList, name)
@@ -32,9 +43,28 @@ func init() {
 	setDefault("pprof", false, "Enable pporf debugging.")
 	setDefault("dev", false, "Enable dev related features like debugging.")
 	setDefault("opt", true, "Optimize and inline.")
+	setDefault("trimpath", false, "Don't include absolute path of source files for debugging.")
 	setDefault("wasm-opt", false, "Optimize wasm (requires wasm-opt from https://github.com/WebAssembly/binaryen).")
 	setDefault("tsc", false, "Build typescript module.")
 	setDefault("no-vcs", false, "Stop Go compiler from stamp binary with version control information.")
+
+	// =======================================
+	// check if ReleaseSettings are correct
+	// =======================================
+
+	// has all the default settings
+	for key, _ := range DefaultSettings {
+		if _, ok := ReleaseSettings[key]; !ok {
+			misc.ErrLogger.Fatalf("ReleaseSettings lacks setting for %s", key)
+		}
+	}
+
+	// doesn't have anything that DefaultSettings lacks
+	for key, _ := range ReleaseSettings {
+		if _, ok := DefaultSettings[key]; !ok {
+			misc.ErrLogger.Fatalf("ReleaseSettings has unknonw setting %s", key)
+		}
+	}
 }
 
 func PrintUsage() {
@@ -84,7 +114,11 @@ func main() {
 
 	// parse flags
 	if len(args) == 1 {
-		buildTarget = args[0]
+		if args[0] == "release" {
+			useReleaseSetting = true
+		}else {
+			buildTarget = args[0]
+		}
 	} else if len(args) == 2 {
 		if args[0] != "release" {
 			misc.ErrLogger.Printf("%s is not a vaid argument", strings.Join(args, " "))
@@ -124,9 +158,8 @@ func main() {
 	var settings map[string]bool
 
 	if useReleaseSetting {
-		// TODO: support release setting
-		misc.ErrLogger.Printf("release setting is not supproted yet")
-		os.Exit(1)
+		misc.InfoLogger.Print("using release settings")
+		settings = ReleaseSettings
 	} else {
 		// load settings
 		misc.InfoLogger.Printf("loading settings from %s", SettingsPath)
@@ -157,11 +190,11 @@ func main() {
 	}
 
 	// build tsc
-	{
-		tscTargets := []string{
+	if settings["tsc"] {
+		soundTargets := []string{
 			"./web_build/sound.js",
 		}
-		tscSources := []string{
+		soundSources := []string{
 			"./sound/sound.ts",
 			"./sound/internalplayer.ts",
 
@@ -170,10 +203,29 @@ func main() {
 			"./sound/tsconfig.json",
 		}
 
-		if settings["tsc"] && NeedToBuild(tscTargets, tscSources) {
-			err, errcode := BuildTsc()
+		if NeedToBuild(soundTargets, soundSources) {
+			err, errcode := BuildSoundTsc()
 			if err != nil {
-				misc.ErrLogger.Printf("failed to build for typescript module: %v", err)
+				misc.ErrLogger.Printf("failed to build sound typescript module: %v", err)
+				os.Exit(errcode)
+			}
+		}
+
+		webPageTargets := []string{
+			"./web_build/loader.js",
+		}
+		webPageSources := []string{
+			"./web_build/scripts/loader.ts",
+
+			"./web_build/scripts/package-lock.json",
+			"./web_build/scripts/package.json",
+			"./web_build/scripts/tsconfig.json",
+		}
+
+		if NeedToBuild(webPageTargets, webPageSources) {
+			err, errcode := BuildWebPageTsc()
+			if err != nil {
+				misc.ErrLogger.Printf("failed to build web page typescript module: %v", err)
 				os.Exit(errcode)
 			}
 		}
@@ -389,6 +441,10 @@ func BuildApp(settings map[string]bool, buildWeb bool) (error, int) {
 		cmd.Args = append(cmd.Args, "-buildvcs=false")
 	}
 
+	if settings["trimpath"] {
+		cmd.Args = append(cmd.Args, "-trimpath")
+	}
+
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
@@ -419,7 +475,7 @@ func BuildApp(settings map[string]bool, buildWeb bool) (error, int) {
 			"wasm-opt",
 			"./web_build/minesweeper.wasm",
 			"-O2",
-			"--enable-bulk-memory-opt", // NOTE: I have no idea what this option does lol
+			"--enable-bulk-memory", // NOTE: I have no idea what this option does lol
 			"-o",
 			"./web_build/minesweeper-opt.wasm",
 		)
@@ -447,10 +503,32 @@ func BuildApp(settings map[string]bool, buildWeb bool) (error, int) {
 		}
 	}
 
+	// output compiled binary size to minesweeper_wasm_size.js
+	if buildWeb {
+		misc.InfoLogger.Print(
+			"ouputing size of ./web_build/minesweeper.wasm to ./web_build/minesweeper_wasm_size.js",
+		)
+
+		info, err := os.Stat("./web_build/minesweeper.wasm")
+		if err != nil {
+			return err, 1
+		}
+
+		size := info.Size()
+		err = os.WriteFile(
+			"./web_build/minesweeper_wasm_size.js",
+			[]byte(fmt.Sprintf("const MINESWEEPER_WASM_SIZE  = %d", size)),
+			0664,
+		)
+		if err != nil {
+			return err, 1
+		}
+	}
+
 	return nil, 0
 }
 
-func BuildTsc() (error, int) {
+func BuildTsc(dir string) (error, int){
 	if !misc.CheckExeExists("npm") {
 		return fmt.Errorf("couldn't find npm"), 1
 	}
@@ -463,7 +541,7 @@ func BuildTsc() (error, int) {
 		"install",
 	)
 
-	cmd.Dir = "./sound"
+	cmd.Dir = dir
 
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -488,7 +566,7 @@ func BuildTsc() (error, int) {
 		"tsc",
 	)
 
-	cmd.Dir = "./sound"
+	cmd.Dir = dir
 
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -503,19 +581,33 @@ func BuildTsc() (error, int) {
 		return err, err.(*exec.ExitError).ExitCode()
 	}
 
-	// ================
+	return nil, 0
+}
+
+func BuildSoundTsc() (error, int) {
+	if err, exitCode := BuildTsc("./sound"); err != nil {
+		return err, exitCode
+	}
+
 	// copy file
-	// ================
 	const copySrc = "./sound/sound.js"
 	const copyDst = "./web_build/sound.js"
 
 	misc.InfoLogger.Printf("copying %s to %s", copySrc, copyDst)
 
-	err = misc.CopyFile(
+	err := misc.CopyFile(
 		copySrc, copyDst, 0664,
 	)
 	if err != nil {
 		return err, 1
+	}
+
+	return nil, 0
+}
+
+func BuildWebPageTsc() (error, int) {
+	if err, exitCode := BuildTsc("./web_build/scripts"); err != nil {
+		return err, exitCode
 	}
 
 	return nil, 0

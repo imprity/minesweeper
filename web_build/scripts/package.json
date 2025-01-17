@@ -1,0 +1,9 @@
+{
+  "name": "minesweeper",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Page for Go minesweeper",
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}
