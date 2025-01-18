@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 
 	_ "github.com/silbinarywolf/preferdiscretegpu"
 
@@ -22,10 +23,10 @@ var (
 	PprofEnabled bool = false
 )
 
-var redrawFrameCounter int = 4
+var redrawTimer time.Time
 
 func SetRedraw() {
-	redrawFrameCounter = 4
+	redrawTimer = time.Now()
 }
 
 var ErrLogger *log.Logger = log.New(os.Stderr, "ERROR: ", log.Lshortfile)
@@ -106,11 +107,14 @@ func (a *App) Update() error {
 }
 
 func (a *App) Draw(dst *eb.Image) {
-	if redrawFrameCounter > 0 || AlwaysDraw {
+	timeSinceRedraw := time.Now().Sub(redrawTimer)
+	redraw := timeSinceRedraw < time.Millisecond*100
+
+	if redraw || AlwaysDraw {
 		a.Scene.Draw(dst)
 	}
 
-	if redrawFrameCounter > 0 || AlwaysDraw {
+	if redraw || AlwaysDraw {
 		DebugPuts("do redraw", "true ")
 	} else {
 		DebugPuts("do redraw", "false")
@@ -119,9 +123,6 @@ func (a *App) Draw(dst *eb.Image) {
 	if a.ShowDebugConsole {
 		DrawDebugMsgs(dst)
 	}
-
-	redrawFrameCounter--
-	redrawFrameCounter = max(redrawFrameCounter, 0)
 }
 
 func (a *App) Layout(outsideWidth, outsideHeight int) (int, int) {
@@ -153,6 +154,7 @@ func main() {
 	eb.SetWindowResizingMode(eb.WindowResizingModeEnabled)
 	eb.SetWindowTitle("Minesweeper")
 	eb.SetScreenClearedEveryFrame(false)
+	eb.SetTPS(120)
 
 	op := &eb.RunGameOptions{
 		// NOTE: I have no idea why, but I think there is a bug

@@ -7,7 +7,10 @@ import (
 type BezierTableIndex int
 
 const (
-	BezierBoardHideTile BezierTableIndex = iota
+	BezierTileRevealScale BezierTableIndex = iota
+	BezierTileRevealOffsetY
+
+	BezierBoardHideTile
 	BezierBoardHideTileAlpha
 	BezierBoardHideButton
 

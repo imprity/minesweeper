@@ -808,7 +808,7 @@ func isTileFirmlyPlaced(style TileStyle) bool {
 }
 
 func ShouldDrawBgTile(style TileStyle) bool {
-	return style.DrawBg && !style.DrawTile && style.BgScale > 0.001 && style.BgAlpha > 0.001
+	return style.DrawBg && style.BgScale > 0.001 && style.BgAlpha > 0.001
 }
 
 func ShouldDrawTile(style TileStyle) bool {
@@ -835,6 +835,7 @@ func GetAnimationTargetTileStyle(board Board, x, y int) TileStyle {
 	if board.IsPosInBoard(x, y) {
 		if board.Revealed.Get(x, y) {
 			style.DrawTile = true
+			style.DrawBg = false
 
 			style.TileFillColor = ColorTileRevealed1
 			if IsOddTile(board.Width, board.Height, x, y) {
@@ -1826,49 +1827,14 @@ func NewFgClickModifier() StyleModifier {
 func (g *Game) QueueRevealAnimation(revealsBefore, revealsAfter Array2D[bool], originX, originY int) {
 	iter := NewBoardIterator(0, 0, g.board.Width-1, g.board.Height-1)
 
-	// =======================
-	// collect general info
-	// =======================
-	distSquaredMax := 0
-	tileDistMax := 0
-	revealedTileCount := 0
-
-	var distMin float64 = math.MaxFloat64 // big number
-	var distMax float64
-
-	{
-		fw, fh := f64(g.board.Width-1), f64(g.board.Height-1)
-		distMax = math.Sqrt(fw*fw + fh*fh)
+	getDist := func(x, y int) float64 {
+		return FPt(f64(originX), f64(originY)).Sub(FPt(f64(x), f64(y))).Length()
 	}
 
-	iter.Reset()
-	for iter.HasNext() {
-		x, y := iter.GetNext()
-		if !revealsBefore.Get(x, y) && revealsAfter.Get(x, y) {
-			diffX, diffY := Abs(originX-x), Abs(originY-y)
-
-			distSquared := diffX*diffX + diffY*diffY
-			tileDist := max(diffX, diffY)
-			dist := math.Sqrt(f64(distSquared))
-
-			distSquaredMax = max(distSquaredMax, distSquared)
-			tileDistMax = max(tileDistMax, tileDist)
-
-			distMin = min(distMin, dist)
-
-			revealedTileCount++
-		}
+	getDistSquared := func(x, y int) int {
+		diffX, diffY := Abs(originX-x), Abs(originY-y)
+		return diffX*diffX + diffY*diffY
 	}
-
-	// ======================================
-	// queue animation for revealed tiles
-	// ======================================
-
-	const maxDuration = time.Millisecond * 900
-	const minDuration = time.Millisecond * 10
-
-	playedFirstSound := false
-	playedLastSound := false
 
 	var playedAt time.Time
 	playSound := func() {
@@ -1876,11 +1842,28 @@ func (g *Game) QueueRevealAnimation(revealsBefore, revealsAfter Array2D[bool], o
 			return
 		}
 		now := time.Now()
-		if now.Sub(playedAt) > time.Millisecond*30 {
+		if now.Sub(playedAt) > time.Millisecond*20 {
 			PlaySoundBytes(SeCut, 0.8)
 			playedAt = now
 		}
 	}
+
+	minDist := math.MaxFloat64
+	distSquaredMax := 0
+	revealedTileCount := 0
+
+	iter.Reset()
+	for iter.HasNext() {
+		x, y := iter.GetNext()
+		if !revealsBefore.Get(x, y) && revealsAfter.Get(x, y) {
+			distSquaredMax = max(distSquaredMax, getDistSquared(x, y))
+			minDist = min(minDist, getDist(x, y))
+			revealedTileCount++
+		}
+	}
+
+	playedFirstSound := false
+	playedLastSound := false
 
 	iter.Reset()
 	for iter.HasNext() {
@@ -1894,19 +1877,15 @@ func (g *Game) QueueRevealAnimation(revealsBefore, revealsAfter Array2D[bool], o
 			continue
 		}
 
-		diffX, diffY := Abs(originX-x), Abs(originY-y)
-		tileDist := max(diffX, diffY)
-		_ = tileDist
-		distSquared := diffX*diffX + diffY*diffY
+		distSquared := getDistSquared(x, y)
+		dist := getDist(x, y)
 
-		dist := math.Sqrt(f64(distSquared))
-
-		duration := time.Duration(f64(maxDuration) * ((dist - distMin) / distMax))
+		distSubMinDist := dist - minDist
 
 		var timer Timer
-
-		timer.Duration = max(duration, minDuration)
-		timer.Current = 0
+		timer.Duration = time.Duration((distSubMinDist) * f64(time.Millisecond) * 20)
+		timer.Duration += time.Millisecond * 5
+		timer.Current = time.Duration(-distSubMinDist * f64(time.Millisecond) * 20)
 
 		targetStyle := GetAnimationTargetTileStyle(g.board, x, y)
 
@@ -1917,12 +1896,9 @@ func (g *Game) QueueRevealAnimation(revealsBefore, revealsAfter Array2D[bool], o
 			style := g.BaseTileStyles.Get(x, y)
 			timer.TickUp()
 
-			t := timer.Normalize()
-			t = t * t
+			t := timer.NormalizeUnclamped()
 
-			const limit = 0.4
-
-			if t > limit {
+			if t > 0 {
 				if revealedTileCount == 1 {
 					if !playedFirstSound {
 						playedFirstSound = true
@@ -1941,28 +1917,31 @@ func (g *Game) QueueRevealAnimation(revealsBefore, revealsAfter Array2D[bool], o
 				}
 
 				style = targetStyle
+				style.DrawBg = true
 
-				t = ((t - limit) / (1 - limit))
 				t = Clamp(t, 0, 1)
 
-				style.TileScale = Lerp(1.2, 1.0, t)
-			} else {
-				style.DrawTile = false
-				style.DrawFg = false
+				style.TileScale = BezierCurveDataAsGraph(
+					TheBezierTable[BezierTileRevealScale], t)
+
+				style.TileOffsetY = BezierCurveDataAsGraph(
+					TheBezierTable[BezierTileRevealOffsetY], t) * 10
 			}
 
 			g.BaseTileStyles.Set(x, y, style)
 		}
 
 		anim.Skip = func() {
-			playedFirstSound = true
-			playedLastSound = true
 			timer.Current = timer.Duration
 			anim.Update()
 		}
 
 		anim.Done = func() bool {
 			return timer.Current >= timer.Duration
+		}
+
+		anim.AfterDone = func() {
+			g.BaseTileStyles.Set(x, y, targetStyle)
 		}
 
 		g.TileAnimations.Get(x, y).Enqueue(anim)
@@ -1981,7 +1960,7 @@ func (g *Game) QueueRevealAnimation(revealsBefore, revealsAfter Array2D[bool], o
 		gameAnim.Update = func() {
 			if playedFirstSound && !playedLastSound {
 				repeatSoundTimer.TickUp()
-				if repeatSoundTimer.Current > time.Millisecond*60 {
+				if repeatSoundTimer.Current > time.Millisecond*50 {
 					playSound()
 					repeatSoundTimer.Current = 0
 				}
@@ -2067,12 +2046,12 @@ func (g *Game) QueueRemoveFlagAnimation(flagX, flagY int) {
 			g.BaseTileStyles.Set(flagX, flagY, style)
 		}
 
-		velocityX := RandF(0.02, 0.06)
+		velocityX := RandF(0.01, 0.03)
 		if rand.IntN(100) > 50 {
 			velocityX *= -1
 		}
 
-		velocityY := RandF(-0.25, -0.3)
+		velocityY := RandF(-0.17, -0.2)
 
 		rotVelocity := RandF(-0.1, 0.1)
 
@@ -2086,7 +2065,7 @@ func (g *Game) QueueRemoveFlagAnimation(flagX, flagY int) {
 			Width: 1, Height: 1,
 			VelocityX: velocityX, VelocityY: velocityY,
 			RotVelocity: rotVelocity,
-			GravityX:    0, GravityY: 0.02,
+			GravityX:    0, GravityY: 0.007,
 		}
 
 		g.Particles = AppendTileParticle(g.Particles, p)

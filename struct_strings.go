@@ -70,18 +70,20 @@ func _() {
 	// An "invalid array index" compiler error signifies that the constant values have changed.
 	// Re-run the stringer command to generate them again.
 	var x [1]struct{}
-	_ = x[BezierBoardHideTile-0]
-	_ = x[BezierBoardHideTileAlpha-1]
-	_ = x[BezierBoardHideButton-2]
-	_ = x[BezierBoardShowTileOffsetY-3]
-	_ = x[BezierBoardShowTileAlpha-4]
-	_ = x[BezierBoardShowTileScale-5]
-	_ = x[BezierTableSize-6]
+	_ = x[BezierTileRevealScale-0]
+	_ = x[BezierTileRevealOffsetY-1]
+	_ = x[BezierBoardHideTile-2]
+	_ = x[BezierBoardHideTileAlpha-3]
+	_ = x[BezierBoardHideButton-4]
+	_ = x[BezierBoardShowTileOffsetY-5]
+	_ = x[BezierBoardShowTileAlpha-6]
+	_ = x[BezierBoardShowTileScale-7]
+	_ = x[BezierTableSize-8]
 }
 
-const _BezierTableIndex_name = "BezierBoardHideTileBezierBoardHideTileAlphaBezierBoardHideButtonBezierBoardShowTileOffsetYBezierBoardShowTileAlphaBezierBoardShowTileScaleBezierTableSize"
+const _BezierTableIndex_name = "BezierTileRevealScaleBezierTileRevealOffsetYBezierBoardHideTileBezierBoardHideTileAlphaBezierBoardHideButtonBezierBoardShowTileOffsetYBezierBoardShowTileAlphaBezierBoardShowTileScaleBezierTableSize"
 
-var _BezierTableIndex_index = [...]uint8{0, 19, 43, 64, 90, 114, 138, 153}
+var _BezierTableIndex_index = [...]uint8{0, 21, 44, 63, 87, 108, 134, 158, 182, 197}
 
 func (i BezierTableIndex) String() string {
 	if i < 0 || i >= BezierTableIndex(len(_BezierTableIndex_index)-1) {
