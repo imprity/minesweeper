@@ -3,9 +3,13 @@
 package main
 
 import (
+	"archive/zip"
+	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"slices"
 	"strings"
@@ -21,15 +25,15 @@ var SettingsList []string
 var DefaultSettings = make(map[string]bool)
 var SettingsComments = make(map[string]string)
 
-var ReleaseSettings = map[string]bool {
-	"always-draw" : false,
-	"pprof" : false,
-	"dev" : false,
-	"opt" : true,
-	"trimpath" : true,
-	"wasm-opt" : true,
-	"tsc" : true,
-	"no-vcs" : false,
+var ReleaseSettings = map[string]bool{
+	"always-draw": false,
+	"pprof":       false,
+	"dev":         false,
+	"opt":         true,
+	"trimpath":    true,
+	"wasm-opt":    true,
+	"tsc":         true,
+	"no-vcs":      false,
 }
 
 func init() {
@@ -53,14 +57,14 @@ func init() {
 	// =======================================
 
 	// has all the default settings
-	for key, _ := range DefaultSettings {
+	for key := range DefaultSettings {
 		if _, ok := ReleaseSettings[key]; !ok {
 			misc.ErrLogger.Fatalf("ReleaseSettings lacks setting for %s", key)
 		}
 	}
 
 	// doesn't have anything that DefaultSettings lacks
-	for key, _ := range ReleaseSettings {
+	for key := range ReleaseSettings {
 		if _, ok := DefaultSettings[key]; !ok {
 			misc.ErrLogger.Fatalf("ReleaseSettings has unknonw setting %s", key)
 		}
@@ -110,13 +114,13 @@ func main() {
 	}
 
 	var buildTarget = "desktop"
-	var useReleaseSetting = false
+	var isRelease = false
 
 	// parse flags
 	if len(args) == 1 {
 		if args[0] == "release" {
-			useReleaseSetting = true
-		}else {
+			isRelease = true
+		} else {
 			buildTarget = args[0]
 		}
 	} else if len(args) == 2 {
@@ -125,7 +129,7 @@ func main() {
 			PrintUsage()
 			os.Exit(1)
 		} else {
-			useReleaseSetting = true
+			isRelease = true
 		}
 		buildTarget = args[1]
 	} else if len(args) > 2 {
@@ -157,7 +161,7 @@ func main() {
 
 	var settings map[string]bool
 
-	if useReleaseSetting {
+	if isRelease {
 		misc.InfoLogger.Print("using release settings")
 		settings = ReleaseSettings
 	} else {
@@ -234,14 +238,14 @@ func main() {
 	misc.InfoLogger.Printf("building %s", buildTarget)
 
 	buildDesktop := func() {
-		err, errcode := BuildApp(settings, false)
+		err, errcode := BuildApp(settings, false, isRelease)
 		if err != nil {
 			misc.ErrLogger.Printf("failed to build for desktop: %v", err)
 			os.Exit(errcode)
 		}
 	}
 	buildWeb := func() {
-		err, errcode := BuildApp(settings, true)
+		err, errcode := BuildApp(settings, true, isRelease)
 		if err != nil {
 			misc.ErrLogger.Printf("failed to build for web: %v", err)
 			os.Exit(errcode)
@@ -360,7 +364,11 @@ func LoadSettings(path string) (map[string]bool, error) {
 	return settings, nil
 }
 
-func BuildApp(settings map[string]bool, buildWeb bool) (error, int) {
+func BuildApp(
+	settings map[string]bool,
+	buildWeb bool,
+	buildRelease bool,
+) (error, int) {
 	// generate sound_srcs.go
 	{
 		var targets = []string{
@@ -422,9 +430,7 @@ func BuildApp(settings map[string]bool, buildWeb bool) (error, int) {
 	}
 
 	dst := "minesweeper"
-	if runtime.GOOS == "windows" {
-		dst += ".exe"
-	}
+	dst = AddExeIfWindows(dst)
 	if buildWeb {
 		dst = "./web_build/minesweeper.wasm"
 	}
@@ -525,10 +531,59 @@ func BuildApp(settings map[string]bool, buildWeb bool) (error, int) {
 		}
 	}
 
+	// create release build
+	if buildRelease {
+		if buildWeb {
+			err := os.RemoveAll("./release/web")
+			if err != nil {
+				return err, 1
+			}
+			err = misc.MkDir("./release/web")
+			if err != nil {
+				return err, 1
+			}
+			files, err := GlobMultiple(
+				[]string{
+					"./web_build/*.html",
+					"./web_build/*.js",
+					"./web_build/*.wasm",
+				},
+			)
+			if err != nil {
+				return err, 1
+			}
+			err = ZipFiles(
+				files,
+				"./web_build",
+				"./release/web/minesweeper.zip",
+			)
+			if err != nil {
+				return err, 1
+			}
+		} else {
+			err := os.RemoveAll("./release/desktop")
+			if err != nil {
+				return err, 1
+			}
+			err = misc.MkDir("./release/desktop")
+			if err != nil {
+				return err, 1
+			}
+			err = misc.CopyFile(
+				AddExeIfWindows("./minesweeper"),
+				AddExeIfWindows("./release/desktop/minesweeper"),
+				0664,
+			)
+			if err != nil {
+				return err, 1
+			}
+		}
+	}
+
 	return nil, 0
 }
 
-func BuildTsc(dir string) (error, int){
+func BuildTsc(dir string) (error, int) {
 	if !misc.CheckExeExists("npm") {
 		return fmt.Errorf("couldn't find npm"), 1
 	}
@@ -661,4 +716,81 @@ func NeedToBuild(targets []string, srcs []string) bool {
 	}
 
 	return srcNewest.Compare(targetOldest) > 0
+}
+
+func GlobMultiple(patterns []string) ([]string, error) {
+	var matches []string
+
+	for _, pattern := range patterns {
+		m, err := filepath.Glob(pattern)
+		if err != nil {
+			return nil, err
+		}
+		matches = append(matches, m...)
+	}
+
+	return matches, nil
+}
+
+func ZipFiles(
+	files []string,
+	filesBase string,
+	dst string,
+) error {
+	// clean paths
+	for i := range files {
+		files[i] = strings.ReplaceAll(files[i], "\\", "/")
+	}
+	filesBase = strings.ReplaceAll(filesBase, "\\", "/")
+	dst = strings.ReplaceAll(dst, "\\", "/")
+
+	misc.InfoLogger.Printf("zipping")
+	fmt.Printf("\n")
+	for _, file := range files {
+		fmt.Printf("  %s\n", file)
+	}
+	fmt.Printf("\n")
+	fmt.Printf("to %s", dst)
+
+	zipBuffer := new(bytes.Buffer)
+	writer := zip.NewWriter(zipBuffer)
+
+	for _, file := range files {
+		rel, err := filepath.Rel(filesBase, file)
+		if err != nil {
+			return err
+		}
+
+		fileContent, err := os.ReadFile(file)
+		if err != nil {
+			return err
+		}
+
+		fileWriter, err := writer.Create(rel)
+		if err != nil {
+			return err
+		}
+
+		_, err = io.Copy(fileWriter, bytes.NewReader(fileContent))
+		if err != nil {
+			return err
+		}
+	}
+
+	if err := writer.Close(); err != nil {
+		return err
+	}
+
+	if err := os.WriteFile(dst, zipBuffer.Bytes(), 0644); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func AddExeIfWindows(path string) string {
+	if runtime.GOOS == "windows" {
+		path += ".exe"
+	}
+	return path
 }
