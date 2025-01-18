@@ -8,6 +8,8 @@ web_build/minesweeper.wasm
 web_build/minesweeper.wasm.bak
 web_build/minesweeper_wasm_size.js
 
+git_version.txt
+
 tmps/
 
 build-settings.txt

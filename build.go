@@ -369,6 +369,26 @@ func BuildApp(
 	buildWeb bool,
 	buildRelease bool,
 ) (error, int) {
+	// generate git_version.txt
+	{
+		versionStr, err, exitCode := GetGitVersionString()
+
+		if err != nil {
+			if !buildRelease {
+				misc.WarnLogger.Printf("failed to get git version : %v", err)
+				versionStr = "unknonw"
+			} else { // release build should not omit version string
+				return err, exitCode
+			}
+		}
+
+		misc.InfoLogger.Printf("git version : %s", versionStr)
+
+		if err = os.WriteFile("git_version.txt", []byte(versionStr), 0644); err != nil {
+			return err, 1
+		}
+	}
+
 	// generate sound_srcs.go
 	{
 		var targets = []string{
@@ -572,7 +592,7 @@ func BuildApp(
 			err = misc.CopyFile(
 				AddExeIfWindows("./minesweeper"),
 				AddExeIfWindows("./release/desktop/minesweeper"),
-				0664,
+				0755,
 			)
 			if err != nil {
 				return err, 1
@@ -793,4 +813,103 @@ func AddExeIfWindows(path string) string {
 		path += ".exe"
 	}
 	return path
+}
+
+// Get version string using git.
+// Version string format is :
+//
+//	branchName-tag-commitCount-hash
+//
+// For example:
+//
+//	main--148-c9b1d68
+//
+// If dirty:
+//
+//	main--148-c9b1d68-dirty
+func GetGitVersionString() (string, error, int) {
+	execCommand := func(name string, arg ...string) (string, error, int) {
+		cmd := exec.Command(name, arg...)
+		cmd.Stderr = os.Stderr
+
+		stdout, err := cmd.StdoutPipe()
+		if err != nil {
+			return "", err, 1
+		}
+
+		if err = cmd.Start(); err != nil {
+			return "", err, 1
+		}
+
+		stdoutCollected, err := io.ReadAll(stdout)
+		if err != nil {
+			return "", err, 1
+		}
+
+		if err = cmd.Wait(); err != nil {
+			if exitErr, ok := err.(*exec.ExitError); ok {
+				return "", exitErr, exitErr.ExitCode()
+			} else {
+				return "", err, 1
+			}
+		}
+
+		if !utf8.Valid(stdoutCollected) {
+			return "", fmt.Errorf("output from %s is not a valid utf8", cmd.String()), 1
+		}
+
+		return strings.TrimSpace(string(stdoutCollected)), nil, 0
+	}
+
+	var combined string
+
+	// get current branch name
+	out, err, exitCode := execCommand(
+		"git", "rev-parse", "--abbrev-ref", "HEAD",
+	)
+	if err != nil {
+		return "", err, exitCode
+	}
+	combined += out + "-"
+
+	// get current tag
+	out, err, exitCode = execCommand(
+		"git", "tag", "--points-at", "HEAD",
+	)
+	if err != nil {
+		return "", err, exitCode
+	}
+	combined += out + "-"
+
+	// get commit count
+	out, err, exitCode = execCommand(
+		"git", "rev-list", "--count", "HEAD",
+	)
+	if err != nil {
+		return "", err, exitCode
+	}
+	combined += out + "-"
+
+	// get commit hash
+	out, err, exitCode = execCommand(
+		"git", "rev-parse", "--short", "HEAD",
+	)
+	if err != nil {
+		return "", err, exitCode
+	}
+	combined += out
+
+	// check if dirty
+	out, err, exitCode = execCommand(
+		"git", "status", "--porcelain",
+	)
+	if err != nil {
+		return "", err, exitCode
+	}
+
+	if out != "" {
+		combined += "-dirty"
+	}
+
+	return combined, nil, 0
 }

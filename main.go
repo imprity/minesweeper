@@ -1,10 +1,12 @@
 package main
 
 import (
+	_ "embed"
 	"flag"
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	_ "github.com/silbinarywolf/preferdiscretegpu"
@@ -35,7 +37,24 @@ var InfoLogger *log.Logger = log.New(os.Stdout, "INFO: ", log.Lshortfile)
 
 var FlagHotReload bool
 
+// Get version string using git.
+// Version string format is :
+//
+//	branchName-tag-commitCount-hash
+//
+// For example:
+//
+//	main--148-c9b1d68
+//
+// If dirty:
+//
+//	main--148-c9b1d68-dirty
+//
+//go:embed git_version.txt
+var GitVersionString string
+
 func init() {
+	GitVersionString = strings.TrimSpace(GitVersionString)
 	flag.BoolVar(&FlagHotReload, "hot", false, "enable hot reloading")
 }
 
@@ -139,6 +158,8 @@ func (a *App) Layout(outsideWidth, outsideHeight int) (int, int) {
 }
 
 func main() {
+	InfoLogger.Printf("git version: %s", GitVersionString)
+
 	flag.Parse()
 
 	InitClipboardManager()
