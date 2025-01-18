@@ -1,13 +1,13 @@
 package main
 
 import (
-	crand "crypto/rand"
 	"fmt"
 	"golang.org/x/exp/constraints"
 	"image"
 	"math"
 	"math/rand/v2"
 	"strings"
+	"time"
 
 	eb "github.com/hajimehoshi/ebiten/v2"
 )
@@ -445,42 +445,25 @@ func RandF(minV, maxV float64) float64 {
 
 func GetSeed() [32]byte {
 	var seed [32]byte
-	cryptoFailed := false
 
-	seedSlice := seed[:0]
+	gt := time.Now().UnixMilli()
+	mx, my := eb.CursorPosition()
+	whSum := math.Float64bits(eb.ActualFPS())
 
-	for len(seedSlice) < cap(seed) {
-		buf := seedSlice[len(seedSlice):cap(seed)]
-		readAmound, err := crand.Reader.Read(buf)
-		seedSlice = seedSlice[:len(seedSlice)+readAmound]
-		if err != nil {
-			cryptoFailed = true
-			WarnLogger.Printf("secure random failed, using arbitrary number")
-			break
+	offset := 0
+
+	assignToSeed := func(n uint64) {
+		for i := range 8 {
+			seed[i+offset] = byte(n & 0xff)
+			n = n >> 8
 		}
+		offset += 8
 	}
 
-	// just use arbitrary numbers
-	if cryptoFailed {
-		gt := GlobalTimerNow()
-		mx, my := eb.CursorPosition()
-		whSum := math.Float64bits(ScreenWidth + ScreenHeight)
-
-		offset := 0
-
-		assignToSeed := func(n uint64) {
-			for i := range 8 {
-				seed[i+offset] = byte(n & 0xff)
-				n = n >> 8
-			}
-			offset += 8
-		}
-
-		assignToSeed(uint64(gt))
-		assignToSeed(uint64(mx))
-		assignToSeed(uint64(my))
-		assignToSeed(uint64(whSum))
-	}
+	assignToSeed(uint64(gt))
+	assignToSeed(uint64(mx))
+	assignToSeed(uint64(my))
+	assignToSeed(uint64(whSum))
 
 	return seed
 }
