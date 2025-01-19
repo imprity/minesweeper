@@ -554,7 +554,7 @@ func NewTimerUI() *TimerUI {
 			RegularFace, idealFontSizeNormal,
 			FontLineSpacingSized(RegularFace, idealFontSizeNormal),
 		)
-		idealFontSizeSmall = (idealMaxTextWidth / w)
+		idealFontSizeSmall = idealFontSizeNormal * (idealMaxTextWidth / w)
 	}
 
 	tu.GetIdealWidth = func() float64 {
