@@ -50,9 +50,9 @@ func NewGameUI() *GameUI {
 	gu := new(GameUI)
 
 	// set constants
-	gu.MineCounts = [DifficultySize]int{10, 30, 70}
+	gu.MineCounts = [DifficultySize]int{10, 40, 99}
 	gu.BoardTileCounts = [DifficultySize]image.Point{
-		image.Pt(10, 10), image.Pt(15, 13), image.Pt(20, 20),
+		image.Pt(10, 10), image.Pt(17, 15), image.Pt(22, 22),
 	}
 	gu.BoardSizeRatios = [DifficultySize]float64{0.75, 0.9, 1}
 
