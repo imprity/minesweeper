@@ -27,6 +27,8 @@ import (
 var (
 	SrcDir string
 	DstDir string
+
+	EncodeToWav bool = false
 )
 
 func init() {
@@ -36,7 +38,7 @@ func init() {
 
 		fmt.Fprintf(out, "Usage of %s:\n", scriptName)
 		fmt.Fprintf(out, "\n")
-		fmt.Fprintf(out, "go run %s -s ./audio/input/directory/ -d ./output/directory/\n", scriptName)
+		fmt.Fprintf(out, "go run %s -s ./audio/input/directory/ -d ./output/directory/ [-wav]\n", scriptName)
 		fmt.Fprintf(out, "\n")
 		fmt.Fprintf(out, "requires ffmpeg\n")
 		fmt.Fprintf(out, "\n")
@@ -45,6 +47,7 @@ func init() {
 
 	flag.StringVar(&SrcDir, "s", "", "source folder")
 	flag.StringVar(&DstDir, "d", "", "destination folder")
+	flag.BoolVar(&EncodeToWav, "wav", false, "convert to wav instead of ogg")
 }
 
 func main() {
@@ -181,17 +184,34 @@ func main() {
 	for i, file := range audioFiles {
 		dstFile := dstAudioFiles[i]
 		if before, found := strings.CutSuffix(dstFile, filepath.Ext(dstFile)); found {
-			dstFile = before + ".ogg"
+			if EncodeToWav {
+				dstFile = before + ".wav"
+			} else {
+				dstFile = before + ".ogg"
+			}
 		}
 
-		cmd := exec.Command(
-			"ffmpeg",
-			"-i", file, // input file
-			"-vn",      // no video
-			"-ac", "2", // 2 audio channel
-			"-q:a", "5", // variable bitrate quality 5
-			dstFile,
-		)
+		var cmd *exec.Cmd
+
+		if EncodeToWav {
+			cmd = exec.Command(
+				"ffmpeg",
+				"-i", file, // input file
+				"-vn",      // no video
+				"-ac", "2", // 2 audio channel
+				"-ar", "48000", // sample rate of 48000
+				dstFile,
+			)
+		} else {
+			cmd = exec.Command(
+				"ffmpeg",
+				"-i", file, // input file
+				"-vn",      // no video
+				"-ac", "2", // 2 audio channel
+				"-q:a", "5", // variable bitrate quality 5
+				dstFile,
+			)
+		}
 
 		stdout := &bytes.Buffer{}
 		stderr := &bytes.Buffer{}

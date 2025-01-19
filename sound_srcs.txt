@@ -1,0 +1,17 @@
+// https://opengameart.org/content/interface-sounds-starter-pack
+SeTileReveal assets_sound/tile-reveal.ogg
+
+SeVictory assets_sound/victory.ogg
+
+// https://freesound.org/people/kwahmah_02/sounds/260614/
+SePop assets_sound/pop.ogg
+
+// https://freesound.org/people/PelicanPolice/sounds/580967/
+// https://freesound.org/people/Sauron974/sounds/188733/
+SeFlag assets_sound/flag.ogg
+
+// https://freesound.org/people/Sauron974/sounds/188733/
+SeUnflag assets_sound/unflag.ogg
+
+// https://opengameart.org/content/51-ui-sound-effects-buttons-switches-and-clicks
+SeButtonClick assets_sound/button-click.ogg

@@ -371,7 +371,7 @@ func NewGame(boardWidth, boardHeight, mineCount int) *Game {
 	g.RetryButton.OnPress = func(justPressed bool) {
 		if justPressed {
 			g.SkipAllAnimationsUntilTag(AnimationTagHideBoard)
-			PlaySoundBytes(SeButtonClick3, 1.0)
+			PlaySoundBytes(SeButtonClick, 1.0)
 			g.RetryButton.Disabled = true
 			g.QueueResetBoardAnimation()
 		}
@@ -1843,7 +1843,7 @@ func (g *Game) QueueRevealAnimation(revealsBefore, revealsAfter Array2D[bool], o
 		}
 		now := time.Now()
 		if now.Sub(playedAt) > time.Millisecond*20 {
-			PlaySoundBytes(SeCut, 0.8)
+			PlaySoundBytes(SeTileReveal, 0.8)
 			playedAt = now
 		}
 	}
@@ -1980,7 +1980,7 @@ func (g *Game) QueueRevealAnimation(revealsBefore, revealsAfter Array2D[bool], o
 
 func (g *Game) QueueAddFlagAnimation(flagX, flagY int) {
 	if !g.playedAddFlagSound {
-		PlaySoundBytes(SeFlagFlap3, 0.6)
+		PlaySoundBytes(SeFlag, 0.6)
 		g.playedAddFlagSound = true
 	}
 
@@ -2176,7 +2176,7 @@ func (g *Game) QueueDefeatAnimation(originX, originY int) {
 
 				if timer.Current > 0 && playSoundCopy {
 					playSoundCopy = false
-					PlaySoundBytes(SePop2, 0.3)
+					PlaySoundBytes(SePop, 0.3)
 				}
 
 				timer.TickUp()
@@ -2235,7 +2235,7 @@ func (g *Game) QueueDefeatAnimation(originX, originY int) {
 }
 
 func (g *Game) QueueWinAnimation(originX, originY int) {
-	PlaySoundBytes(SeWobble2, 0.6)
+	PlaySoundBytes(SeVictory, 0.6)
 	fw, fh := f64(g.board.Width), f64(g.board.Height)
 
 	originP := FPt(f64(originX), f64(originY))
