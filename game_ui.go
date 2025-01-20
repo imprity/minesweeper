@@ -334,9 +334,9 @@ func NewDifficultySelectUI() *DifficultySelectUI {
 			}
 		}
 
-		ds.DifficultyButtonLeft.Image = SpriteSubView(TileSprite, 11)
-		ds.DifficultyButtonLeft.ImageOnHover = SpriteSubView(TileSprite, 11)
-		ds.DifficultyButtonLeft.ImageOnDown = SpriteSubView(TileSprite, 13)
+		ds.DifficultyButtonLeft.Image = SpriteSubView(TileSprite, 16)
+		ds.DifficultyButtonLeft.ImageOnHover = SpriteSubView(TileSprite, 16)
+		ds.DifficultyButtonLeft.ImageOnDown = SpriteSubView(TileSprite, 18)
 
 		ds.DifficultyButtonLeft.ImageColor = ColorTopUIButton
 		ds.DifficultyButtonLeft.ImageColorOnHover = ColorTopUIButtonOnHover
@@ -353,9 +353,9 @@ func NewDifficultySelectUI() *DifficultySelectUI {
 			}
 		}
 
-		ds.DifficultyButtonRight.Image = SpriteSubView(TileSprite, 12)
-		ds.DifficultyButtonRight.ImageOnHover = SpriteSubView(TileSprite, 12)
-		ds.DifficultyButtonRight.ImageOnDown = SpriteSubView(TileSprite, 14)
+		ds.DifficultyButtonRight.Image = SpriteSubView(TileSprite, 17)
+		ds.DifficultyButtonRight.ImageOnHover = SpriteSubView(TileSprite, 17)
+		ds.DifficultyButtonRight.ImageOnDown = SpriteSubView(TileSprite, 19)
 
 		ds.DifficultyButtonRight.ImageColor = ColorTopUIButton
 		ds.DifficultyButtonRight.ImageColorOnHover = ColorTopUIButtonOnHover
@@ -580,7 +580,7 @@ func NewTimerUI() *TimerUI {
 
 		// draw timer icon
 		DrawSubViewInRect(
-			dst, timerRect, 1.0, 0, 0, ColorTopUITitle, SpriteSubView(TileSprite, 15),
+			dst, timerRect, 1.0, 0, 0, ColorTopUITitle, SpriteSubView(TileSprite, 20),
 		)
 
 		textX := idealTextX*scale + actualRect.Min.X
@@ -664,9 +664,9 @@ func NewMuteButtonUI() *MuteButtonUI {
 	{
 		mu.MuteButton = NewImageButton()
 
-		mu.MuteButton.Image = SpriteSubView(TileSprite, 17)
-		mu.MuteButton.ImageOnHover = SpriteSubView(TileSprite, 17)
-		mu.MuteButton.ImageOnDown = SpriteSubView(TileSprite, 17)
+		mu.MuteButton.Image = SpriteSubView(TileSprite, 22)
+		mu.MuteButton.ImageOnHover = SpriteSubView(TileSprite, 22)
+		mu.MuteButton.ImageOnDown = SpriteSubView(TileSprite, 22)
 
 		mu.MuteButton.ImageColor = ColorTopUIButton
 		mu.MuteButton.ImageColorOnHover = ColorTopUIButtonOnHover
@@ -675,14 +675,14 @@ func NewMuteButtonUI() *MuteButtonUI {
 		mu.MuteButton.OnPress = func(justPressed bool) {
 			mu.IsMute = !mu.IsMute
 			if mu.IsMute {
-				mu.MuteButton.Image = SpriteSubView(TileSprite, 16)
-				mu.MuteButton.ImageOnHover = SpriteSubView(TileSprite, 16)
-				mu.MuteButton.ImageOnDown = SpriteSubView(TileSprite, 16)
+				mu.MuteButton.Image = SpriteSubView(TileSprite, 21)
+				mu.MuteButton.ImageOnHover = SpriteSubView(TileSprite, 21)
+				mu.MuteButton.ImageOnDown = SpriteSubView(TileSprite, 21)
 				SetGlobalVolume(0)
 			} else {
-				mu.MuteButton.Image = SpriteSubView(TileSprite, 17)
-				mu.MuteButton.ImageOnHover = SpriteSubView(TileSprite, 17)
-				mu.MuteButton.ImageOnDown = SpriteSubView(TileSprite, 17)
+				mu.MuteButton.Image = SpriteSubView(TileSprite, 22)
+				mu.MuteButton.ImageOnHover = SpriteSubView(TileSprite, 22)
+				mu.MuteButton.ImageOnDown = SpriteSubView(TileSprite, 22)
 				SetGlobalVolume(1)
 			}
 		}

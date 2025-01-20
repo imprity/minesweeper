@@ -1,7 +1,7 @@
 {
     "spriteWidth": 100,
     "spriteHeight": 100,
-    "spriteMargin": 0,
-    "spriteCount": 9
+    "spriteMargin": 2,
+    "spriteCount": 64
 }
 

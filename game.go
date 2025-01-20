@@ -1187,7 +1187,7 @@ func VIaddSubViewInRect(
 }
 
 var DBC = struct { // DrawBoard cache
-	VIBuffers [3]*VIBuffer
+	VIBuffers [2]*VIBuffer
 
 	ShouldDrawBgTile Array2D[bool]
 	ShouldDrawTile   Array2D[bool]
@@ -1204,9 +1204,8 @@ var DBC = struct { // DrawBoard cache
 
 func init() {
 	// NOTE : hard coded number based on previous run
-	DBC.VIBuffers[0] = NewVIBuffer(4096, 16384)
+	DBC.VIBuffers[0] = NewVIBuffer(4096, 4096)
 	DBC.VIBuffers[1] = NewVIBuffer(2048, 2048)
-	DBC.VIBuffers[2] = NewVIBuffer(2048, 2048)
 }
 
 func DrawBoard(
@@ -1373,7 +1372,6 @@ func DrawBoard(
 
 	shapeBuf := DBC.VIBuffers[0]
 	spriteBuf := DBC.VIBuffers[1]
-	flagSpriteBuf := DBC.VIBuffers[2]
 
 	const segments = 6
 
@@ -1511,7 +1509,7 @@ func DrawBoard(
 			}
 		} else if style.FgType == TileFgTypeFlag {
 			VIaddSubViewInRect(
-				flagSpriteBuf,
+				spriteBuf,
 				fgRect,
 				style.FgScale,
 				style.FgOffsetX, style.FgOffsetY,
@@ -1595,18 +1593,15 @@ func DrawBoard(
 		EndFilter()
 	}
 
-	// flush flag sprites
-	{
-		BeginAntiAlias(false)
-		BeginFilter(eb.FilterLinear)
-		BeginMipMap(true)
-		op := &DrawTrianglesOptions{}
-		op.ColorScaleMode = eb.ColorScaleModePremultipliedAlpha
-		DrawTriangles(dst, flagSpriteBuf.Vertices, flagSpriteBuf.Indices, FlagAnimSprite.Image, op)
-		EndMipMap()
-		EndAntiAlias()
-		EndFilter()
-	}
+	/*
+		{
+			DebugPrint("Vertices 0", len(DBC.VIBuffers[0].Vertices))
+			DebugPrint("Indices  0", len(DBC.VIBuffers[0].Indices))
+
+			DebugPrint("Vertices 1", len(DBC.VIBuffers[1].Vertices))
+			DebugPrint("Indices  1", len(DBC.VIBuffers[1].Indices))
+		}
+	*/
 }
 
 func DrawParticles(
@@ -2715,21 +2710,22 @@ func (g *Game) SkipAllAnimationsUntilTag(tags ...AnimationTag) {
 }
 
 func GetNumberTile(number int) SubView {
-	if !(1 <= number && number <= 8) {
+	if !(0 <= number && number <= 9) {
 		ErrLogger.Fatalf("%d is not a valid number", number)
 	}
 
-	return SpriteSubView(TileSprite, number-1)
+	return SpriteSubView(TileSprite, number)
 }
 
 func GetMineTile() SubView {
-	return SpriteSubView(TileSprite, 9)
+	return SpriteSubView(TileSprite, 10)
 }
 
 func GetFlagTile(animT float64) SubView {
-	frame := int(math.Round(animT * f64(FlagAnimSprite.Count-1)))
-	frame = Clamp(frame, 0, FlagAnimSprite.Count-1)
-	return SpriteSubView(FlagAnimSprite, frame)
+	const flagSpriteSount = 9
+	frame := int(math.Round(animT * f64(flagSpriteSount-1)))
+	frame = Clamp(frame, 0, flagSpriteSount-1)
+	return SpriteSubView(TileSprite, frame+32)
 }
 
 // returns rounded cornder rect SubView
@@ -2742,6 +2738,8 @@ func GetRoundTile(isRound [4]bool) (SubView, int) {
 		d270 = 3
 	)
 
+	const tileStart = 56
+
 	roundCount := 0
 
 	for _, round := range isRound {
@@ -2752,61 +2750,63 @@ func GetRoundTile(isRound [4]bool) (SubView, int) {
 
 	switch roundCount {
 	case 0:
-		return SpriteSubView(TileSprite, 20), d0
+		return SpriteSubView(TileSprite, tileStart), d0
 	case 1:
 		if isRound[0] {
-			return SpriteSubView(TileSprite, 21), d0
+			return SpriteSubView(TileSprite, tileStart+1), d0
 		}
 		if isRound[1] {
-			return SpriteSubView(TileSprite, 21), d90
+			return SpriteSubView(TileSprite, tileStart+1), d90
 		}
 		if isRound[2] {
-			return SpriteSubView(TileSprite, 21), d180
+			return SpriteSubView(TileSprite, tileStart+1), d180
 		}
 		if isRound[3] {
-			return SpriteSubView(TileSprite, 21), d270
+			return SpriteSubView(TileSprite, tileStart+1), d270
 		}
 	case 2:
 		if !isRound[0] && !isRound[1] {
-			return SpriteSubView(TileSprite, 22), d180
+			return SpriteSubView(TileSprite, tileStart+2), d180
 		}
 		if !isRound[1] && !isRound[2] {
-			return SpriteSubView(TileSprite, 22), d270
+			return SpriteSubView(TileSprite, tileStart+2), d270
 		}
 		if !isRound[2] && !isRound[3] {
-			return SpriteSubView(TileSprite, 22), d0 // d360
+			return SpriteSubView(TileSprite, tileStart+2), d0 // d360
 		}
 		if !isRound[3] && !isRound[0] {
-			return SpriteSubView(TileSprite, 22), d90 // d450
+			return SpriteSubView(TileSprite, tileStart+2), d90 // d450
 		}
 	case 3:
 		if !isRound[0] {
-			return SpriteSubView(TileSprite, 23), d90
+			return SpriteSubView(TileSprite, tileStart+3), d90
 		}
 		if !isRound[1] {
-			return SpriteSubView(TileSprite, 23), d180
+			return SpriteSubView(TileSprite, tileStart+3), d180
 		}
 		if !isRound[2] {
-			return SpriteSubView(TileSprite, 23), d270
+			return SpriteSubView(TileSprite, tileStart+3), d270
 		}
 		if !isRound[3] {
-			return SpriteSubView(TileSprite, 23), d0 // d360
+			return SpriteSubView(TileSprite, tileStart+3), d0 // d360
 		}
 	case 4:
-		return SpriteSubView(TileSprite, 24), d0
+		return SpriteSubView(TileSprite, tileStart+4), d0
 	default:
 		panic("UNREACHABLE")
 	}
 
-	return SpriteSubView(TileSprite, 24), d0
+	return SpriteSubView(TileSprite, tileStart+4), d0
 }
 
 func GetAllRoundTile() SubView {
-	return SpriteSubView(TileSprite, 24)
+	const tileStart = 56
+	return SpriteSubView(TileSprite, tileStart+4)
 }
 
 func GetRectTile() SubView {
-	return SpriteSubView(TileSprite, 20)
+	const tileStart = 56
+	return SpriteSubView(TileSprite, tileStart)
 }
 
 func MousePosToBoardPos(board Board, boardRect FRectangle, mousePos FPoint) (int, int) {
@@ -3017,6 +3017,15 @@ REVEAL_LOOP:
 			if !g.board.Mines.Get(x, y) && !g.board.Revealed.Get(x, y) {
 				g.board.Revealed.Set(x, y, true)
 				tilesToReveal--
+			}
+		}
+	}
+
+	// flag every mines
+	for x := range g.board.Width {
+		for y := range g.board.Height {
+			if g.board.Mines.Get(x, y) {
+				g.board.Flags.Set(x, y, true)
 			}
 		}
 	}

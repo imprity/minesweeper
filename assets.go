@@ -20,7 +20,6 @@ import (
 var EmbeddedAssets embed.FS
 
 var TileSprite Sprite
-var FlagAnimSprite Sprite
 
 var RetryButtonImage *eb.Image
 
@@ -167,16 +166,10 @@ func LoadAssets() {
 		return sprite
 	}
 
-	// load tile sprite
+	// load TileSprite
 	TileSprite = loadSprite(
-		"assets/spritesheet-100x100-5x5.png",
-		"assets/spritesheet-100x100-5x5.json",
-	)
-
-	// load flag animation
-	FlagAnimSprite = loadSprite(
-		"assets/flag-animation-100x100-4x4.png",
-		"assets/flag-animation-100x100-4x4.json",
+		"assets/spritesheet-100x100-8x8.png",
+		"assets/spritesheet-100x100-8x8.json",
 	)
 
 	// load RetryButtonImage
