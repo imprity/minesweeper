@@ -26,6 +26,7 @@ var RetryButtonImage *eb.Image
 var (
 	ClearFace *ebt.GoTextFace
 
+	FaceSource  *ebt.GoTextFaceSource
 	RegularFace *ebt.GoTextFace
 	BoldFace    *ebt.GoTextFace
 )
@@ -168,8 +169,8 @@ func LoadAssets() {
 
 	// load TileSprite
 	TileSprite = loadSprite(
-		"assets/spritesheet-100x100-8x8.png",
-		"assets/spritesheet-100x100-8x8.json",
+		"assets/spritesheet-50x50-8x8.png",
+		"assets/spritesheet-50x50-8x8.json",
 	)
 
 	// load RetryButtonImage
@@ -188,6 +189,8 @@ func LoadAssets() {
 		if err != nil {
 			ErrLogger.Fatalf("failed to load font: %v", err)
 		}
+
+		FaceSource = faceSource
 
 		BoldFace = &ebt.GoTextFace{
 			Source: faceSource,

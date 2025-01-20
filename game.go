@@ -15,9 +15,11 @@ import (
 	"math"
 	"math/rand/v2"
 	"slices"
+	"strconv"
 	"time"
 
 	eb "github.com/hajimehoshi/ebiten/v2"
+	ebt "github.com/hajimehoshi/ebiten/v2/text/v2"
 	ebv "github.com/hajimehoshi/ebiten/v2/vector"
 )
 
@@ -1200,6 +1202,9 @@ var DBC = struct { // DrawBoard cache
 
 	TileFirmlyPlaced Array2D[bool]
 	TileRoundness    Array2D[[4]bool]
+
+	NumberFace       *ebt.GoTextFace
+	NumberFaceHeight float64
 }{}
 
 func init() {
@@ -1368,6 +1373,22 @@ func DrawBoard(
 				DBC.TileRoundness.Set(x, y, isRound)
 			}
 		}
+
+		// numberFace
+		{
+			_, tileSizeH := GetBoardTileSize(boardRect, board.Width, board.Height)
+			targetFaceHeight := tileSizeH * 0.95
+
+			if DBC.NumberFace == nil || !CloseToEx(targetFaceHeight, DBC.NumberFaceHeight, 0.01) {
+				DBC.NumberFaceHeight = targetFaceHeight
+
+				DBC.NumberFace = &ebt.GoTextFace{
+					Source: FaceSource,
+					Size:   DBC.NumberFaceHeight,
+				}
+				DBC.NumberFace.SetVariation(ebt.MustParseTag("wght"), 700)
+			}
+		}
 	}
 
 	shapeBuf := DBC.VIBuffers[0]
@@ -1492,31 +1513,21 @@ func DrawBoard(
 			continue
 		}
 
+		if style.FgType != TileFgTypeFlag {
+			continue
+		}
+
 		fgRect := DBC.TileFillRects.Get(x, y)
 		fgColor := style.FgColor
 
-		if style.FgType == TileFgTypeNumber {
-			count := board.GetNeighborMineCount(x, y)
-			if 1 <= count && count <= 8 {
-				VIaddSubViewInRect(
-					spriteBuf,
-					fgRect,
-					style.FgScale,
-					style.FgOffsetX, style.FgOffsetY,
-					modColor(fgColor, style.FgAlpha, style.Highlight, ColorFgHighLight),
-					GetNumberTile(count),
-				)
-			}
-		} else if style.FgType == TileFgTypeFlag {
-			VIaddSubViewInRect(
-				spriteBuf,
-				fgRect,
-				style.FgScale,
-				style.FgOffsetX, style.FgOffsetY,
-				modColor(fgColor, style.FgAlpha, style.Highlight, ColorFgHighLight),
-				GetFlagTile(style.FlagAnim),
-			)
-		}
+		VIaddSubViewInRect(
+			spriteBuf,
+			fgRect,
+			style.FgScale,
+			style.FgOffsetX, style.FgOffsetY,
+			modColor(fgColor, style.FgAlpha, style.Highlight, ColorFgHighLight),
+			GetFlagTile(style.FlagAnim),
+		)
 	}
 
 	// ====================
@@ -1584,7 +1595,7 @@ func DrawBoard(
 	{
 		BeginAntiAlias(false)
 		BeginFilter(eb.FilterLinear)
-		BeginMipMap(true)
+		BeginMipMap(false)
 		op := &DrawTrianglesOptions{}
 		op.ColorScaleMode = eb.ColorScaleModePremultipliedAlpha
 		DrawTriangles(dst, spriteBuf.Vertices, spriteBuf.Indices, TileSprite.Image, op)
@@ -1602,6 +1613,49 @@ func DrawBoard(
 			DebugPrint("Indices  1", len(DBC.VIBuffers[1].Indices))
 		}
 	*/
+
+	// draw numbers
+
+	BeginAntiAlias(false)
+	BeginFilter(eb.FilterNearest)
+	BeginMipMap(false)
+
+	iter.Reset()
+	for iter.HasNext() {
+		x, y := iter.GetNext()
+		style := tileStyles.Get(x, y)
+
+		if !DBC.ShouldDrawFgTile.Get(x, y) {
+			continue
+		}
+
+		fgRect := DBC.TileFillRects.Get(x, y)
+		fgScale := style.FgScale
+		fgColor := style.FgColor
+
+		if style.FgType == TileFgTypeNumber {
+			count := board.GetNeighborMineCount(x, y)
+			if 1 <= count && count <= 8 {
+				op := &DrawTextOptions{}
+				op.PrimaryAlign = ebt.AlignCenter
+
+				center := FRectangleCenter(fgRect)
+
+				op.GeoM.Translate(0, -DBC.NumberFaceHeight*0.6)
+				op.GeoM.Scale(fgScale, fgScale)
+
+				op.GeoM.Translate(
+					center.X+style.FgOffsetX, center.Y+style.FgOffsetX,
+				)
+				op.ColorScale.ScaleWithColor(modColor(fgColor, style.FgAlpha, style.Highlight, ColorFgHighLight))
+
+				DrawText(dst, strconv.Itoa(count), DBC.NumberFace, op)
+			}
+		}
+	}
+	EndMipMap()
+	EndAntiAlias()
+	EndFilter()
 }
 
 func DrawParticles(
