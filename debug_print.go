@@ -104,16 +104,16 @@ func DrawDebugMsgs(dst *eb.Image) {
 		}
 	}
 
-	const fontSize = 20
+	const faceSize = 20
 	const hozMargin = 5
 	const vertMargin = 5
 
-	scale := fontSize / FaceSize(ClearFace)
-	fontLineSpacing := FaceLineSpacing(ClearFace) + 3
+	scale := faceSize / FaceSize(ClearFace)
+	faceLineSpacing := FaceLineSpacing(ClearFace) + 3
 
 	text := dm.builder.String()
 
-	w, h := ebt.Measure(text, ClearFace, fontLineSpacing)
+	w, h := ebt.Measure(text, ClearFace, faceLineSpacing)
 
 	// update width and height of background rect
 	boxW, boxH := w*scale+hozMargin*2, h*scale+vertMargin*2
@@ -156,7 +156,7 @@ func DrawDebugMsgs(dst *eb.Image) {
 			hozMargin, vertMargin,
 		)
 		op.ColorScale.ScaleWithColor(color.NRGBA{255, 255, 255, 255})
-		op.LayoutOptions.LineSpacing = fontLineSpacing
+		op.LayoutOptions.LineSpacing = faceLineSpacing
 
 		DrawText(dm.DebugMsgRenderTarget, text, ClearFace, op)
 	}

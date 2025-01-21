@@ -161,10 +161,10 @@ func WidthLimitFace(
 
 func FitTextInRect(
 	text string,
-	fontFace ebt.Face,
+	face ebt.Face,
 	rect FRectangle,
 ) eb.GeoM {
-	textW, textH := ebt.Measure(text, fontFace, FaceLineSpacing(fontFace))
+	textW, textH := ebt.Measure(text, face, FaceLineSpacing(face))
 	scale := min(rect.Dx()/textW, rect.Dy()/textH)
 	geom := TransformToCenter(textW, textH, scale, scale, 0)
 	center := FRectangleCenter(rect)
