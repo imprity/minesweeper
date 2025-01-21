@@ -350,9 +350,9 @@ func (cp *ColorPicker) Draw(dst *eb.Image) {
 		textRectHeight := textRect.Dy() / 3
 
 		// TODO : this can be cached
-		hsvSizeX, hsvSizeY := ebt.Measure("1.00 1.00 1.00 1.00", ClearFace, FontLineSpacing(ClearFace))
-		rgbSizeX, rgbSizeY := ebt.Measure("255 255 255 255", ClearFace, FontLineSpacing(ClearFace))
-		hexSizeX, hexSizeY := ebt.Measure("#FFFFFFFF", ClearFace, FontLineSpacing(ClearFace))
+		hsvSizeX, hsvSizeY := ebt.Measure("1.00 1.00 1.00 1.00", ClearFace, FaceLineSpacing(ClearFace))
+		rgbSizeX, rgbSizeY := ebt.Measure("255 255 255 255", ClearFace, FaceLineSpacing(ClearFace))
+		hexSizeX, hexSizeY := ebt.Measure("#FFFFFFFF", ClearFace, FaceLineSpacing(ClearFace))
 
 		sizeX, sizeY := max(hsvSizeX, rgbSizeX, hexSizeX), max(hsvSizeY, rgbSizeY, hexSizeY)
 

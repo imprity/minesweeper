@@ -210,7 +210,7 @@ func (b *TextButton) Draw(dst *eb.Image) {
 
 	// draw text color
 	if len(b.Text) > 0 {
-		textW, textH := ebt.Measure(b.Text, ClearFace, FontLineSpacing(ClearFace))
+		textW, textH := ebt.Measure(b.Text, ClearFace, FaceLineSpacing(ClearFace))
 
 		scale := min(b.Rect.Dx()*0.9/textW, b.Rect.Dy()*0.9/textH)
 

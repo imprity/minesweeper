@@ -108,8 +108,8 @@ func DrawDebugMsgs(dst *eb.Image) {
 	const hozMargin = 5
 	const vertMargin = 5
 
-	scale := fontSize / FontSize(ClearFace)
-	fontLineSpacing := FontLineSpacing(ClearFace) + 3
+	scale := fontSize / FaceSize(ClearFace)
+	fontLineSpacing := FaceLineSpacing(ClearFace) + 3
 
 	text := dm.builder.String()
 

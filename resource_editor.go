@@ -193,7 +193,7 @@ func (re *ResourceEditor) Draw(dst *eb.Image) {
 
 		const textScale = 0.3
 
-		lineSpacing := FontLineSpacing(ClearFace)
+		lineSpacing := FaceLineSpacing(ClearFace)
 
 		var bgWidth float64
 		var bgHeight float64

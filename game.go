@@ -1202,9 +1202,6 @@ var DBC = struct { // DrawBoard cache
 
 	TileFirmlyPlaced Array2D[bool]
 	TileRoundness    Array2D[[4]bool]
-
-	NumberFace       *ebt.GoTextFace
-	NumberFaceHeight float64
 }{}
 
 func init() {
@@ -1375,20 +1372,22 @@ func DrawBoard(
 		}
 
 		// numberFace
-		{
-			_, tileSizeH := GetBoardTileSize(boardRect, board.Width, board.Height)
-			targetFaceHeight := tileSizeH * 0.95
+		/*
+			{
+				_, tileSizeH := GetBoardTileSize(boardRect, board.Width, board.Height)
+				targetFaceHeight := tileSizeH * 0.95
 
-			if DBC.NumberFace == nil || !CloseToEx(targetFaceHeight, DBC.NumberFaceHeight, 0.01) {
-				DBC.NumberFaceHeight = targetFaceHeight
+				if DBC.NumberFace == nil || !CloseToEx(targetFaceHeight, DBC.NumberFaceHeight, 0.01) {
+					DBC.NumberFaceHeight = targetFaceHeight
 
-				DBC.NumberFace = &ebt.GoTextFace{
-					Source: NumberFaceSource,
-					Size:   DBC.NumberFaceHeight,
+					DBC.NumberFace = &ebt.GoTextFace{
+						Source: FaceSource,
+						Size:   DBC.NumberFaceHeight,
+					}
+					DBC.NumberFace.SetVariation(ebt.MustParseTag("wght"), 600)
 				}
-				DBC.NumberFace.SetVariation(ebt.MustParseTag("wght"), 600)
 			}
-		}
+		*/
 	}
 
 	shapeBuf := DBC.VIBuffers[0]
@@ -1615,6 +1614,15 @@ func DrawBoard(
 	*/
 
 	// draw numbers
+	var numberFace *ebt.GoTextFace
+	{
+		_, tileSizeH := GetBoardTileSize(boardRect, board.Width, board.Height)
+		numberFace = &ebt.GoTextFace{
+			Source: FaceSource,
+			Size:   tileSizeH * 0.95,
+		}
+		numberFace.SetVariation(ebt.MustParseTag("wght"), 600)
+	}
 
 	BeginAntiAlias(false)
 	BeginFilter(eb.FilterNearest)
@@ -1641,7 +1649,7 @@ func DrawBoard(
 
 				center := FRectangleCenter(fgRect)
 
-				op.GeoM.Translate(0, -DBC.NumberFaceHeight*0.58)
+				op.GeoM.Translate(0, -numberFace.Size*0.58)
 				op.GeoM.Scale(fgScale, fgScale)
 
 				op.GeoM.Translate(
@@ -1649,7 +1657,7 @@ func DrawBoard(
 				)
 				op.ColorScale.ScaleWithColor(modColor(fgColor, style.FgAlpha, style.Highlight, ColorFgHighLight))
 
-				DrawText(dst, strconv.Itoa(count), DBC.NumberFace, op)
+				DrawText(dst, strconv.Itoa(count), numberFace, op)
 			}
 		}
 	}

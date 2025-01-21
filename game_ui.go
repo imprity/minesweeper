@@ -7,6 +7,7 @@ import (
 	"time"
 
 	eb "github.com/hajimehoshi/ebiten/v2"
+	ebt "github.com/hajimehoshi/ebiten/v2/text/v2"
 )
 
 var _ = color.White
@@ -292,9 +293,11 @@ func (tu *TopUI) RenderedRect() FRectangle {
 }
 
 const (
-	TopUIIdealHeight   = 100
-	TopUIIdealFontSize = 80
-	TopUIIdealTextY    = 50
+	TopUIIdealHeight = 100
+	/*
+		TopUIIdealFaceSize = 71
+		TopUIIdealTextY    = 46
+	*/
 )
 
 type TopUIElement struct {
@@ -369,21 +372,26 @@ func NewDifficultySelectUI() *DifficultySelectUI {
 	var idealTextWidths [DifficultySize]float64
 	var idealTextCenterX float64
 
-	idealFontSize := float64(TopUIIdealFontSize)
+	const idealFaceSize = 71
+
+	idealFace := &ebt.GoTextFace{
+		Source: FaceSource,
+		Size:   idealFaceSize,
+	}
+	idealFace.SetVariation(ebt.MustParseTag("wght"), 700)
 
 	for d := Difficulty(0); d < DifficultySize; d++ {
 		str := DifficultyStrs[d]
-		w, _ := MeasureTextSized(
+		w, _ := ebt.Measure(
 			str,
-			BoldFace,
-			idealFontSize,
-			FontLineSpacingSized(BoldFace, idealFontSize),
+			idealFace,
+			FaceLineSpacing(idealFace),
 		)
 		idealTextWidths[d] = w
 		idealMaxTextWidth = max(w, idealMaxTextWidth)
 	}
 
-	const idealMargin = 10
+	const idealMargin = 15
 	var idealBtnSize FPoint = FPt(70, 70)
 
 	var idealWidth float64 = idealBtnSize.X + idealMargin + idealMaxTextWidth + idealMargin + idealBtnSize.X
@@ -401,8 +409,8 @@ func NewDifficultySelectUI() *DifficultySelectUI {
 		idealBtnSize.X, idealBtnSize.Y,
 	)
 
-	idealBtnRectLeft = idealBtnRectLeft.Add(FPt(0, 5))
-	idealBtnRectRight = idealBtnRectRight.Add(FPt(0, 5))
+	idealBtnRectLeft = idealBtnRectLeft.Add(FPt(0, 4))
+	idealBtnRectRight = idealBtnRectRight.Add(FPt(0, 4))
 
 	idealTextCenterX = idealWidth * 0.5
 
@@ -417,28 +425,38 @@ func NewDifficultySelectUI() *DifficultySelectUI {
 		ds.DifficultyButtonRight.Update()
 	}
 
+	difficultyTextOffsetsY := [DifficultySize]float64{
+		-1.6,
+		0,
+		1,
+	}
+
 	ds.OnDraw = func(dst *eb.Image, actualRect FRectangle, scale float64) {
 		ds.DifficultyButtonLeft.Draw(dst)
 		ds.DifficultyButtonRight.Draw(dst)
 
-		const idealTextOffsetY = -1
-
 		// draw text
-		textY := (TopUIIdealTextY+idealTextOffsetY)*scale + actualRect.Min.Y
+		textCenterY := (actualRect.Min.Y + actualRect.Max.Y) * 0.5
 		textCenterX := idealTextCenterX*scale + actualRect.Min.X
-		textX := textCenterX - idealTextWidths[ds.Difficulty]*scale*0.5
 
-		fontSize := idealFontSize * scale
+		textCenterY += difficultyTextOffsetsY[ds.Difficulty] * scale
+
+		faceSize := idealFaceSize * scale
+		face := &ebt.GoTextFace{
+			Source: FaceSource,
+			Size:   faceSize,
+		}
+		face.SetVariation(ebt.MustParseTag("wght"), 700)
 
 		op := &DrawTextOptions{}
-		op.GeoM.Concat(TextToYcenter(
-			BoldFace,
-			fontSize,
-			textX, textY,
-		))
+		op.PrimaryAlign = ebt.AlignCenter
+		op.GeoM.Translate(
+			textCenterX,
+			textCenterY-FaceSize(face)*0.5,
+		)
 		op.ColorScale.ScaleWithColor(ColorTopUITitle)
 
-		DrawText(dst, DifficultyStrs[ds.Difficulty], BoldFace, op)
+		DrawText(dst, DifficultyStrs[ds.Difficulty], face, op)
 	}
 
 	return ds
@@ -461,16 +479,23 @@ func NewFlagUI() *FlagUI {
 	)
 	idealFlagRect = idealFlagRect.Add(FPt(0, -5))
 
-	idealFontSize := TopUIIdealFontSize * 0.85
+	const idealFaceSize = 62
 
 	const idealMargin = 6
 
 	var idealTextX float64 = idealFlagRect.Dx() + idealMargin
+	const idealTextY = 54
 
 	var idealMaxTextWidth float64
 	{
-		w, _ := MeasureTextSized(
-			"000", RegularFace, idealFontSize, FontLineSpacingSized(RegularFace, idealFontSize))
+		idealFace := &ebt.GoTextFace{
+			Source: FaceSource,
+			Size:   idealFaceSize,
+		}
+		idealFace.SetVariation(ebt.MustParseTag("wght"), 400)
+
+		w, _ := ebt.Measure(
+			"000", idealFace, FaceLineSpacing(idealFace))
 		idealMaxTextWidth = w
 	}
 
@@ -487,27 +512,27 @@ func NewFlagUI() *FlagUI {
 
 		// draw flag icon
 		DrawSubViewInRect(
-			dst, flagRect, 1.1, 0, -scale*2, ColorTopUIFlag, GetFlagTile(1.0),
+			dst, flagRect, 1.1, 0, 0, ColorTopUIFlag, GetFlagTile(1.0),
 		)
 
 		textX := idealTextX*scale + actualRect.Min.X
-		textY := TopUIIdealTextY*scale + actualRect.Min.Y
+		textCenterY := idealTextY*scale + actualRect.Min.Y
 
 		text := fmt.Sprintf("%d", fu.FlagCount)
 
-		fontSize := idealFontSize * scale
+		faceSize := idealFaceSize * scale
+		face := &ebt.GoTextFace{
+			Source: FaceSource,
+			Size:   faceSize,
+		}
+		face.SetVariation(ebt.MustParseTag("wght"), 400)
+		WidthLimitFace(text, face, idealMaxTextWidth*scale)
 
 		op := &DrawTextOptions{}
-		op.GeoM.Concat(TextToYcenterLimitWidth(
-			text,
-			RegularFace,
-			fontSize,
-			textX, textY,
-			idealMaxTextWidth*scale,
-		))
+		op.GeoM.Translate(textX, textCenterY-FaceSize(face)*0.5)
 		op.ColorScale.ScaleWithColor(ColorTopUITitle)
 
-		DrawText(dst, text, RegularFace, op)
+		DrawText(dst, text, face, op)
 	}
 
 	return fu
@@ -534,27 +559,32 @@ func NewTimerUI() *TimerUI {
 	const idealMargin = 10
 
 	var idealTextX float64 = idealTimerRect.Dx() + idealMargin
+	const idealTextY = 51
 
-	var idealFontSizeNormal float64 = TopUIIdealFontSize * 0.8
+	var idealFaceSizeNormal float64 = 58
+	var idealFaceSizeSmall float64
 
 	var idealMaxTextWidth float64
 	{
-		w, _ := MeasureTextSized(
+		idealFace := &ebt.GoTextFace{
+			Source: FaceSource,
+			Size:   idealFaceSizeNormal,
+		}
+		idealFace.SetVariation(ebt.MustParseTag("wght"), 400)
+
+		w, _ := ebt.Measure(
 			"00:00",
-			RegularFace, idealFontSizeNormal,
-			FontLineSpacingSized(RegularFace, idealFontSizeNormal),
+			idealFace,
+			FaceLineSpacing(idealFace),
 		)
 		idealMaxTextWidth = w
-	}
 
-	var idealFontSizeSmall float64
-	{
-		w, _ := MeasureTextSized(
+		w, _ = ebt.Measure(
 			"00:00:00",
-			RegularFace, idealFontSizeNormal,
-			FontLineSpacingSized(RegularFace, idealFontSizeNormal),
+			idealFace,
+			FaceLineSpacing(idealFace),
 		)
-		idealFontSizeSmall = idealFontSizeNormal * (idealMaxTextWidth / w)
+		idealFaceSizeSmall = idealFaceSizeNormal * (idealMaxTextWidth / w)
 	}
 
 	tu.GetIdealWidth = func() float64 {
@@ -584,17 +614,11 @@ func NewTimerUI() *TimerUI {
 		)
 
 		textX := idealTextX*scale + actualRect.Min.X
-		textY := TopUIIdealTextY*scale + actualRect.Min.Y
+		textCenterY := idealTextY*scale + actualRect.Min.Y
 
 		currentTime := tu.CurrentTime()
 
 		hours, minutes, seconds := GetHourMinuteSeconds(currentTime)
-
-		fontSize := idealFontSizeNormal
-		if hours > 0 {
-			fontSize = idealFontSizeSmall
-		}
-		fontSize *= scale
 
 		var text string
 		if hours > 0 {
@@ -609,17 +633,24 @@ func NewTimerUI() *TimerUI {
 			)
 		}
 
+		faceSize := idealFaceSizeNormal
+		if hours > 0 {
+			faceSize = idealFaceSizeSmall
+		}
+		faceSize *= scale
+
+		face := &ebt.GoTextFace{
+			Source: FaceSource,
+			Size:   faceSize,
+		}
+		face.SetVariation(ebt.MustParseTag("wght"), 400)
+		WidthLimitFace(text, face, idealMaxTextWidth*scale)
+
 		op := &DrawTextOptions{}
-		op.GeoM.Concat(TextToYcenterLimitWidth(
-			text,
-			RegularFace,
-			fontSize,
-			textX, textY,
-			idealMaxTextWidth*scale,
-		))
+		op.GeoM.Translate(textX, textCenterY-FaceSize(face)*0.5)
 		op.ColorScale.ScaleWithColor(ColorTopUITitle)
 
-		DrawText(dst, text, RegularFace, op)
+		DrawText(dst, text, face, op)
 	}
 
 	return tu

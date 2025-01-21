@@ -27,9 +27,7 @@ var RetryButtonImage *eb.Image
 var (
 	ClearFace *ebt.GoTextFace
 
-	NumberFaceSource *ebt.GoTextFaceSource
-	RegularFace      *ebt.GoTextFace
-	BoldFace         *ebt.GoTextFace
+	FaceSource *ebt.GoTextFaceSource
 )
 
 var (
@@ -195,21 +193,7 @@ func LoadAssets() {
 		if err != nil {
 			ErrLogger.Fatalf("failed to load font: %v", err)
 		}
-		NumberFaceSource = faceSource
-
-		BoldFace = &ebt.GoTextFace{
-			Source: faceSource,
-			Size:   64,
-		}
-
-		BoldFace.SetVariation(ebt.MustParseTag("wght"), 700)
-
-		RegularFace = &ebt.GoTextFace{
-			Source: faceSource,
-			Size:   64,
-		}
-
-		RegularFace.SetVariation(ebt.MustParseTag("wght"), 400)
+		FaceSource = faceSource
 	}
 	{
 		clearFontFile := mustLoadData("dejavu-fonts-ttf-2.37/ttf/DejaVuSansMono.ttf")
