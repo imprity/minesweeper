@@ -1383,10 +1383,10 @@ func DrawBoard(
 				DBC.NumberFaceHeight = targetFaceHeight
 
 				DBC.NumberFace = &ebt.GoTextFace{
-					Source: FaceSource,
+					Source: NumberFaceSource,
 					Size:   DBC.NumberFaceHeight,
 				}
-				DBC.NumberFace.SetVariation(ebt.MustParseTag("wght"), 700)
+				DBC.NumberFace.SetVariation(ebt.MustParseTag("wght"), 600)
 			}
 		}
 	}
@@ -1641,7 +1641,7 @@ func DrawBoard(
 
 				center := FRectangleCenter(fgRect)
 
-				op.GeoM.Translate(0, -DBC.NumberFaceHeight*0.6)
+				op.GeoM.Translate(0, -DBC.NumberFaceHeight*0.58)
 				op.GeoM.Scale(fgScale, fgScale)
 
 				op.GeoM.Translate(
@@ -2763,23 +2763,15 @@ func (g *Game) SkipAllAnimationsUntilTag(tags ...AnimationTag) {
 	AnimationQueueSkipUntilTag(&g.GameAnimations, tags...)
 }
 
-func GetNumberTile(number int) SubView {
-	if !(0 <= number && number <= 9) {
-		ErrLogger.Fatalf("%d is not a valid number", number)
-	}
-
-	return SpriteSubView(TileSprite, number)
-}
-
 func GetMineTile() SubView {
-	return SpriteSubView(TileSprite, 10)
+	return SpriteSubView(TileSprite, 0)
 }
 
 func GetFlagTile(animT float64) SubView {
 	const flagSpriteSount = 9
 	frame := int(math.Round(animT * f64(flagSpriteSount-1)))
 	frame = Clamp(frame, 0, flagSpriteSount-1)
-	return SpriteSubView(TileSprite, frame+32)
+	return SpriteSubView(TileSprite, frame+5)
 }
 
 // returns rounded cornder rect SubView
@@ -2792,7 +2784,7 @@ func GetRoundTile(isRound [4]bool) (SubView, int) {
 		d270 = 3
 	)
 
-	const tileStart = 56
+	const tileStart = 20
 
 	roundCount := 0
 
@@ -2854,12 +2846,12 @@ func GetRoundTile(isRound [4]bool) (SubView, int) {
 }
 
 func GetAllRoundTile() SubView {
-	const tileStart = 56
+	const tileStart = 20
 	return SpriteSubView(TileSprite, tileStart+4)
 }
 
 func GetRectTile() SubView {
-	const tileStart = 56
+	const tileStart = 20
 	return SpriteSubView(TileSprite, tileStart)
 }
 

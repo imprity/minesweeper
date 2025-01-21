@@ -20,15 +20,16 @@ import (
 var EmbeddedAssets embed.FS
 
 var TileSprite Sprite
+var UISprite Sprite
 
 var RetryButtonImage *eb.Image
 
 var (
 	ClearFace *ebt.GoTextFace
 
-	FaceSource  *ebt.GoTextFaceSource
-	RegularFace *ebt.GoTextFace
-	BoldFace    *ebt.GoTextFace
+	NumberFaceSource *ebt.GoTextFaceSource
+	RegularFace      *ebt.GoTextFace
+	BoldFace         *ebt.GoTextFace
 )
 
 var (
@@ -169,8 +170,13 @@ func LoadAssets() {
 
 	// load TileSprite
 	TileSprite = loadSprite(
-		"assets/spritesheet-50x50-8x8.png",
-		"assets/spritesheet-50x50-8x8.json",
+		"assets/tile-spritesheet-50x50-5x5.png",
+		"assets/tile-spritesheet-50x50-5x5.json",
+	)
+
+	UISprite = loadSprite(
+		"assets/ui-spritesheet-100x100-5x5.png",
+		"assets/ui-spritesheet-100x100-5x5.json",
 	)
 
 	// load RetryButtonImage
@@ -189,8 +195,7 @@ func LoadAssets() {
 		if err != nil {
 			ErrLogger.Fatalf("failed to load font: %v", err)
 		}
-
-		FaceSource = faceSource
+		NumberFaceSource = faceSource
 
 		BoldFace = &ebt.GoTextFace{
 			Source: faceSource,
