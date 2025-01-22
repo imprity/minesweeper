@@ -103,8 +103,6 @@ function initAudioContext(sampleRate) {
     let audioContext = new (window['AudioContext'] || window['webkitAudioContext'])({ sampleRate: sampleRate });
     AUDIO_CONTEXT = audioContext;
     InternalPlayer.audioContext = audioContext;
-}
-(() => {
     const events = ["touchend", "keyup", "mouseup"];
     let callback;
     const removeCallbacks = () => {
@@ -117,13 +115,13 @@ function initAudioContext(sampleRate) {
             if (typeof ON_AUDIO_RESUME === 'function') {
                 ON_AUDIO_RESUME();
             }
-            removeCallbacks();
         });
+        removeCallbacks();
     };
     events.forEach(toAdd => {
         document.addEventListener(toAdd, callback);
     });
-})();
+}
 // =================================
 // buffer functions
 // =================================

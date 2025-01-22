@@ -10,16 +10,14 @@ let AUDIO_BUFFERS : BufferMap = {}
 let INTERNAL_PLAYERS : InternalPlayerMap = []
 let AUDIO_CONTEXT : AudioContext = null
 
+declare var ON_AUDIO_RESUME : ()=>void
+
 function initAudioContext(sampleRate : number) {
     let audioContext = new (window['AudioContext'] || window['webkitAudioContext'])({sampleRate : sampleRate})
 
     AUDIO_CONTEXT = audioContext
     InternalPlayer.audioContext = audioContext
-}
 
-declare var ON_AUDIO_RESUME : ()=>void
-
-(()=>{
     const events = ["touchend", "keyup", "mouseup"]
 
     let callback : ()=>void
@@ -35,14 +33,14 @@ declare var ON_AUDIO_RESUME : ()=>void
             if (typeof ON_AUDIO_RESUME === 'function') {
                 ON_AUDIO_RESUME()
             }
-            removeCallbacks()
         })
+        removeCallbacks()
     }
 
     events.forEach(toAdd=>{
         document.addEventListener(toAdd, callback)
     })
-})()
+}
 
 // =================================
 // buffer functions
