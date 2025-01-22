@@ -50,6 +50,10 @@ var FlagHotReload bool
 //
 //	main--148-c9b1d68-dirty
 //
+// If release:
+//
+//	main--148-c9b1d68-release
+//
 //go:embed git_version.txt
 var GitVersionString string
 

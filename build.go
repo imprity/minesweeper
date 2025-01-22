@@ -371,7 +371,7 @@ func BuildApp(
 ) (error, int) {
 	// generate git_version.txt
 	{
-		versionStr, err, exitCode := GetGitVersionString()
+		versionStr, err, exitCode := GetGitVersionString(buildRelease)
 
 		if err != nil {
 			if !buildRelease {
@@ -827,7 +827,11 @@ func AddExeIfWindows(path string) string {
 // If dirty:
 //
 //	main--148-c9b1d68-dirty
-func GetGitVersionString() (string, error, int) {
+//
+// If release:
+//
+//	main--148-c9b1d68-release
+func GetGitVersionString(isRelease bool) (string, error, int) {
 	execCommand := func(name string, arg ...string) (string, error, int) {
 		cmd := exec.Command(name, arg...)
 		cmd.Stderr = os.Stderr
@@ -909,6 +913,11 @@ func GetGitVersionString() (string, error, int) {
 
 	if out != "" {
 		combined += "-dirty"
+	}
+
+	// add release
+	if isRelease {
+		combined += "-release"
 	}
 
 	return combined, nil, 0
