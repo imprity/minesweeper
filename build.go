@@ -30,7 +30,7 @@ var ReleaseSettings = map[string]bool{
 	"pprof":       false,
 	"dev":         false,
 	"opt":         true,
-	"trimpath":    true,
+	"no-debug":    true,
 	"wasm-opt":    true,
 	"tsc":         true,
 	"no-vcs":      false,
@@ -47,7 +47,7 @@ func init() {
 	setDefault("pprof", false, "Enable pporf debugging.")
 	setDefault("dev", false, "Enable dev related features like debugging.")
 	setDefault("opt", true, "Optimize and inline.")
-	setDefault("trimpath", false, "Don't include absolute path of source files for debugging.")
+	setDefault("no-debug", false, "Don't include debugging informations.")
 	setDefault("wasm-opt", false, "Optimize wasm (requires wasm-opt from https://github.com/WebAssembly/binaryen).")
 	setDefault("tsc", false, "Build typescript module.")
 	setDefault("no-vcs", false, "Stop Go compiler from stamp binary with version control information.")
@@ -467,8 +467,9 @@ func BuildApp(
 		cmd.Args = append(cmd.Args, "-buildvcs=false")
 	}
 
-	if settings["trimpath"] {
+	if settings["no-debug"] {
 		cmd.Args = append(cmd.Args, "-trimpath")
+		cmd.Args = append(cmd.Args, "-ldflags=-s -w")
 	}
 
 	cmd.Stdout = os.Stdout
