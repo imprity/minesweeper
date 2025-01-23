@@ -3,6 +3,11 @@
 
 <head>
     <style>
+        :root {
+          --background: white;
+          --text : black;
+        }
+
         /*margin border padding zero*/
         .mbp-zero {
             margin: 0px;
@@ -11,9 +16,13 @@
         }
 
         body {
-            background-color: black;
+            background-color: var(--background);
             width : 100vw;
             height : 100vh;
+        }
+
+        canvas {
+            background-color: var(--background);
         }
 
         #loading-screen {
@@ -30,7 +39,7 @@
         }
 
         #loading-header {
-            color : white;
+            color : var(--text);
             font-size : 7vmin;
             font-family: Georgia, serif;
         }
@@ -43,7 +52,7 @@
             min-height : 10px;
         }
         #progress-fill {
-            background-color: white;
+            background-color: black;
 
             height : 100%;
             width : 0%;
@@ -59,7 +68,7 @@
             font-family: Georgia, serif;
         }
         #error-text {
-            color : white;
+            color : var(--text);
             font-family : Arial, Helvetica, sans-serif;
         }
     </style>
