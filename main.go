@@ -15,8 +15,8 @@ import (
 )
 
 var (
-	ScreenWidth  float64 = 600
-	ScreenHeight float64 = 600
+	ScreenWidth  float64 = 580
+	ScreenHeight float64 = 620
 )
 
 var (
@@ -151,6 +151,11 @@ func (a *App) Draw(dst *eb.Image) {
 func (a *App) Layout(outsideWidth, outsideHeight int) (int, int) {
 	if int(ScreenWidth) != outsideWidth || int(ScreenHeight) != outsideHeight {
 		SetRedraw()
+
+		if InDevMode {
+			InfoLogger.Printf("screen width : %d", outsideWidth)
+			InfoLogger.Printf("screen height: %d", outsideHeight)
+		}
 	}
 
 	ScreenWidth = f64(outsideWidth)

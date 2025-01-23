@@ -53,11 +53,11 @@ func NewGameUI() *GameUI {
 	// set constants
 	gu.MineCounts = [DifficultySize]int{10, 40, 99}
 	gu.BoardTileCounts = [DifficultySize]image.Point{
-		image.Pt(10, 10), image.Pt(17, 15), image.Pt(22, 22),
+		image.Pt(10, 10), image.Pt(16, 16), image.Pt(22, 22),
 	}
 	gu.BoardSizeRatios = [DifficultySize]float64{0.75, 0.9, 1}
 
-	gu.TopUIHeight = 0.085
+	gu.TopUIHeight = 0.075
 
 	gu.BoardMarginTop = 10
 	gu.BoardMarginBottom = 10
@@ -136,17 +136,13 @@ func (gu *GameUI) BoardRect(difficulty Difficulty) FRectangle {
 	boardTileWidth = gu.BoardTileCounts[difficulty].X
 	boardTileHeight = gu.BoardTileCounts[difficulty].Y
 
-	maxSize := min(parentRect.Dx(), parentRect.Dy()) * gu.BoardSizeRatios[difficulty]
+	scale := min(
+		parentRect.Dx()*gu.BoardSizeRatios[difficulty]/f64(boardTileWidth),
+		parentRect.Dy()*gu.BoardSizeRatios[difficulty]/f64(boardTileHeight),
+	)
 
-	var boardWidth, boardHeight float64
-
-	if boardTileWidth > boardTileHeight {
-		boardWidth = maxSize
-		boardHeight = maxSize * f64(boardTileHeight) / f64(boardTileWidth)
-	} else {
-		boardHeight = maxSize
-		boardWidth = maxSize * f64(boardTileWidth) / f64(boardTileHeight)
-	}
+	boardWidth := f64(boardTileWidth) * scale
+	boardHeight := f64(boardTileHeight) * scale
 
 	boardRect := FRectWH(
 		boardWidth, boardHeight,

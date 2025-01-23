@@ -3188,9 +3188,6 @@ func (rb *RetryButton) Draw(dst *eb.Image) {
 			)
 		}
 
-		DebugPrint("rw", rb.waterRenderTarget.Bounds().Dx())
-		DebugPrint("rh", rb.waterRenderTarget.Bounds().Dy())
-
 		rb.waterRenderTarget.Clear()
 
 		bottomRectW := bottomRect.Sub(union.Min)
