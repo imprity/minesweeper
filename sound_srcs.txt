@@ -10,7 +10,7 @@ SePop assets_sound/pop.ogg
 // https://freesound.org/people/Sauron974/sounds/188733/
 SeFlag assets_sound/flag.ogg
 
-// https://freesound.org/people/Sauron974/sounds/188733/
+// https://opengameart.org/content/swish-bamboo-stick-weapon-swhoshes
 SeUnflag assets_sound/unflag.ogg
 
 // https://opengameart.org/content/51-ui-sound-effects-buttons-switches-and-clicks
