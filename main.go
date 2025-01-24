@@ -73,6 +73,8 @@ type Scene interface {
 type App struct {
 	ShowDebugConsole bool
 
+	ScreenshotQueued bool
+
 	Scene Scene
 }
 
@@ -126,6 +128,13 @@ func (a *App) Update() error {
 		a.ShowDebugConsole = !a.ShowDebugConsole
 	}
 
+	// ==========================
+	// screenshot
+	// ==========================
+	if ScreenshotEnabled && IsKeyJustPressed(ScreenshotKey) {
+		a.ScreenshotQueued = true
+	}
+
 	a.Scene.Update()
 
 	return nil
@@ -145,7 +154,8 @@ func (a *App) Draw(dst *eb.Image) {
 		DebugPuts("do redraw", "false")
 	}
 
-	if ScreenshotEnabled && IsKeyJustPressed(ScreenshotKey) {
+	if ScreenshotEnabled && a.ScreenshotQueued {
+		a.ScreenshotQueued = false
 		if filename, err := TakeScreenshot(dst); err != nil {
 			WarnLogger.Printf("failed to take screenshot %s: %v", filename, err)
 		} else {
