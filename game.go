@@ -3166,7 +3166,13 @@ func (rb *RetryButton) Draw(dst *eb.Image) {
 	const segments = 6
 	const radius = 0.4
 
-	if rb.DoWaterEffect {
+	// NOTE : water effect on RetryButton doesn't look so good
+	// while being too expensive.
+	//
+	// Reenable it when needed.
+
+	//if rb.DoWaterEffect {
+	if false {
 		const renderMargin = 3
 		union := bottomRect.Union(topRect).Inset(-renderMargin)
 		union = RectToFRect(FRectToRect(union))
