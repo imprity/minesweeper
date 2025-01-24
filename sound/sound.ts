@@ -21,6 +21,7 @@ function initAudioContext(sampleRate : number) {
     const events = ["touchend", "keyup", "mouseup"]
 
     let callback : ()=>void
+    let calledOnAudioResume : boolean = false
 
     const removeCallbacks = () => {
         events.forEach((toRemove)=>{
@@ -31,10 +32,16 @@ function initAudioContext(sampleRate : number) {
     callback = () => {
         AUDIO_CONTEXT.resume().then(()=>{
             if (typeof ON_AUDIO_RESUME === 'function') {
-                ON_AUDIO_RESUME()
+                if (!calledOnAudioResume) {
+                    calledOnAudioResume = true
+                    ON_AUDIO_RESUME()
+                }
+
+                if (calledOnAudioResume) {
+                    removeCallbacks()
+                }
             }
         })
-        removeCallbacks()
     }
 
     events.forEach(toAdd=>{

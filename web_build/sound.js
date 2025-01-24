@@ -105,6 +105,7 @@ function initAudioContext(sampleRate) {
     InternalPlayer.audioContext = audioContext;
     const events = ["touchend", "keyup", "mouseup"];
     let callback;
+    let calledOnAudioResume = false;
     const removeCallbacks = () => {
         events.forEach((toRemove) => {
             document.removeEventListener(toRemove, callback);
@@ -113,10 +114,15 @@ function initAudioContext(sampleRate) {
     callback = () => {
         AUDIO_CONTEXT.resume().then(() => {
             if (typeof ON_AUDIO_RESUME === 'function') {
-                ON_AUDIO_RESUME();
+                if (!calledOnAudioResume) {
+                    calledOnAudioResume = true;
+                    ON_AUDIO_RESUME();
+                }
+                if (calledOnAudioResume) {
+                    removeCallbacks();
+                }
             }
         });
-        removeCallbacks();
     };
     events.forEach(toAdd => {
         document.addEventListener(toAdd, callback);

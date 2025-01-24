@@ -58,6 +58,7 @@ func UpdateSound() {
 	if !sm.contextReady {
 		select {
 		case <-sm.contextReadyChan:
+			InfoLogger.Print("ready to make sound")
 			sm.contextReady = true
 		default:
 			// pass
