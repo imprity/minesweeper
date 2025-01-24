@@ -172,3 +172,9 @@ func FitTextInRect(
 
 	return geom
 }
+
+func ImageImageFromEbImage(ebImg *eb.Image) image.Image {
+	img := image.NewNRGBA(RectWH(ebImg.Bounds().Dx(), ebImg.Bounds().Dy()))
+	ebImg.ReadPixels(img.Pix)
+	return img
+}

@@ -3,5 +3,5 @@
 package main
 
 func init() {
-	InDevMode = true
+	IsDevVersion = true
 }

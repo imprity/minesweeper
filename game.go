@@ -502,11 +502,11 @@ func (g *Game) Update() {
 	// ======================================
 	// changing board for debugging purpose
 	// ======================================
-	if IsKeyJustPressed(SetToDecoBoardKey) && InDevMode {
+	if IsKeyJustPressed(SetToDecoBoardKey) && IsDevVersion {
 		g.SetDebugBoardForDecoration()
 		needToCheckStateChange = true
 	}
-	if IsKeyJustPressed(InstantWinKey) && InDevMode {
+	if IsKeyJustPressed(InstantWinKey) && IsDevVersion {
 		g.SetBoardForInstantWin()
 		needToCheckStateChange = true
 	}
@@ -728,11 +728,11 @@ func (g *Game) Update() {
 	}
 	g.RetryButton.Update()
 
-	if IsKeyJustPressed(ResetBoardKey) && InDevMode {
+	if IsKeyJustPressed(ResetBoardKey) && IsDevVersion {
 		g.ResetBoard(g.board.Width, g.board.Height, g.mineCount)
 		SetRedraw()
 	}
-	if IsKeyJustPressed(ResetToSameBoardKey) && InDevMode {
+	if IsKeyJustPressed(ResetToSameBoardKey) && IsDevVersion {
 		g.ResetBoardEx(g.board.Width, g.board.Height, g.mineCount, false)
 		SetRedraw()
 	}

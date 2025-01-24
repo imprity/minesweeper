@@ -27,6 +27,7 @@ var SettingsComments = make(map[string]string)
 
 var ReleaseSettings = map[string]bool{
 	"always-draw": false,
+	"screenshot":  false,
 	"pprof":       false,
 	"dev":         false,
 	"opt":         true,
@@ -44,6 +45,7 @@ func init() {
 	}
 
 	setDefault("always-draw", false, "Always redraw frames. Even if you are not doing anything.")
+	setDefault("screenshot", false, "Enable screenshot.")
 	setDefault("pprof", false, "Enable pporf debugging.")
 	setDefault("dev", false, "Enable dev related features like debugging.")
 	setDefault("opt", true, "Optimize and inline.")
@@ -442,6 +444,9 @@ func BuildApp(
 	}
 	if settings["dev"] {
 		tags += "minedev,"
+	}
+	if settings["screenshot"] {
+		tags += "screenshot,"
 	}
 
 	gcFlags := "-e -l -N"

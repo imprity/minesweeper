@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -20,9 +21,10 @@ var (
 )
 
 var (
-	AlwaysDraw   bool = false
-	InDevMode    bool = false
-	PprofEnabled bool = false
+	AlwaysDraw        bool = false
+	IsDevVersion      bool = false
+	PprofEnabled      bool = false
+	ScreenshotEnabled bool = false
 )
 
 var redrawTimer time.Time
@@ -107,11 +109,11 @@ func (a *App) Update() error {
 	// ==========================
 	// asset loading and saving
 	// ==========================
-	if IsKeyJustPressed(ReloadAssetsKey) && InDevMode {
+	if IsKeyJustPressed(ReloadAssetsKey) && IsDevVersion {
 		LoadAssets()
 	}
 
-	if IsKeyJustPressed(SaveAssetsKey) && InDevMode {
+	if IsKeyJustPressed(SaveAssetsKey) && IsDevVersion {
 		SaveColorTable()
 		SaveBezierTable()
 		SaveHSVmodTable()
@@ -120,7 +122,7 @@ func (a *App) Update() error {
 	// ==========================
 	// debug showing
 	// ==========================
-	if IsKeyJustPressed(ShowDebugConsoleKey) && InDevMode {
+	if IsKeyJustPressed(ShowDebugConsoleKey) && IsDevVersion {
 		a.ShowDebugConsole = !a.ShowDebugConsole
 	}
 
@@ -143,6 +145,14 @@ func (a *App) Draw(dst *eb.Image) {
 		DebugPuts("do redraw", "false")
 	}
 
+	if ScreenshotEnabled && IsKeyJustPressed(ScreenshotKey) {
+		if filename, err := TakeScreenshot(dst); err != nil {
+			WarnLogger.Printf("failed to take screenshot %s: %v", filename, err)
+		} else {
+			InfoLogger.Printf("took a screenshot %s", filepath.Base(filename))
+		}
+	}
+
 	if a.ShowDebugConsole {
 		DrawDebugMsgs(dst)
 	}
@@ -152,7 +162,7 @@ func (a *App) Layout(outsideWidth, outsideHeight int) (int, int) {
 	if int(ScreenWidth) != outsideWidth || int(ScreenHeight) != outsideHeight {
 		SetRedraw()
 
-		if InDevMode {
+		if IsDevVersion {
 			InfoLogger.Printf("screen width : %d", outsideWidth)
 			InfoLogger.Printf("screen height: %d", outsideHeight)
 		}
@@ -168,6 +178,11 @@ func (a *App) Layout(outsideWidth, outsideHeight int) (int, int) {
 
 func main() {
 	InfoLogger.Printf("git version: %s", GitVersionString)
+
+	InfoLogger.Printf("AlwaysDraw: %v", AlwaysDraw)
+	InfoLogger.Printf("IsDevVersion: %v", IsDevVersion)
+	InfoLogger.Printf("PprofEnabled: %v", PprofEnabled)
+	InfoLogger.Printf("ScreenshotEnabled: %v", ScreenshotEnabled)
 
 	flag.Parse()
 

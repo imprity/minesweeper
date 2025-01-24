@@ -19,4 +19,6 @@ const (
 
 	ResetBoardKey       eb.Key = eb.KeyR
 	ResetToSameBoardKey eb.Key = eb.KeyT
+
+	ScreenshotKey eb.Key = eb.KeyP
 )
