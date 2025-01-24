@@ -884,7 +884,7 @@ func GetGitVersionString(isRelease bool) (string, error, int) {
 
 	// get current tag
 	out, err, exitCode = execCommand(
-		"git", "tag", "--points-at", "HEAD",
+		"git", "describe", "--tags", "--abbrev=0",
 	)
 	if err != nil {
 		return "", err, exitCode
