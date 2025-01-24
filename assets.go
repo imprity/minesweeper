@@ -15,7 +15,8 @@ import (
 	ebt "github.com/hajimehoshi/ebiten/v2/text/v2"
 )
 
-//go:embed dejavu-fonts-ttf-2.37/ttf/DejaVuSansMono.ttf
+//go:embed fonts/dejavu-fonts-ttf-2.37/ttf/DejaVuSansMono.ttf
+//go:embed fonts/Sen/Sen-VariableFont_wght.ttf
 //go:embed assets
 var EmbeddedAssets embed.FS
 
@@ -188,7 +189,7 @@ func LoadAssets() {
 
 	// load fonts
 	{
-		fontFile := mustLoadData("assets/Sen-VariableFont_wght.ttf")
+		fontFile := mustLoadData("fonts/Sen/Sen-VariableFont_wght.ttf")
 		faceSource, err := ebt.NewGoTextFaceSource(bytes.NewReader(fontFile))
 		if err != nil {
 			ErrLogger.Fatalf("failed to load font: %v", err)
@@ -196,7 +197,7 @@ func LoadAssets() {
 		FaceSource = faceSource
 	}
 	{
-		clearFontFile := mustLoadData("dejavu-fonts-ttf-2.37/ttf/DejaVuSansMono.ttf")
+		clearFontFile := mustLoadData("fonts/dejavu-fonts-ttf-2.37/ttf/DejaVuSansMono.ttf")
 		faceSource, err := ebt.NewGoTextFaceSource(bytes.NewReader(clearFontFile))
 		if err != nil {
 			ErrLogger.Fatalf("failed to load font: %v", err)
