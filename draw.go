@@ -344,93 +344,89 @@ func getRoundRectPathImpl(
 
 	path := &ebv.Path{}
 
-	if segments[0] > 1 && radiuses[0] > 1.5 {
-		if useSegments {
-			ArcFast(
-				path,
-				(inLeftTop.X), (inLeftTop.Y),
-				(radiuses[0]),
-				d180, d270,
-				ebv.Clockwise,
-				segments[0],
-			)
-		} else {
-			path.Arc(
-				f32(inLeftTop.X), f32(inLeftTop.Y),
-				f32(radiuses[0]),
-				d180, d270,
-				ebv.Clockwise,
-			)
-		}
+	const segmentMin = 1
+	const radiusMin = 1.5
+
+	if useSegments && segments[0] > segmentMin && radiuses[0] > radiusMin {
+		ArcFast(
+			path,
+			(inLeftTop.X), (inLeftTop.Y),
+			(radiuses[0]),
+			d180, d270,
+			ebv.Clockwise,
+			segments[0],
+		)
+	} else if !useSegments && radiuses[0] > radiusMin {
+		path.Arc(
+			f32(inLeftTop.X), f32(inLeftTop.Y),
+			f32(radiuses[0]),
+			d180, d270,
+			ebv.Clockwise,
+		)
 	} else {
 		path.LineTo(f32(rect.Min.X), f32(rect.Min.Y))
 	}
 	path.LineTo(f32(inRightTop.X), f32(inRightTop.Y-radiuses[1]))
 
-	if segments[1] > 1 && radiuses[1] > 1.5 {
-		if useSegments {
-			ArcFast(
-				path,
-				(inRightTop.X), (inRightTop.Y),
-				(radiuses[1]),
-				d270, d0,
-				ebv.Clockwise,
-				segments[1],
-			)
-		} else {
-			path.Arc(
-				f32(inRightTop.X), f32(inRightTop.Y),
-				f32(radiuses[1]),
-				d270, d0,
-				ebv.Clockwise,
-			)
-		}
+	if useSegments && segments[1] > segmentMin && radiuses[1] > radiusMin {
+		ArcFast(
+			path,
+			(inRightTop.X), (inRightTop.Y),
+			(radiuses[1]),
+			d270, d0,
+			ebv.Clockwise,
+			segments[1],
+		)
+	} else if !useSegments && radiuses[1] > radiusMin {
+		path.Arc(
+			f32(inRightTop.X), f32(inRightTop.Y),
+			f32(radiuses[1]),
+			d270, d0,
+			ebv.Clockwise,
+		)
 	} else {
 		path.LineTo(f32(rect.Max.X), f32(rect.Min.Y))
 	}
 	path.LineTo(f32(inRightBottom.X+radiuses[2]), f32(inRightBottom.Y))
 
-	if segments[2] > 1 && radiuses[2] > 1.5 {
-		if useSegments {
-			ArcFast(
-				path,
-				(inRightBottom.X), (inRightBottom.Y),
-				(radiuses[2]),
-				d0, d90,
-				ebv.Clockwise,
-				segments[2],
-			)
-		} else {
-			path.Arc(
-				f32(inRightBottom.X), f32(inRightBottom.Y),
-				f32(radiuses[2]),
-				d0, d90,
-				ebv.Clockwise,
-			)
-		}
+	if useSegments && segments[2] > segmentMin && radiuses[2] > radiusMin {
+		ArcFast(
+			path,
+			(inRightBottom.X), (inRightBottom.Y),
+			(radiuses[2]),
+			d0, d90,
+			ebv.Clockwise,
+			segments[2],
+		)
+	} else if !useSegments && radiuses[2] > radiusMin {
+		path.Arc(
+			f32(inRightBottom.X), f32(inRightBottom.Y),
+			f32(radiuses[2]),
+			d0, d90,
+			ebv.Clockwise,
+		)
 	} else {
 		path.LineTo(f32(rect.Max.X), f32(rect.Max.Y))
 	}
+
 	path.LineTo(f32(inLeftBottom.X), f32(inLeftBottom.Y+radiuses[3]))
 
-	if segments[3] > 1 && radiuses[3] > 1.5 {
-		if useSegments {
-			ArcFast(
-				path,
-				(inLeftBottom.X), (inLeftBottom.Y),
-				(radiuses[3]),
-				d90, d180,
-				ebv.Clockwise,
-				segments[3],
-			)
-		} else {
-			path.Arc(
-				f32(inLeftBottom.X), f32(inLeftBottom.Y),
-				f32(radiuses[3]),
-				d90, d180,
-				ebv.Clockwise,
-			)
-		}
+	if useSegments && segments[3] > segmentMin && radiuses[3] > radiusMin {
+		ArcFast(
+			path,
+			(inLeftBottom.X), (inLeftBottom.Y),
+			(radiuses[3]),
+			d90, d180,
+			ebv.Clockwise,
+			segments[3],
+		)
+	} else if !useSegments && radiuses[3] > radiusMin {
+		path.Arc(
+			f32(inLeftBottom.X), f32(inLeftBottom.Y),
+			f32(radiuses[3]),
+			d90, d180,
+			ebv.Clockwise,
+		)
 	} else {
 		path.LineTo(f32(rect.Min.X), f32(rect.Max.Y))
 	}
