@@ -3193,11 +3193,11 @@ func (rb *RetryButton) Draw(dst *eb.Image) {
 		bottomRectW := bottomRect.Sub(union.Min)
 		topRectW := topRect.Sub(union.Min)
 
-		FillRoundRectFast(
-			rb.waterRenderTarget, bottomRectW, radius, false, segments, color1)
+		FillRoundRect(
+			rb.waterRenderTarget, bottomRectW, radius, false, color1)
 
-		FillRoundRectFast(
-			rb.waterRenderTarget, topRectW, radius, false, segments, color2)
+		FillRoundRect(
+			rb.waterRenderTarget, topRectW, radius, false, color2)
 
 		waterColors := [4]color.Color{
 			ColorRetryWater1,
@@ -3233,11 +3233,11 @@ func (rb *RetryButton) Draw(dst *eb.Image) {
 		EndAntiAlias()
 		EndFilter()
 	} else {
-		FillRoundRectFast(
-			dst, bottomRect, radius, false, segments, color1)
+		FillRoundRect(
+			dst, bottomRect, radius, false, color1)
 
-		FillRoundRectFast(
-			dst, topRect, radius, false, segments, color2)
+		FillRoundRect(
+			dst, topRect, radius, false, color2)
 	}
 
 	imgRect := RectToFRect(RetryButtonImage.Bounds())
