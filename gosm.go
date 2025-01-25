@@ -1,4 +1,4 @@
-package main
+package minesweeper
 
 type f64 = float64
 type f32 = float32

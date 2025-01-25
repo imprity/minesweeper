@@ -1,6 +1,6 @@
 //go:build minepprof
 
-package main
+package minesweeper
 
 import (
 	"net/http"

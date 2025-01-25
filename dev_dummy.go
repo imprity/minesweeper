@@ -1,6 +1,6 @@
 //go:build !minedev
 
-package main
+package minesweeper
 
 import (
 	eb "github.com/hajimehoshi/ebiten/v2"

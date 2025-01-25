@@ -4,7 +4,7 @@
 
 //go:build !js && !(!windows && !cgo) && minedev
 
-package main
+package minesweeper
 
 import (
 	"unicode/utf8"

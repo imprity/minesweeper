@@ -4,7 +4,7 @@
 
 //go:build !(!js && !(!windows && !cgo) && minedev)
 
-package main
+package minesweeper
 
 var TheClipboardManager struct {
 	Initialized bool

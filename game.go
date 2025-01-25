@@ -1,12 +1,4 @@
-package main
-
-// TODO : currently, reveal animation and bomb animation
-// needs too many sound players for it's sound effects
-//
-// causing sound to bug out on chrome
-//
-// change the animation and sound effects to use less players
-// it doesn't even sound that good even with using many players
+package minesweeper
 
 import (
 	"fmt"

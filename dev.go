@@ -1,6 +1,6 @@
 //go:build minedev
 
-package main
+package minesweeper
 
 func init() {
 	IsDevVersion = true

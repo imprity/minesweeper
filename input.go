@@ -1,4 +1,4 @@
-package main
+package minesweeper
 
 import (
 	"time"

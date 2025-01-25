@@ -1,6 +1,6 @@
 //go:build alwaysdraw
 
-package main
+package minesweeper
 
 func init() {
 	AlwaysDraw = true

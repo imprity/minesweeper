@@ -466,6 +466,7 @@ func BuildApp(
 		"-o", dst,
 		"-tags="+tags,
 		"-gcflags=all="+gcFlags,
+		"main.go",
 	)
 
 	if settings["no-vcs"] {
