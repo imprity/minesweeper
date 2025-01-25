@@ -114,7 +114,9 @@ type TileStyle struct {
 
 	FgAlpha float64
 
-	FlagAnim float64
+	FgFlagAnim float64
+
+	FgNumber int
 
 	Highlight float64
 }
@@ -345,8 +347,6 @@ type Game struct {
 
 	mineCount int
 
-	placedMinesOnBoard bool
-
 	playedAddFlagSound    bool
 	playedRemoveFlagSound bool
 
@@ -397,8 +397,6 @@ func (g *Game) ResetBoardNotStylesEx(width, height, mineCount int, newSeed bool)
 	InfoLogger.Printf("resetting, seed : %s", SeedToString(g.Seed))
 
 	g.shouldCallOnFirstInteraction = true
-
-	g.placedMinesOnBoard = false
 
 	g.GameState = GameStatePlaying
 	g.GameAnimations.Clear()
@@ -751,7 +749,8 @@ func (g *Game) Draw(dst *eb.Image) {
 	DrawBoard(
 		dst,
 
-		g.board, g.Rect,
+		g.board.Width, g.board.Height,
+		g.Rect,
 		g.RenderTileStyles,
 
 		doWaterEffect, g.WaterRenderTarget, g.WaterAlpha, g.WaterFlowOffset,
@@ -851,6 +850,7 @@ func GetAnimationTargetTileStyle(board Board, x, y int) TileStyle {
 				style.DrawFg = true
 				style.FgType = TileFgTypeNumber
 				style.FgColor = ColorTableGetNumber(count)
+				style.FgNumber = count
 			}
 		}
 
@@ -1213,7 +1213,7 @@ func init() {
 func DrawBoard(
 	dst *eb.Image,
 
-	board Board,
+	boardWidth, boardHeight int,
 	boardRect FRectangle,
 	tileStyles Array2D[TileStyle],
 
@@ -1251,7 +1251,7 @@ func DrawBoard(
 		}
 	}
 
-	iter := NewBoardIterator(0, 0, board.Width-1, board.Height-1)
+	iter := NewBoardIterator(0, 0, boardWidth-1, boardHeight-1)
 
 	// ======================
 	// reset VIBuffers
@@ -1263,28 +1263,28 @@ func DrawBoard(
 	// ===============================
 	// resize cache
 	// ===============================
-	DBC.ShouldDrawBgTile.Resize(board.Width, board.Height)
-	DBC.ShouldDrawTile.Resize(board.Width, board.Height)
-	DBC.ShouldDrawFgTile.Resize(board.Width, board.Height)
+	DBC.ShouldDrawBgTile.Resize(boardWidth, boardHeight)
+	DBC.ShouldDrawTile.Resize(boardWidth, boardHeight)
+	DBC.ShouldDrawFgTile.Resize(boardWidth, boardHeight)
 
-	DBC.BgTileRects.Resize(board.Width, board.Height)
+	DBC.BgTileRects.Resize(boardWidth, boardHeight)
 
-	DBC.TileStrokeRects.Resize(board.Width, board.Height)
-	DBC.TileFillRects.Resize(board.Width, board.Height)
+	DBC.TileStrokeRects.Resize(boardWidth, boardHeight)
+	DBC.TileFillRects.Resize(boardWidth, boardHeight)
 
-	DBC.TileRoundness.Resize(board.Width, board.Height)
-	DBC.TileFirmlyPlaced.Resize(board.Width, board.Height)
+	DBC.TileRoundness.Resize(boardWidth, boardHeight)
+	DBC.TileFirmlyPlaced.Resize(boardWidth, boardHeight)
 
 	// ===============================
 	// recalculate cache
 	// ===============================
 	{
-		tileSizeW, tileSizeH := GetBoardTileSize(boardRect, board.Width, board.Height)
+		tileSizeW, tileSizeH := GetBoardTileSize(boardRect, boardWidth, boardHeight)
 
 		for iter.HasNext() {
 			x, y := iter.GetNext()
 
-			ogTileRect := GetBoardTileRect(boardRect, board.Width, board.Height, x, y)
+			ogTileRect := GetBoardTileRect(boardRect, boardWidth, boardHeight, x, y)
 			style := tileStyles.Get(x, y)
 
 			DBC.ShouldDrawBgTile.Set(x, y, ShouldDrawBgTile(style))
@@ -1358,7 +1358,7 @@ func DrawBoard(
 							rx -= 1
 						}
 
-						if 0 <= rx && rx < board.Width && 0 <= ry && ry < board.Height {
+						if 0 <= rx && rx < boardWidth && 0 <= ry && ry < boardHeight {
 							if DBC.TileFirmlyPlaced.Get(rx, ry) {
 								isRound[i] = false
 								isRound[(i+1)%4] = false
@@ -1370,24 +1370,6 @@ func DrawBoard(
 				DBC.TileRoundness.Set(x, y, isRound)
 			}
 		}
-
-		// numberFace
-		/*
-			{
-				_, tileSizeH := GetBoardTileSize(boardRect, board.Width, board.Height)
-				targetFaceHeight := tileSizeH * 0.95
-
-				if DBC.NumberFace == nil || !CloseToEx(targetFaceHeight, DBC.NumberFaceHeight, 0.01) {
-					DBC.NumberFaceHeight = targetFaceHeight
-
-					DBC.NumberFace = &ebt.GoTextFace{
-						Source: FaceSource,
-						Size:   DBC.NumberFaceHeight,
-					}
-					DBC.NumberFace.SetVariation(ebt.MustParseTag("wght"), 600)
-				}
-			}
-		*/
 	}
 
 	shapeBuf := DBC.VIBuffers[0]
@@ -1525,7 +1507,7 @@ func DrawBoard(
 			style.FgScale,
 			style.FgOffsetX, style.FgOffsetY,
 			modColor(fgColor, style.FgAlpha, style.Highlight, ColorFgHighLight),
-			GetFlagTile(style.FlagAnim),
+			GetFlagTile(style.FgFlagAnim),
 		)
 	}
 
@@ -1616,7 +1598,7 @@ func DrawBoard(
 	// draw numbers
 	var numberFace *ebt.GoTextFace
 	{
-		_, tileSizeH := GetBoardTileSize(boardRect, board.Width, board.Height)
+		_, tileSizeH := GetBoardTileSize(boardRect, boardWidth, boardHeight)
 		numberFace = &ebt.GoTextFace{
 			Source: FaceSource,
 			Size:   tileSizeH * 0.95,
@@ -1642,7 +1624,7 @@ func DrawBoard(
 		fgColor := style.FgColor
 
 		if style.FgType == TileFgTypeNumber {
-			count := board.GetNeighborMineCount(x, y)
+			count := style.FgNumber
 			if 1 <= count && count <= 8 {
 				op := &DrawTextOptions{}
 				op.PrimaryAlign = ebt.AlignCenter
@@ -2058,7 +2040,7 @@ func (g *Game) QueueAddFlagAnimation(flagX, flagY int) {
 
 		t := timer.Normalize()
 
-		style.FlagAnim = t
+		style.FgFlagAnim = t
 
 		g.BaseTileStyles.Set(flagX, flagY, style)
 	}
@@ -2075,7 +2057,7 @@ func (g *Game) QueueAddFlagAnimation(flagX, flagY int) {
 	anim.AfterDone = func() {
 		style := g.BaseTileStyles.Get(flagX, flagY)
 
-		style.FlagAnim = 1
+		style.FgFlagAnim = 1
 
 		g.BaseTileStyles.Set(flagX, flagY, style)
 	}
@@ -2988,7 +2970,6 @@ func (g *Game) SetDebugBoardForDecoration() {
 		(g.board.Height-1)/2,
 	)
 
-	g.placedMinesOnBoard = true
 	g.mineCount = 0
 
 	iter := NewBoardIterator(0, 0, newBoardWidth-1, newBoardHeight-1)
@@ -3046,10 +3027,9 @@ func (g *Game) SetDebugBoardForDecoration() {
 }
 
 func (g *Game) SetBoardForInstantWin() {
-	if !g.placedMinesOnBoard {
+	if g.board.HasNoMines() {
 		g.board.PlaceMines(g.mineCount, g.board.Width-1, g.board.Height-1, GetSeed())
 	}
-	g.placedMinesOnBoard = true
 
 	// count how many tiles we have to reveal
 	tilesToReveal := 0
