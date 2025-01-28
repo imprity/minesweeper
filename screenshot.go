@@ -19,10 +19,16 @@ func init() {
 	DebugPutsPersist("screenshot", "true")
 }
 
-func TakeScreenshot(img *eb.Image) (string, error) {
+func TakeScreenshot(img *eb.Image, dir string) (string, error) {
+	dir = filepath.Clean(dir)
+
+	if !filepath.IsLocal(dir) {
+		return "", fmt.Errorf("screenshot directory must be local")
+	}
+
 	timeStr := time.Now().Format("0102150405")
 
-	dirPath, err := RelativePath("./")
+	dirPath, err := RelativePath(dir)
 	if err != nil {
 		return "", err
 	}
@@ -55,12 +61,11 @@ func TakeScreenshot(img *eb.Image) (string, error) {
 	}
 
 	toWrite := buffer.Bytes()
-	InfoLogger.Printf("bytes len : %d", len(toWrite))
 
 	err = os.WriteFile(fullPath, toWrite, 0644)
 	if err != nil {
 		return "", err
 	}
 
-	return filename, nil
+	return fullPath, nil
 }

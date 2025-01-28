@@ -11,6 +11,7 @@ require (
 )
 
 require (
+	github.com/TheTitanrain/w32 v0.0.0-20180517000239-4f5cfb03fabf // indirect
 	github.com/ebitengine/gomobile v0.0.0-20241016134836-cc2e38a7c0ee // indirect
 	github.com/ebitengine/hideconsole v1.0.0 // indirect
 	github.com/ebitengine/oto/v3 v3.3.1 // indirect
@@ -20,6 +21,7 @@ require (
 	github.com/jezek/xgb v1.1.1 // indirect
 	github.com/jfreymuth/oggvorbis v1.0.5 // indirect
 	github.com/jfreymuth/vorbis v1.0.2 // indirect
+	github.com/sqweek/dialog v0.0.0-20240226140203-065105509627 // indirect
 	golang.org/x/exp/shiny v0.0.0-20241108190413-2d47ceb2692f // indirect
 	golang.org/x/image v0.22.0 // indirect
 	golang.org/x/mobile v0.0.0-20241108191957-fa514ef75a0f // indirect

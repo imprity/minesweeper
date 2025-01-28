@@ -1,3 +1,5 @@
+github.com/TheTitanrain/w32 v0.0.0-20180517000239-4f5cfb03fabf h1:FPsprx82rdrX2jiKyS17BH6IrTmUBYqZa/CXT4uvb+I=
+github.com/TheTitanrain/w32 v0.0.0-20180517000239-4f5cfb03fabf/go.mod h1:peYoMncQljjNS6tZwI9WVyQB3qZS6u79/N3mBOcnd3I=
 github.com/ebitengine/gomobile v0.0.0-20241016134836-cc2e38a7c0ee h1:YoNt0DHeZ92kjR78SfyUn1yEf7KnBypOFlFZO14cJ6w=
 github.com/ebitengine/gomobile v0.0.0-20241016134836-cc2e38a7c0ee/go.mod h1:ZDIonJlTRW7gahIn5dEXZtN4cM8Qwtlduob8cOCflmg=
 github.com/ebitengine/hideconsole v1.0.0 h1:5J4U0kXF+pv/DhiXt5/lTz0eO5ogJ1iXb8Yj1yReDqE=
@@ -29,6 +31,8 @@ github.com/pierrec/lz4/v4 v4.1.21 h1:yOVMLb6qSIDP67pl/5F7RepeKYu/VmTyEXvuMI5d9mQ
 github.com/pierrec/lz4/v4 v4.1.21/go.mod h1:gZWDp/Ze/IJXGXf23ltt2EXimqmTUXEy0GFuRQyBid4=
 github.com/silbinarywolf/preferdiscretegpu v1.0.0 h1:tuvXLRCnoFMFyk74/8PFvO0B5rjDmXm0JgNTaOYAHT0=
 github.com/silbinarywolf/preferdiscretegpu v1.0.0/go.mod h1:h3s2GkfAP2sWqoS7v/PxAlFOQ1azMRsZxUJNw47QhLc=
+github.com/sqweek/dialog v0.0.0-20240226140203-065105509627 h1:2JL2wmHXWIAxDofCK+AdkFi1KEg3dgkefCsm7isADzQ=
+github.com/sqweek/dialog v0.0.0-20240226140203-065105509627/go.mod h1:/qNPSY91qTz/8TgHEMioAUc6q7+3SOybeKczHMXFcXw=
 golang.design/x/clipboard v0.7.0 h1:4Je8M/ys9AJumVnl8m+rZnIvstSnYj1fvzqYrU3TXvo=
 golang.design/x/clipboard v0.7.0/go.mod h1:PQIvqYO9GP29yINEfsEn5zSQKAz3UgXmZKzDA6dnq2E=
 golang.org/x/exp v0.0.0-20241108190413-2d47ceb2692f h1:XdNn9LlyWAhLVp6P/i8QYBW+hlyhrhei9uErw2B5GJo=

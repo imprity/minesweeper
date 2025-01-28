@@ -131,7 +131,7 @@ type Array2D[T any] struct {
 	Data []T
 }
 
-func New2DArray[T any](width, height int) Array2D[T] {
+func NewArray2D[T any](width, height int) Array2D[T] {
 	arr := Array2D[T]{
 		Width:  width,
 		Height: height,

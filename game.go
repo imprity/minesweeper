@@ -57,7 +57,11 @@ func GetMouseState(board Board, boardRect FRectangle) MouseState {
 	ms.CursorX = cursor.X
 	ms.CursorY = cursor.Y
 
-	ms.BoardX, ms.BoardY = MousePosToBoardPos(board, boardRect, cursor)
+	ms.BoardX, ms.BoardY = MousePosToBoardPos(
+		boardRect,
+		board.Width, board.Height,
+		cursor,
+	)
 
 	return ms
 }
@@ -326,8 +330,6 @@ type Game struct {
 	WaterAlpha      float64
 	WaterFlowOffset time.Duration
 
-	WaterRenderTarget *eb.Image
-
 	Particles []TileParticle
 
 	Seed [32]byte
@@ -349,11 +351,6 @@ func NewGame(boardWidth, boardHeight, mineCount int) *Game {
 	g := new(Game)
 
 	g.mineCount = mineCount
-
-	g.WaterRenderTarget = eb.NewImageWithOptions(
-		RectWH(int(ScreenWidth), int(ScreenHeight)),
-		&eb.NewImageOptions{Unmanaged: true},
-	)
 
 	g.StyleModifiers = append(g.StyleModifiers, NewTileHighlightModifier())
 	g.StyleModifiers = append(g.StyleModifiers, NewFgClickModifier())
@@ -404,10 +401,10 @@ func (g *Game) ResetBoardNotStylesEx(width, height, mineCount int, newSeed bool)
 	g.RetryButtonOffsetX = 0
 	g.RetryButtonOffsetY = 0
 
-	g.BaseTileStyles = New2DArray[TileStyle](width, height)
-	g.RenderTileStyles = New2DArray[TileStyle](width, height)
+	g.BaseTileStyles = NewArray2D[TileStyle](width, height)
+	g.RenderTileStyles = NewArray2D[TileStyle](width, height)
 
-	g.TileAnimations = New2DArray[*CircularQueue[CallbackAnimation]](width, height)
+	g.TileAnimations = NewArray2D[*CircularQueue[CallbackAnimation]](width, height)
 	for x := range width {
 		for y := range height {
 			// TODO : do we need this much queued animation?
@@ -745,7 +742,7 @@ func (g *Game) Draw(dst *eb.Image) {
 		g.Rect,
 		g.RenderTileStyles,
 
-		doWaterEffect, g.WaterRenderTarget, g.WaterAlpha, g.WaterFlowOffset,
+		doWaterEffect, g.WaterAlpha, g.WaterFlowOffset,
 	)
 
 	if g.DrawRetryButton {
@@ -765,13 +762,6 @@ func (g *Game) Draw(dst *eb.Image) {
 }
 
 func (g *Game) Layout(outsideWidth, outsideHeight int) {
-	if g.WaterRenderTarget.Bounds().Dx() != outsideWidth || g.WaterRenderTarget.Bounds().Dy() != outsideHeight {
-		g.WaterRenderTarget.Dispose()
-		g.WaterRenderTarget = eb.NewImageWithOptions(
-			RectWH(int(ScreenWidth), int(ScreenHeight)),
-			&eb.NewImageOptions{Unmanaged: true},
-		)
-	}
 }
 
 func (g *Game) MineCount() int {
@@ -816,24 +806,34 @@ func ShouldDrawFgTile(style TileStyle) bool {
 		style.FgAlpha > 0.001
 }
 
+func GetBgFillColor(boardWidth, boardHeight, x, y int) color.Color {
+	if IsOddTile(boardWidth, boardHeight, x, y) {
+		return ColorTileNormal2
+	} else {
+		return ColorTileNormal1
+	}
+}
+
+func GetTileFillColor(boardWidth, boardHeight, x, y int) color.Color {
+	if IsOddTile(boardWidth, boardHeight, x, y) {
+		return ColorTileRevealed2
+	} else {
+		return ColorTileRevealed1
+	}
+}
+
 func GetAnimationTargetTileStyle(board Board, x, y int) TileStyle {
 	style := NewTileStyle()
 
 	style.DrawBg = true
-	style.BgFillColor = ColorTileNormal1
-	if IsOddTile(board.Width, board.Height, x, y) {
-		style.BgFillColor = ColorTileNormal2
-	}
+	style.BgFillColor = GetBgFillColor(board.Width, board.Height, x, y)
 
 	if board.IsPosInBoard(x, y) {
 		if board.Revealed.Get(x, y) {
 			style.DrawTile = true
 			style.DrawBg = false
 
-			style.TileFillColor = ColorTileRevealed1
-			if IsOddTile(board.Width, board.Height, x, y) {
-				style.TileFillColor = ColorTileRevealed2
-			}
+			style.TileFillColor = GetTileFillColor(board.Width, board.Height, x, y)
 			style.TileStrokeColor = ColorTileRevealedStroke
 
 			count := board.GetNeighborMineCount(x, y)
@@ -1194,6 +1194,8 @@ var DBC = struct { // DrawBoard cache
 
 	TileFirmlyPlaced Array2D[bool]
 	TileRoundness    Array2D[[4]bool]
+
+	WaterRenderTarget *eb.Image
 }{}
 
 func init() {
@@ -1211,7 +1213,6 @@ func DrawBoard(
 
 	// params for water effect
 	doWaterEffect bool,
-	waterRenderTarget *eb.Image,
 	waterAlpha float64,
 	waterFlowOffset time.Duration,
 ) {
@@ -1244,6 +1245,26 @@ func DrawBoard(
 	}
 
 	iter := NewBoardIterator(0, 0, boardWidth-1, boardHeight-1)
+
+	// ======================
+	// create WaterRenderTarget
+	// ======================
+	{
+		recreateRenderTarget := DBC.WaterRenderTarget == nil
+		recreateRenderTarget = recreateRenderTarget || DBC.WaterRenderTarget.Bounds().Dx() != int(ScreenWidth)
+		recreateRenderTarget = recreateRenderTarget || DBC.WaterRenderTarget.Bounds().Dy() != int(ScreenHeight)
+
+		// WaterRenderTarget
+		if recreateRenderTarget {
+			if DBC.WaterRenderTarget != nil {
+				DBC.WaterRenderTarget.Dispose()
+			}
+			DBC.WaterRenderTarget = eb.NewImageWithOptions(
+				RectWH(int(ScreenWidth), int(ScreenHeight)),
+				&eb.NewImageOptions{Unmanaged: true},
+			)
+		}
+	}
 
 	// ======================
 	// reset VIBuffers
@@ -1510,9 +1531,9 @@ func DrawBoard(
 	// flush shapes
 	shapesRenderTarget := dst
 
-	if waterRenderTarget != nil && doWaterEffect {
-		waterRenderTarget.Clear()
-		shapesRenderTarget = waterRenderTarget
+	if DBC.WaterRenderTarget != nil && doWaterEffect {
+		DBC.WaterRenderTarget.Clear()
+		shapesRenderTarget = DBC.WaterRenderTarget
 	}
 
 	BeginAntiAlias(false)
@@ -1528,7 +1549,7 @@ func DrawBoard(
 	EndAntiAlias()
 
 	// draw water effect
-	if doWaterEffect && waterRenderTarget != nil {
+	if doWaterEffect && DBC.WaterRenderTarget != nil {
 		rect := boardRect
 		rect = rect.Inset(-3)
 
@@ -1546,7 +1567,7 @@ func DrawBoard(
 
 		BeginBlend(eb.BlendSourceAtop)
 		DrawWaterRect(
-			waterRenderTarget,
+			DBC.WaterRenderTarget,
 			rect,
 			GlobalTimerNow()+waterFlowOffset,
 			colors,
@@ -1558,7 +1579,7 @@ func DrawBoard(
 		BeginAntiAlias(false)
 		BeginFilter(eb.FilterNearest)
 		BeginMipMap(false)
-		DrawImage(dst, waterRenderTarget, nil)
+		DrawImage(dst, DBC.WaterRenderTarget, nil)
 		EndMipMap()
 		EndAntiAlias()
 		EndFilter()
@@ -2837,12 +2858,16 @@ func GetRectTile() SubView {
 	return SpriteSubView(TileSprite, tileStart)
 }
 
-func MousePosToBoardPos(board Board, boardRect FRectangle, mousePos FPoint) (int, int) {
+func MousePosToBoardPos(
+	boardRect FRectangle,
+	boardWidth, boardHeight int,
+	mousePos FPoint,
+) (int, int) {
 	mousePos.X -= boardRect.Min.X
 	mousePos.Y -= boardRect.Min.Y
 
-	boardX := int(math.Floor(mousePos.X / (boardRect.Dx() / float64(board.Width))))
-	boardY := int(math.Floor(mousePos.Y / (boardRect.Dy() / float64(board.Height))))
+	boardX := int(math.Floor(mousePos.X / (boardRect.Dx() / float64(boardWidth))))
+	boardY := int(math.Floor(mousePos.Y / (boardRect.Dy() / float64(boardHeight))))
 
 	return boardX, boardY
 }

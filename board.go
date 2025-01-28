@@ -24,9 +24,9 @@ func NewBoard(width int, height int) Board {
 	board.Width = width
 	board.Height = height
 
-	board.Mines = New2DArray[bool](width, height)
-	board.Revealed = New2DArray[bool](width, height)
-	board.Flags = New2DArray[bool](width, height)
+	board.Mines = NewArray2D[bool](width, height)
+	board.Revealed = NewArray2D[bool](width, height)
+	board.Flags = NewArray2D[bool](width, height)
 
 	return board
 }

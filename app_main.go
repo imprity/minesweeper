@@ -70,10 +70,12 @@ type Scene interface {
 	Layout(outsideWidth, outsideHeight int)
 }
 
-var overriddenFirstScene Scene = nil
+var firstSceneConstructor func() Scene = func() Scene {
+	return NewGameUI()
+}
 
-func OverrideFirstScene(scene Scene) {
-	overriddenFirstScene = scene
+func OverrideFirstScene(sceneConstructor func() Scene) {
+	firstSceneConstructor = sceneConstructor
 }
 
 type App struct {
@@ -161,8 +163,8 @@ func (a *App) Draw(dst *eb.Image) {
 
 	if ScreenshotEnabled && a.ScreenshotQueued {
 		a.ScreenshotQueued = false
-		if filename, err := TakeScreenshot(dst); err != nil {
-			WarnLogger.Printf("failed to take screenshot %s: %v", filename, err)
+		if filename, err := TakeScreenshot(dst, "./"); err != nil {
+			WarnLogger.Printf("failed to take screenshot %s: %v", filepath.Base(filename), err)
 		} else {
 			InfoLogger.Printf("took a screenshot %s", filepath.Base(filename))
 		}
@@ -209,9 +211,7 @@ func AppMain() {
 
 	app := NewApp()
 
-	if overriddenFirstScene == nil {
-		app.Scene = NewGameUI()
-	}
+	app.Scene = firstSceneConstructor()
 
 	eb.SetVsyncEnabled(true)
 	eb.SetWindowSize(int(ScreenWidth), int(ScreenHeight))

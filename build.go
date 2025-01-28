@@ -86,6 +86,7 @@ func PrintUsage() {
 	fmt.Printf("valid targets:\n")
 	fmt.Printf("  desktop\n")
 	fmt.Printf("  web\n")
+	fmt.Printf("  itch\n")
 	fmt.Printf("  all\n")
 	fmt.Printf("\n")
 	fmt.Printf("build settings are read from %s\n", SettingsPath)
@@ -140,7 +141,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if !(buildTarget == "desktop" || buildTarget == "web" || buildTarget == "all") {
+	if !(buildTarget == "desktop" || buildTarget == "web" || buildTarget == "itch" || buildTarget == "all") {
 		misc.ErrLogger.Printf("%s is not a vaid target", buildTarget)
 		PrintUsage()
 		os.Exit(1)
@@ -240,16 +241,23 @@ func main() {
 	misc.InfoLogger.Printf("building %s", buildTarget)
 
 	buildDesktop := func() {
-		err, errcode := BuildApp(settings, false, isRelease)
+		err, errcode := BuildApp(settings, isRelease, false)
 		if err != nil {
 			misc.ErrLogger.Printf("failed to build for desktop: %v", err)
 			os.Exit(errcode)
 		}
 	}
 	buildWeb := func() {
-		err, errcode := BuildApp(settings, true, isRelease)
+		err, errcode := BuildApp(settings, isRelease, true)
 		if err != nil {
 			misc.ErrLogger.Printf("failed to build for web: %v", err)
+			os.Exit(errcode)
+		}
+	}
+	buildItch := func() {
+		err, errcode := BuildItch(settings, isRelease)
+		if err != nil {
+			misc.ErrLogger.Printf("failed to build itch: %v", err)
 			os.Exit(errcode)
 		}
 	}
@@ -259,9 +267,12 @@ func main() {
 		buildDesktop()
 	case "web":
 		buildWeb()
+	case "itch":
+		buildItch()
 	case "all":
 		buildDesktop()
 		buildWeb()
+		buildItch()
 	}
 }
 
@@ -366,11 +377,7 @@ func LoadSettings(path string) (map[string]bool, error) {
 	return settings, nil
 }
 
-func BuildApp(
-	settings map[string]bool,
-	buildWeb bool,
-	buildRelease bool,
-) (error, int) {
+func Generate(buildRelease bool) (error, int) {
 	// generate git_version.txt
 	{
 		versionStr, err, exitCode := GetGitVersionString(buildRelease)
@@ -434,6 +441,18 @@ func BuildApp(
 		}
 	}
 
+	return nil, 0
+}
+
+func BuildApp(
+	settings map[string]bool,
+	buildRelease bool,
+	buildWeb bool,
+) (error, int) {
+	if err, exitCode := Generate(buildRelease); err != nil {
+		return err, exitCode
+	}
+
 	tags := ""
 
 	if settings["always-draw"] {
@@ -466,7 +485,6 @@ func BuildApp(
 		"-o", dst,
 		"-tags="+tags,
 		"-gcflags=all="+gcFlags,
-		"main.go",
 	)
 
 	if settings["no-vcs"] {
@@ -477,6 +495,8 @@ func BuildApp(
 		cmd.Args = append(cmd.Args, "-trimpath")
 		cmd.Args = append(cmd.Args, "-ldflags=-s -w")
 	}
+
+	cmd.Args = append(cmd.Args, "main.go")
 
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -605,6 +625,43 @@ func BuildApp(
 				return err, 1
 			}
 		}
+	}
+
+	return nil, 0
+}
+
+func BuildItch(
+	settings map[string]bool,
+	buildRelease bool,
+) (error, int) {
+	if err, exitCode := Generate(buildRelease); err != nil {
+		return err, exitCode
+	}
+
+	cmd := exec.Command(
+		"go",
+		"build",
+		"-o", AddExeIfWindows("itch"),
+		"-tags=alwaysdraw,minedev,screenshot",
+		"-gcflags=all=-e -l -N",
+		"itch.go",
+	)
+
+	if settings["no-vcs"] {
+		cmd.Args = append(cmd.Args, "-buildvcs=false")
+	}
+
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	misc.InfoLogger.Printf("%s", cmd.String())
+
+	fmt.Printf("\n")
+	err := cmd.Run()
+	fmt.Printf("\n")
+
+	if err != nil {
+		return err, err.(*exec.ExitError).ExitCode()
 	}
 
 	return nil, 0
