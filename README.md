@@ -2,7 +2,9 @@
 
 ![screenshot](readme_stuff/screenshot.png)
 
-Minesweeper written in go.
+*Minesweeper written in go.*
+
+### You can play it on [itch](https://imprity.itch.io/minesweeper)!
 
 # How to build
 
@@ -37,17 +39,17 @@ But if you don't like mine, you can just serve web_build directory with whatever
 
 ### Used sound effects
 
-[Interface Sounds Starter Pack](https://opengameart.org/content/interface-sounds-starter-pack) by p0ss - License : CC BY-SA 3.0
+[Interface Sounds Starter Pack](https://opengameart.org/content/interface-sounds-starter-pack) by **p0ss** - License : CC BY-SA 3.0
 
-[Pop!.wav](https://freesound.org/people/kwahmah_02/sounds/260614/) by kwahmah_02 - License : CC BY 3.0
+[Pop!.wav](https://freesound.org/people/kwahmah_02/sounds/260614/) by **kwahmah_02** - License : CC BY 3.0
 
-[Fabric flaps](https://freesound.org/people/PelicanPolice/sounds/580967/) by PelicanPolice - License : CC0 1.0
+[Fabric flaps](https://freesound.org/people/PelicanPolice/sounds/580967/) by **PelicanPolice** - License : CC0 1.0
 
-[Cloth Flaps](https://freesound.org/people/Sauron974/sounds/188733/) by Sauron974 - License : CC BY 4.0
+[Cloth Flaps](https://freesound.org/people/Sauron974/sounds/188733/) by **Sauron974** - License : CC BY 4.0
 
-[Swish - bamboo stick weapon swhoshes](https://opengameart.org/content/swish-bamboo-stick-weapon-swhoshes) by qubodup - License : CC0 1.0
+[Swish - bamboo stick weapon swhoshes](https://opengameart.org/content/swish-bamboo-stick-weapon-swhoshes) by **qubodup** - License : CC0 1.0
 
-[51 UI sound effects (buttons, switches and clicks)](https://opengameart.org/content/51-ui-sound-effects-buttons-switches-and-clicks) by Kenney - License : CC0 1.0
+[51 UI sound effects (buttons, switches and clicks)](https://opengameart.org/content/51-ui-sound-effects-buttons-switches-and-clicks) by **Kenney** - License : CC0 1.0
 
 # License
 
