@@ -393,7 +393,6 @@ func (g *Game) SetResetParameter(boardWidth, boardHeight, mineCount int) {
 	g.resetBoardWidth = boardWidth
 	g.resetBoardHeight = boardHeight
 	g.resetMineCount = mineCount
-	InfoLogger.Printf("called SetResetParameter")
 }
 
 func (g *Game) ResetBoardNotStylesEx(newSeed bool) {
