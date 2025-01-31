@@ -2450,23 +2450,36 @@ func (g *Game) QueueWinAnimation(originX, originY int) {
 
 func (g *Game) QueueRetryButtonAnimation() {
 	buttonRect := g.RetryButtonRect()
-	buttonRect = buttonRect.Inset(-max(buttonRect.Dx(), buttonRect.Dy()) * 0.03)
 
+	// give 5 pixel margin
+	buttonRect = buttonRect.Inset(-5)
+
+	// collect tiles to animate
 	toAnimate := make([]image.Point, 0)
+	{
+		minTileX, minTileY := MousePosToBoardPos(
+			g.Rect,
+			g.board.Width, g.board.Height,
+			buttonRect.Min,
+		)
+		minTileX = Clamp(minTileX, 0, g.board.Width-1)
+		minTileY = Clamp(minTileY, 0, g.board.Height-1)
 
-	for x := range g.board.Width {
-		for y := range g.board.Height {
-			tileRect := GetBoardTileRect(g.Rect, g.board.Width, g.board.Height, x, y)
+		maxTileX, maxTileY := MousePosToBoardPos(
+			g.Rect,
+			g.board.Width, g.board.Height,
+			buttonRect.Max,
+		)
+		maxTileX = Clamp(maxTileX, 0, g.board.Width-1)
+		maxTileY = Clamp(maxTileY, 0, g.board.Height-1)
 
-			animate := false
+		iter := NewBoardIterator(
+			minTileX, minTileY, maxTileX, maxTileY,
+		)
 
-			if tileRect.Overlaps(buttonRect) {
-				animate = true
-			}
-
-			if animate {
-				toAnimate = append(toAnimate, image.Pt(x, y))
-			}
+		for iter.HasNext() {
+			x, y := iter.GetNext()
+			toAnimate = append(toAnimate, image.Pt(x, y))
 		}
 	}
 
