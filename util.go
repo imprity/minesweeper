@@ -61,6 +61,12 @@ func ImageSizeFPt(img image.Image) FPoint {
 	return FPoint{f64(bound.Dx()), f64(bound.Dy())}
 }
 
+func ImageImageFromEbImage(ebImg *eb.Image) image.Image {
+	img := image.NewNRGBA(RectWH(ebImg.Bounds().Dx(), ebImg.Bounds().Dy()))
+	ebImg.ReadPixels(img.Pix)
+	return img
+}
+
 func ExecutablePath() (string, error) {
 	path, err := os.Executable()
 
@@ -95,6 +101,25 @@ func GetHourMinuteSeconds(duration time.Duration) (int, int, int) {
 	seconds := (duration % time.Minute) / time.Second
 
 	return int(hours), int(minutes), int(seconds)
+}
+
+// looks at current screen ratio and guess if it's on mobile or not
+func ProbablyOnMobile() bool {
+	// NOTE : from https://en.wikipedia.org/wiki/Display_aspect_ratio
+	//
+	// From 2010 to 2017 most smartphone manufacturers switched to using 16:9 widescreen displays
+	//
+	// So if height ratio is bigger than that
+	// we are going to guess it's on mobile
+	//
+	// we are being bit more genorous with our check
+	const mobileRatio = 14.0 / 9.0
+	screenRatio := ScreenHeight / ScreenWidth
+
+	if screenRatio > mobileRatio {
+		return true
+	}
+	return false
 }
 
 // examples
@@ -171,10 +196,4 @@ func FitTextInRect(
 	geom.Translate(center.X, center.Y)
 
 	return geom
-}
-
-func ImageImageFromEbImage(ebImg *eb.Image) image.Image {
-	img := image.NewNRGBA(RectWH(ebImg.Bounds().Dx(), ebImg.Bounds().Dy()))
-	ebImg.ReadPixels(img.Pix)
-	return img
 }

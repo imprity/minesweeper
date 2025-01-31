@@ -15,9 +15,14 @@ import (
 	eb "github.com/hajimehoshi/ebiten/v2"
 )
 
+const (
+	NormalScreenWidth  = 580
+	NormalScreenHeight = 620
+)
+
 var (
-	ScreenWidth  float64 = 580
-	ScreenHeight float64 = 620
+	ScreenWidth  float64 = NormalScreenWidth
+	ScreenHeight float64 = NormalScreenHeight
 )
 
 var (
@@ -143,6 +148,10 @@ func (a *App) Update() error {
 	}
 
 	a.Scene.Update()
+
+	if IsDevVersion {
+		DebugPrint("ProbablyOnMobile", ProbablyOnMobile())
+	}
 
 	return nil
 }

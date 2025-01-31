@@ -303,7 +303,8 @@ type StyleModifier func(
 type Game struct {
 	Rect FRectangle
 
-	OnBoardReset       func()
+	OnAfterBoardReset  func()
+	OnBeforeBoardReset func()
 	OnGameEnd          func(didWin bool)
 	OnFirstInteraction func()
 
@@ -317,8 +318,6 @@ type Game struct {
 	StyleModifiers []StyleModifier
 
 	RetryButton *RetryButton
-
-	RetryButtonSize float64
 
 	DrawRetryButton    bool
 	RetryButtonScale   float64
@@ -337,12 +336,19 @@ type Game struct {
 	board     Board
 	prevBoard Board
 
-	shouldCallOnFirstInteraction bool
-
 	mineCount int
+
+	resetBoardWidth  int
+	resetBoardHeight int
+	resetMineCount   int
+
+	hadInteraction bool
 
 	playedAddFlagSound    bool
 	playedRemoveFlagSound bool
+
+	retryButtonSize         float64
+	retryButtonSizeRelative float64 // relative to min(Rect.Dx(), Rect.Dy())
 
 	viBuffers [3]*VIBuffer
 }
@@ -351,6 +357,10 @@ func NewGame(boardWidth, boardHeight, mineCount int) *Game {
 	g := new(Game)
 
 	g.mineCount = mineCount
+
+	g.resetBoardWidth = boardWidth
+	g.resetBoardHeight = boardHeight
+	g.resetMineCount = mineCount
 
 	g.StyleModifiers = append(g.StyleModifiers, NewTileHighlightModifier())
 	g.StyleModifiers = append(g.StyleModifiers, NewFgClickModifier())
@@ -374,18 +384,33 @@ func NewGame(boardWidth, boardHeight, mineCount int) *Game {
 
 	g.Particles = make([]TileParticle, 0, 256)
 
-	g.ResetBoard(boardWidth, boardHeight, g.mineCount)
+	g.ResetBoard()
 
 	return g
 }
 
-func (g *Game) ResetBoardNotStylesEx(width, height, mineCount int, newSeed bool) {
+func (g *Game) SetResetParameter(boardWidth, boardHeight, mineCount int) {
+	g.resetBoardWidth = boardWidth
+	g.resetBoardHeight = boardHeight
+	g.resetMineCount = mineCount
+	InfoLogger.Printf("called SetResetParameter")
+}
+
+func (g *Game) ResetBoardNotStylesEx(newSeed bool) {
+	if g.OnBeforeBoardReset != nil {
+		g.OnBeforeBoardReset()
+	}
+
+	width := g.resetBoardWidth
+	height := g.resetBoardHeight
+	mineCount := g.resetMineCount
+
 	if newSeed {
 		g.Seed = GetSeed()
 	}
 	InfoLogger.Printf("resetting, seed : %s", SeedToString(g.Seed))
 
-	g.shouldCallOnFirstInteraction = true
+	g.hadInteraction = false
 
 	g.GameState = GameStatePlaying
 	g.GameAnimations.Clear()
@@ -422,16 +447,16 @@ func (g *Game) ResetBoardNotStylesEx(width, height, mineCount int, newSeed bool)
 
 	g.Particles = g.Particles[:0]
 
-	if g.OnBoardReset != nil {
-		g.OnBoardReset()
+	if g.OnAfterBoardReset != nil {
+		g.OnAfterBoardReset()
 	}
 }
 
-func (g *Game) ResetBoardEx(width, height, mineCount int, newSeed bool) {
-	g.ResetBoardNotStylesEx(width, height, mineCount, newSeed)
+func (g *Game) ResetBoardEx(newSeed bool) {
+	g.ResetBoardNotStylesEx(newSeed)
 
-	for x := range width {
-		for y := range height {
+	for x := range g.resetBoardWidth {
+		for y := range g.resetBoardHeight {
 			targetStyle := GetAnimationTargetTileStyle(g.board, x, y)
 			g.BaseTileStyles.Set(x, y, targetStyle)
 			g.RenderTileStyles.Set(x, y, targetStyle)
@@ -439,12 +464,12 @@ func (g *Game) ResetBoardEx(width, height, mineCount int, newSeed bool) {
 	}
 }
 
-func (g *Game) ResetBoardNotStyles(width, height, mineCount int) {
-	g.ResetBoardNotStylesEx(width, height, mineCount, true)
+func (g *Game) ResetBoardNotStyles() {
+	g.ResetBoardNotStylesEx(true)
 }
 
-func (g *Game) ResetBoard(width, height, mineCount int) {
-	g.ResetBoardEx(width, height, mineCount, true)
+func (g *Game) ResetBoard() {
+	g.ResetBoardEx(true)
 }
 
 func (g *Game) Update() {
@@ -583,8 +608,8 @@ func (g *Game) Update() {
 		}
 
 		// call OnFirstInteraction
-		if g.shouldCallOnFirstInteraction {
-			g.shouldCallOnFirstInteraction = false
+		if !g.hadInteraction {
+			g.hadInteraction = true
 			if g.OnFirstInteraction != nil {
 				g.OnFirstInteraction()
 			}
@@ -709,6 +734,10 @@ func (g *Game) Update() {
 	// ===================================
 	// update RetryButton
 	// ===================================
+	if !g.DrawRetryButton {
+		g.retryButtonSizeRelative = g.retryButtonSize / min(g.Rect.Dx(), g.Rect.Dy())
+	}
+
 	g.RetryButton.Rect = g.TransformedRetryButtonRect()
 	if !g.DrawRetryButton {
 		g.RetryButton.Disabled = true
@@ -716,11 +745,11 @@ func (g *Game) Update() {
 	g.RetryButton.Update()
 
 	if IsKeyJustPressed(ResetBoardKey) && IsDevVersion {
-		g.ResetBoard(g.board.Width, g.board.Height, g.mineCount)
+		g.ResetBoard()
 		SetRedraw()
 	}
 	if IsKeyJustPressed(ResetToSameBoardKey) && IsDevVersion {
-		g.ResetBoardEx(g.board.Width, g.board.Height, g.mineCount, false)
+		g.ResetBoardEx(false)
 		SetRedraw()
 	}
 }
@@ -779,6 +808,14 @@ func (g *Game) FlagCount() int {
 	}
 
 	return flagCount
+}
+
+func (g *Game) BoardTileCount() (int, int) {
+	return g.board.Width, g.board.Height
+}
+
+func (g *Game) HadInteraction() bool {
+	return g.hadInteraction
 }
 
 func isTileFirmlyPlaced(style TileStyle) bool {
@@ -2646,7 +2683,7 @@ func (g *Game) QueueResetBoardAnimation() {
 
 		anim.AfterDone = func() {
 			g.DrawRetryButton = true
-			g.ResetBoardNotStyles(g.board.Width, g.board.Height, g.mineCount)
+			g.ResetBoardNotStyles()
 			g.QueueShowBoardAnimation(
 				g.board.Width/2,
 				g.board.Height/2,
@@ -2946,7 +2983,8 @@ func DrawWaterRect(
 
 func (g *Game) RetryButtonRect() FRectangle {
 	boardRect := g.Rect
-	rect := FRectWH(g.RetryButtonSize, g.RetryButtonSize)
+	size := g.retryButtonSizeRelative * min(g.Rect.Dx(), g.Rect.Dy())
+	rect := FRectWH(size, size)
 	center := FRectangleCenter(boardRect)
 	rect = CenterFRectangle(rect, center.X, center.Y)
 
@@ -2981,7 +3019,8 @@ func (g *Game) SetDebugBoardForDecoration() {
 	newBoardHeight := len(newBoard)
 	newBoardWidth := len(newBoard[0])
 
-	g.ResetBoard(max(g.board.Width, newBoardWidth), max(g.board.Height, newBoardHeight), 0)
+	g.SetResetParameter(max(g.board.Width, newBoardWidth), max(g.board.Height, newBoardHeight), 0)
+	g.ResetBoard()
 	g.QueueShowBoardAnimation(
 		(g.board.Width-1)/2,
 		(g.board.Height-1)/2,
@@ -3085,6 +3124,10 @@ REVEAL_LOOP:
 // =====================
 // RetryButton
 // =====================
+
+func (g *Game) SetRetryButtonSize(size float64) {
+	g.retryButtonSize = size
+}
 
 type RetryButton struct {
 	BaseButton
