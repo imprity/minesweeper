@@ -132,12 +132,32 @@ function initAudioContext(sampleRate) {
 // buffer functions
 // =================================
 function newBufferFromAudioFile(name, file, onDecoded) {
-    AUDIO_CONTEXT.decodeAudioData(file, (decoded) => {
-        AUDIO_BUFFERS[name] = decoded;
-        onDecoded(true);
-    }, () => {
+    try {
+        const promise = AUDIO_CONTEXT.decodeAudioData(file);
+        promise.then((decoded) => {
+            AUDIO_BUFFERS[name] = decoded;
+            onDecoded(true);
+        });
+        promise.catch(err => {
+            console.error(`failed to decode ${name} : ${err}`);
+            onDecoded(false);
+        });
+    }
+    catch (err) {
+        console.error(`failed to decode ${name} : ${err}`);
         onDecoded(false);
-    });
+    }
+}
+function newBufferFromUndecodedAudioFile(name, channelDatas, sampleRate) {
+    let channelByteLength = 0;
+    if (channelDatas.length > 0) {
+        channelByteLength = channelDatas[0].byteLength;
+    }
+    const buffer = AUDIO_CONTEXT.createBuffer(channelDatas.length, channelByteLength, sampleRate);
+    for (let i = 0; i < channelDatas.length; i++) {
+        buffer.copyToChannel(channelDatas[i], i);
+    }
+    AUDIO_BUFFERS[name] = buffer;
 }
 // =================================
 // player functions

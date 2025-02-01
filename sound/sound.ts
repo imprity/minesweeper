@@ -57,16 +57,41 @@ function newBufferFromAudioFile(
     file : ArrayBuffer,
     onDecoded : (success : boolean)=>void,
 ){
-    AUDIO_CONTEXT.decodeAudioData(
-        file,
-        (decoded : AudioBuffer)=>{
+    try {
+        const promise = AUDIO_CONTEXT.decodeAudioData(file)
+        promise.then((decoded : AudioBuffer) => {
             AUDIO_BUFFERS[name] = decoded
             onDecoded(true)
-        },
-        ()=>{
+        })
+        promise.catch(err=>{
+            console.error(`failed to decode ${name} : ${err}`)
             onDecoded(false)
-        }
-    )
+        })
+    }catch (err) {
+        console.error(`failed to decode ${name} : ${err}`)
+        onDecoded(false)
+    }
+}
+
+function newBufferFromUndecodedAudioFile(
+    name : string,
+    channelDatas : Array<Float32Array>,
+    sampleRate : number,
+) {
+    let channelByteLength = 0
+
+    if (channelDatas.length > 0) {
+        channelByteLength = channelDatas[0].byteLength
+    }
+
+    const buffer = AUDIO_CONTEXT.createBuffer(
+        channelDatas.length, channelByteLength, sampleRate);
+
+    for (let i=0; i<channelDatas.length; i++) {
+        buffer.copyToChannel(channelDatas[i], i)
+    }
+
+    AUDIO_BUFFERS[name] = buffer
 }
 
 // =================================

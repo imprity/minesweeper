@@ -4,21 +4,11 @@ package sound
 
 import (
 	"bytes"
-	"io"
-	"log"
-	"os"
-	"strings"
 	"sync"
 	"time"
 
 	eba "github.com/hajimehoshi/ebiten/v2/audio"
-
-	"github.com/hajimehoshi/ebiten/v2/audio/mp3"
-	"github.com/hajimehoshi/ebiten/v2/audio/vorbis"
-	"github.com/hajimehoshi/ebiten/v2/audio/wav"
 )
-
-var errLogger = log.New(os.Stderr, "[ FAIL ]: ", log.Lshortfile)
 
 type Context struct {
 	sampleRate int
@@ -47,11 +37,6 @@ func (c *Context) SampleRate() int {
 	return c.sampleRate
 }
 
-type decodeStream interface {
-	io.ReadSeeker
-	Length() int64
-}
-
 func (c *Context) RegisterAudio(
 	audioName string,
 	audioFile []byte,
@@ -60,28 +45,7 @@ func (c *Context) RegisterAudio(
 	errChan := make(chan error)
 
 	go func() {
-		var stream decodeStream
-		var err error
-
-		// NOTE: this is not a perfect way to determine the audio file type
-		// since audio file can be in different container.
-		//
-		// But it is good enough for what we are trying to do
-		switch strings.ToLower(audioFileType) {
-		case ".ogg":
-			stream, err = vorbis.DecodeWithSampleRate(c.SampleRate(), bytes.NewReader(audioFile))
-		case ".wav":
-			stream, err = wav.DecodeWithSampleRate(c.SampleRate(), bytes.NewReader(audioFile))
-		case ".mp3":
-			stream, err = mp3.DecodeWithSampleRate(c.SampleRate(), bytes.NewReader(audioFile))
-		}
-		if err != nil {
-			errChan <- err
-			close(errChan)
-			return
-		}
-
-		decoded, err := io.ReadAll(stream)
+		decoded, err := decodeAudioF32(audioFile, audioFileType, c.SampleRate())
 		if err != nil {
 			errChan <- err
 			close(errChan)
@@ -106,7 +70,7 @@ func (c *Context) NewPlayer(audioName string) *Player {
 
 	p := new(Player)
 	var err error
-	p.player, err = c.context.NewPlayer(bytes.NewReader(audioBytes))
+	p.player, err = c.context.NewPlayerF32(bytes.NewReader(audioBytes))
 
 	if err != nil {
 		// TODO: actually handle error instead of catching fire lol
