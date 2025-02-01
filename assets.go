@@ -296,22 +296,22 @@ func LoadAssets() {
 	for _, src := range SoundSrcs {
 		var file []byte
 		var err error
-		var convertedToVorbis bool = false
+		var convertedToMp3 bool = false
 
 		if FlagHotReload {
 			file, err = os.ReadFile(filepath.Join(hotReloadPath, src))
 		} else {
 			embedded := EmbeddedSounds[src]
 			file = EmbeddedSoundsData[embedded.Offset : embedded.Offset+embedded.Len]
-			convertedToVorbis = EmbeddedSounds[src].ConvertedToVorbisWithFfmpeg
+			convertedToMp3 = EmbeddedSounds[src].ConvertedToMp3WithFfmpeg
 		}
 
 		if err != nil {
 			ErrLogger.Fatalf("failed to load %s: %v", src, err)
 		}
 
-		if convertedToVorbis {
-			audioErrors[src] = RegisterAudio(src, file, ".ogg")
+		if convertedToMp3 {
+			audioErrors[src] = RegisterAudio(src, file, ".mp3")
 		} else {
 			audioErrors[src] = RegisterAudio(src, file, filepath.Ext(src))
 		}

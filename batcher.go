@@ -28,7 +28,7 @@ var (
 	SrcDir string
 	DstDir string
 
-	EncodeToWav bool = false
+	TargetFormat string
 )
 
 func init() {
@@ -38,7 +38,7 @@ func init() {
 
 		fmt.Fprintf(out, "Usage of %s:\n", scriptName)
 		fmt.Fprintf(out, "\n")
-		fmt.Fprintf(out, "go run %s -s ./audio/input/directory/ -d ./output/directory/ [-wav]\n", scriptName)
+		fmt.Fprintf(out, "go run %s -f [mp3 or wav or ogg] -s ./audio/input/directory/ -d ./output/directory/ [-wav]\n", scriptName)
 		fmt.Fprintf(out, "\n")
 		fmt.Fprintf(out, "requires ffmpeg\n")
 		fmt.Fprintf(out, "\n")
@@ -47,7 +47,7 @@ func init() {
 
 	flag.StringVar(&SrcDir, "s", "", "source folder")
 	flag.StringVar(&DstDir, "d", "", "destination folder")
-	flag.BoolVar(&EncodeToWav, "wav", false, "convert to wav instead of ogg")
+	flag.StringVar(&TargetFormat, "f", "", "target format")
 }
 
 func main() {
@@ -70,6 +70,11 @@ func main() {
 		flag.Usage()
 		os.Exit(1)
 	}
+	if len(TargetFormat) <= 0 {
+		misc.ErrLogger.Print("no target format provided")
+		flag.Usage()
+		os.Exit(1)
+	}
 
 	// =============================
 	// check if SrcDir is folder
@@ -78,6 +83,31 @@ func main() {
 		misc.ErrLogger.Fatalf("failed to check if \"%s\" a folder: %v", SrcDir, err)
 	} else if !isDir {
 		misc.ErrLogger.Fatalf("\"%s\" is not a folder", SrcDir)
+	}
+	// ========================================
+	// check if TargetFormat is valid
+	// ========================================
+	if !(TargetFormat == "mp3" || TargetFormat == "wav" || TargetFormat == "ogg") {
+		misc.ErrLogger.Fatalf("\"%s\" is not a valid target format", TargetFormat)
+	}
+	// ========================================
+	// check if SrcDir and DstDir is same
+	// ========================================
+	{
+		srcDirAbs, err := filepath.Abs(SrcDir)
+		if err != nil {
+			misc.ErrLogger.Fatal(err)
+		}
+		dstDirAbs, err := filepath.Abs(DstDir)
+		if err != nil {
+			misc.ErrLogger.Fatal(err)
+		}
+
+		if srcDirAbs == dstDirAbs {
+			misc.ErrLogger.Print("SrcDir and DstDir must be different")
+			flag.Usage()
+			os.Exit(1)
+		}
 	}
 
 	// =============================
@@ -184,22 +214,33 @@ func main() {
 	for i, file := range audioFiles {
 		dstFile := dstAudioFiles[i]
 		if before, found := strings.CutSuffix(dstFile, filepath.Ext(dstFile)); found {
-			if EncodeToWav {
+			if TargetFormat == "wav" {
 				dstFile = before + ".wav"
-			} else {
+			} else if TargetFormat == "ogg" {
 				dstFile = before + ".ogg"
+			} else { // mp3
+				dstFile = before + ".mp3"
 			}
 		}
 
 		var cmd *exec.Cmd
 
-		if EncodeToWav {
+		if TargetFormat == "wav" {
 			cmd = exec.Command(
 				"ffmpeg",
 				"-i", file, // input file
 				"-vn",      // no video
 				"-ac", "2", // 2 audio channel
 				"-ar", "48000", // sample rate of 48000
+				dstFile,
+			)
+		} else if TargetFormat == "ogg" {
+			cmd = exec.Command(
+				"ffmpeg",
+				"-i", file, // input file
+				"-vn",      // no video
+				"-ac", "2", // 2 audio channel
+				"-q:a", "5", // variable bitrate quality 5
 				dstFile,
 			)
 		} else {

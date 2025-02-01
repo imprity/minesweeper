@@ -46,7 +46,7 @@ type EmbeddedSound struct {
 	Offset int
 	Len int
 
-	ConvertedToVorbisWithFfmpeg bool
+	ConvertedToMp3WithFfmpeg bool
 }
 
 var EmbeddedSounds = map[string]EmbeddedSound {
@@ -55,7 +55,7 @@ var EmbeddedSounds = map[string]EmbeddedSound {
 		Offset : {{$embeddedSound.Offset}},
 		Len : {{$embeddedSound.Len}},
 
-		ConvertedToVorbisWithFfmpeg : {{$embeddedSound.ConvertedToVorbisWithFfmpeg}},
+		ConvertedToMp3WithFfmpeg : {{$embeddedSound.ConvertedToMp3WithFfmpeg}},
 	},
 {{- end}}
 }
@@ -82,7 +82,7 @@ type EmbeddedSound struct {
 	Offset int
 	Len    int
 
-	ConvertedToVorbisWithFfmpeg bool
+	ConvertedToMp3WithFfmpeg bool
 }
 
 func main() {
@@ -319,8 +319,8 @@ func GenerateEmbeddedSoundsUseFfmpeg(
 			cmd := exec.Command(
 				"ffmpeg",
 				"-i", path, // input file
-				"-f", "ogg", // container format
-				"-c:a", "libvorbis", // vorbis
+				"-f", "mp3", // container format
+				"-c:a", "libmp3lame", // vorbis
 				"-vn",      // no video
 				"-ac", "2", // 2 audio channel
 				"-q:a", "5", // variable bitrate quality 5
@@ -399,9 +399,9 @@ func GenerateEmbeddedSoundsUseFfmpeg(
 
 	for _, thread := range threads {
 		embeddedSound := EmbeddedSound{
-			Offset:                      offset,
-			Len:                         len(thread.ConvertedAudio),
-			ConvertedToVorbisWithFfmpeg: true,
+			Offset:                   offset,
+			Len:                      len(thread.ConvertedAudio),
+			ConvertedToMp3WithFfmpeg: true,
 		}
 		offset += len(thread.ConvertedAudio)
 		embeddedSounds[thread.Path] = embeddedSound
