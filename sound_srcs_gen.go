@@ -162,10 +162,10 @@ func main() {
 	var embeddedSounds map[string]EmbeddedSound
 
 	if misc.CheckExeExists("ffmpeg") {
-		misc.InfoLogger.Print("using ffmpeg to converting audio to vorbis ogg")
+		misc.InfoLogger.Print("using ffmpeg to converting audio to mp3")
 		embeddedSounds, err = GenerateEmbeddedSoundsUseFfmpeg(paths, binOutput)
 	} else {
-		misc.WarnLogger.Print("couldn't find ffmpeg, embedding audio directly without converting to vorbis ogg")
+		misc.WarnLogger.Print("couldn't find ffmpeg, embedding audio directly without converting to mp3")
 		embeddedSounds, err = GenerateEmbeddedSounds(paths, binOutput)
 	}
 
@@ -323,7 +323,8 @@ func GenerateEmbeddedSoundsUseFfmpeg(
 				"-c:a", "libmp3lame", // vorbis
 				"-vn",      // no video
 				"-ac", "2", // 2 audio channel
-				"-q:a", "5", // variable bitrate quality 5
+				// for some fucking reason, lower means better
+				"-q:a", "0", // variable bitrate quality 0
 				"pipe:1", // use stdout as pipe
 			)
 			misc.InfoLogger.Printf("%s", cmd.String())

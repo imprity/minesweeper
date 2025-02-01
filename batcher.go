@@ -243,13 +243,14 @@ func main() {
 				"-q:a", "5", // variable bitrate quality 5
 				dstFile,
 			)
-		} else {
+		} else { // mp3
 			cmd = exec.Command(
 				"ffmpeg",
 				"-i", file, // input file
 				"-vn",      // no video
 				"-ac", "2", // 2 audio channel
-				"-q:a", "5", // variable bitrate quality 5
+				// for some fucking reason, lower means better
+				"-q:a", "0", // variable bitrate quality 0
 				dstFile,
 			)
 		}
