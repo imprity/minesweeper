@@ -4,89 +4,106 @@
 <head>
     <style>
         :root {
-          --background: #FFFBF8FF;
-          --text : #2E2C2AFF;
+            --background: #FFFBF8FF;
+            --text: #2E2C2AFF;
         }
 
         /*margin border padding zero*/
         .mbp-zero {
             margin: 0px;
-            border-width : 0px;
-            padding : 0px;
+            border-width: 0px;
+            padding: 0px;
         }
 
         body {
             background-color: var(--background);
-            width : 100vw;
-            height : 100vh;
+            width: 100vw;
+            height: 100vh;
         }
 
         canvas {
             background-color: var(--background);
         }
 
-        #loading-screen {
+        .parent_screen {
+            position: absolute;
+
             width: 100%;
             height: 100%;
 
-            display : flex;
-            flex-direction : column;
-            flex-wrap : nowrap;
-            /*justify-content : space-around;*/
-            justify-content : center;
-            align-items : center;
-            gap : 5vmin
+            display: flex;
+            flex-direction: column;
+            flex-wrap: nowrap;
+            justify-content: center;
+            align-items: center;
+            gap: 5vmin
         }
 
         #loading-header {
-            color : var(--text);
-            font-size : 7vmin;
+            color: var(--text);
+            font-size: 7vmin;
             font-family: Georgia, serif;
         }
-
         #progress-bar {
-            background-color : darkgray;
+            background-color: darkgray;
 
-            width : 70vw;
-            height : 2.5vmin;
-            min-height : 10px;
+            width: 70vw;
+            height: 2.5vmin;
+            min-height: 10px;
         }
         #progress-fill {
             background-color: black;
 
-            height : 100%;
-            width : 0%;
+            height: 100%;
+            width: 0%;
         }
 
-        #error-text-box {
-            max-width : 60vw;
-            display : none;
+        .error-text-box {
+            max-width: 60vw;
+            max-height: 30vh;
+            overflow: auto;
         }
-        #error-header {
-            color : rgb(232, 60, 71);
-            font-size : 1.5rem;
+        .error-header {
+            color: rgb(232, 60, 71);
+            font-size: 1.5rem;
             font-family: Georgia, serif;
         }
-        #error-text {
-            color : var(--text);
-            font-family : Arial, Helvetica, sans-serif;
+        .error-text {
+            color: var(--text);
+            font-family: Arial, Helvetica, sans-serif;
+        }
+
+        #crash-screen {
+            background-color: var(--background);
+            z-index: 99;
         }
     </style>
 </head>
 
 <body class="mbp-zero">
-    <div id="loading-screen" class="mbp-zero">
+    <div id="loading-screen" class="mbp-zero, parent_screen">
         <h1 id="loading-header" class="mbp-zero">Loading</h1>
 
         <div id="progress-bar" class="mbp-zero">
             <div id="progress-fill" class="mbp-zero"></div>
         </div>
 
-        <div id="error-text-box">
-            <h1 id="error-header">Error:</h1>
-            <p id="error-text"></p>
+        <div id="loading-error-container" class="error-container" style="display: none;">
+            <h1 class="error-header">Error:</h1>
+            <div class="error-text-box">
+                <p id="loading-error-text" class="error-text"></p>
+            </div>
         </div>
     </div>
+    <div id="crash-screen" class="mbp-zero, parent_screen" style="display: none;">
+        <div id="crash-error-container" class="error-container">
+            <h1 class="error-header">Crash:</h1>
+            <div class="error-text-box">
+                <p id="crash-error-text" class="error-text"></p>
+            </div>
+        </div>
+    </div>
+
     <script src="sound.js"></script>
     <script src="wasm_exec.js"></script>
     <script src="minesweeper_wasm_size.js"></script>
