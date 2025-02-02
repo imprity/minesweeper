@@ -99,7 +99,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         const go = new Go();
         go.exit = (code) => {
             if (code != 0) {
-                crashScreen.style.display = 'flex'; // show errorTextBox
+                crashScreen.style.display = 'flex'; // show crashScreen
                 crashErrortext.innerText = logText;
             }
         };
@@ -108,7 +108,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         });
     }
     catch (err) {
-        loadingErrorContainer.style.display = 'block'; // show errorTextBox
+        loadingErrorContainer.style.display = 'block'; // show error container
         loadingErrorText.innerText = err.toString();
         console.error(err);
     }
