@@ -369,13 +369,11 @@ func NewGame(boardWidth, boardHeight, mineCount int) *Game {
 	g.RetryButton.Disabled = true
 	g.RetryButtonScale = 1
 
-	g.RetryButton.OnPress = func(justPressed bool) {
-		if justPressed {
-			g.SkipAllAnimationsUntilTag(AnimationTagHideBoard)
-			PlaySoundBytes(SeButtonClick, 1.0)
-			g.RetryButton.Disabled = true
-			g.QueueResetBoardAnimation()
-		}
+	g.RetryButton.OnPress = func(bool) {
+		g.SkipAllAnimationsUntilTag(AnimationTagHideBoard)
+		PlaySoundBytes(SeButtonClick, 1.0)
+		g.RetryButton.Disabled = true
+		g.QueueResetBoardAnimation()
 	}
 
 	g.Seed = GetSeed()
@@ -3157,6 +3155,7 @@ type RetryButton struct {
 
 func NewRetryButton() *RetryButton {
 	rb := new(RetryButton)
+	rb.BaseButton = NewBaseButton()
 	rb.waterRenderTarget = eb.NewImageWithOptions(
 		RectWH(256, 256),
 		&eb.NewImageOptions{Unmanaged: true},

@@ -760,7 +760,7 @@ func NewMuteButtonUI() *MuteButtonUI {
 		mu.MuteButton.ImageColorOnHover = ColorTopUIButtonOnHover
 		mu.MuteButton.ImageColorOnDown = ColorTopUIButtonOnDown
 
-		mu.MuteButton.OnPress = func(justPressed bool) {
+		mu.MuteButton.OnPress = func(bool) {
 			mu.IsMute = !mu.IsMute
 			if mu.IsMute {
 				mu.MuteButton.Image = SpriteSubView(UISprite, 5)

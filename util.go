@@ -21,6 +21,11 @@ func CursorFPt() FPoint {
 	return FPt(f64(mx), f64(my))
 }
 
+func TouchFPt(touchId eb.TouchID) FPoint {
+	tx, ty := eb.TouchPosition(touchId)
+	return FPt(f64(tx), f64(ty))
+}
+
 // make rectangle with left corner at 0, 0
 // centered at 0, 0
 func TransformToCenter(

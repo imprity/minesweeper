@@ -16,22 +16,38 @@ const (
 	ButtonStateDown
 )
 
+type ButtonTiming int
+
+const (
+	ButtonTimingOnPress ButtonTiming = iota
+	ButtonTimingOnHold
+	ButtonTimingOnRelease
+)
+
 type BaseButton struct {
 	Rect FRectangle
 
 	Disabled bool
 
-	// fires when pressed
-	// if RepeateOnHold is true, then if fires up repeatedly when user holds the button
-	OnPress   func(justPressed bool)
-	OnRelease func()
+	OnPress   func(byTouch bool)
+	OnHold    func(byTouch bool)
+	OnRelease func(byTouch bool)
 
-	RepeateOnHold         bool
+	OnAny func(byTouch bool, timing ButtonTiming)
+
 	FirstRate, RepeatRate time.Duration
 
 	State ButtonState
 
+	InputId InputGroupId
+
 	readyToCallOnRelease bool
+}
+
+func NewBaseButton() BaseButton {
+	var b BaseButton
+	b.InputId = NewInputGroupId()
+	return b
 }
 
 func (b *BaseButton) Update() {
@@ -43,43 +59,78 @@ func (b *BaseButton) Update() {
 
 	prevState := b.State
 
-	pt := CursorFPt()
+	cursor := CursorFPt()
+	touchingInside := IsTouching(b.Rect, nil)
 
-	inRect := pt.In(b.Rect)
+	inRect := cursor.In(b.Rect) || touchingInside
 
 	if inRect { // if mouse in rect
-		if b.RepeateOnHold {
-			if HandleMouseButtonRepeat(
-				b.FirstRate, b.RepeatRate, eb.MouseButtonLeft,
-			) {
-				b.State = ButtonStateDown
-				if b.OnPress != nil {
-					b.OnPress(IsMouseButtonJustPressed(eb.MouseButtonLeft))
-				}
-			}
-		} else {
-			if IsMouseButtonJustPressed(eb.MouseButtonLeft) {
+		firedOnJustPress := false
+		{
+			justPressed := IsMouseButtonJustPressed(eb.MouseButtonLeft)
+			justTouched := IsTouchJustPressed(b.Rect, nil)
+			if justPressed || justTouched {
 				b.State = ButtonStateDown
 				b.readyToCallOnRelease = true
 				if b.OnPress != nil {
-					b.OnPress(true)
+					b.OnPress(justTouched)
 				}
+				if b.OnAny != nil {
+					b.OnAny(justTouched, ButtonTimingOnPress)
+				}
+				firedOnJustPress = true
 			}
 		}
 
-		if b.readyToCallOnRelease && IsMouseButtonJustReleased(eb.MouseButtonLeft) {
+		if b.State == ButtonStateDown {
+			repeat := HandleMouseButtonRepeat(
+				b.InputId,
+				b.Rect,
+				b.FirstRate, b.RepeatRate,
+				eb.MouseButtonLeft,
+			)
+
+			touchRepeat := HandleTouchRepeat(
+				b.InputId,
+				b.Rect,
+				b.FirstRate, b.RepeatRate,
+			)
+
+			repeat = repeat || touchRepeat
+
+			if repeat && !firedOnJustPress {
+				if b.OnHold != nil {
+					b.OnHold(touchRepeat)
+				}
+				if b.OnAny != nil {
+					b.OnAny(touchRepeat, ButtonTimingOnHold)
+				}
+			}
+		}
+	}
+
+	if b.readyToCallOnRelease {
+		touchReleased := IsTouchJustReleased(b.Rect, nil)
+		mouseReleased := IsMouseButtonJustReleased(eb.MouseButtonLeft) && inRect
+
+		released := touchReleased || mouseReleased
+
+		if released {
 			if b.OnRelease != nil {
-				b.OnRelease()
+				b.OnRelease(touchReleased)
+			}
+			if b.OnAny != nil {
+				b.OnAny(touchReleased, ButtonTimingOnRelease)
 			}
 			b.readyToCallOnRelease = false
 		}
 	}
+	if (cursor.In(b.Rect) && !(IsMouseButtonPressed(eb.MouseButtonLeft) && b.State == ButtonStateDown)) ||
+		(touchingInside && b.State != ButtonStateDown) {
+		b.State = ButtonStateHover
+	}
 
-	if inRect {
-		if b.State != ButtonStateDown || !IsMouseButtonPressed(eb.MouseButtonLeft) {
-			b.State = ButtonStateHover
-		}
-	} else {
+	if !inRect {
 		b.State = ButtonStateNormal
 	}
 
@@ -108,6 +159,7 @@ type ImageButton struct {
 
 func NewImageButton() *ImageButton {
 	b := new(ImageButton)
+	b.BaseButton = NewBaseButton()
 
 	b.ImageColor = color.NRGBA{255, 255, 255, 255}
 	b.ImageColorOnHover = color.NRGBA{255, 255, 255, 255}
@@ -185,6 +237,8 @@ var DefaultTextButton = TextButton{
 
 func NewTextButton() *TextButton {
 	copy := DefaultTextButton
+	copy.BaseButton = NewBaseButton()
+
 	return &copy
 }
 
