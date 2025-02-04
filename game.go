@@ -53,6 +53,21 @@ type GameInputHandler struct {
 
 	gameInput GameInput
 
+	// pinch
+	pinchPos     FPoint
+	prevPinchPos FPoint
+
+	pinch     float64
+	prevPinch float64
+
+	pinchStarted bool
+
+	// dragging
+	dragDelta     FPoint
+	dragStartPos  FPoint
+	dragStarted   bool
+	dragPastLimit bool
+
 	consumedHolds map[eb.TouchID]bool
 
 	touchingBuf     []eb.TouchID
@@ -64,8 +79,10 @@ type GameInputHandler struct {
 
 func NewGameInputHandler() *GameInputHandler {
 	gi := new(GameInputHandler)
+
 	gi.TouchInfos = make(map[eb.TouchID]TouchInfo)
 	gi.consumedHolds = make(map[eb.TouchID]bool)
+
 	return gi
 }
 
@@ -73,11 +90,6 @@ func (gi *GameInputHandler) Update(
 	board Board,
 	boardRect FRectangle,
 ) {
-	// TODO : mouse cursor pos doesn't clear by touches
-	// say for example, you were controlling your game with your mouse,
-	// but you used touch screen to do shit,
-	// then mouse just hovers ther
-
 	// =============================
 	// update touch buffers
 	// =============================
@@ -174,7 +186,7 @@ func (gi *GameInputHandler) Update(
 	}
 
 	// =============================
-	// update touch input
+	// update touch board input
 	// =============================
 
 	// check if it's safe to check touch
@@ -284,11 +296,106 @@ func (gi *GameInputHandler) Update(
 		}
 	}
 
+	// =============================
+	// update touch pinch input
+	// =============================
+	if len(gi.touchingBuf) == 2 {
+		pos1 := TouchFPt(gi.touchingBuf[0])
+		pos2 := TouchFPt(gi.touchingBuf[1])
+
+		newPinch := pos1.Sub(pos2).Length()
+		newPinchPos := pos1.Add(pos2).Mul(FPt(0.5, 0.5))
+
+		if !gi.pinchStarted {
+			gi.pinchPos = newPinchPos
+			gi.prevPinchPos = newPinchPos
+
+			gi.pinch = newPinch
+			gi.prevPinch = newPinch
+
+			gi.pinchStarted = true
+		} else {
+			gi.prevPinch = gi.pinch
+			gi.prevPinchPos = gi.pinchPos
+
+			gi.pinch = newPinch
+			gi.pinchPos = newPinchPos
+		}
+	} else {
+		gi.pinchStarted = false
+	}
+
+	// =============================
+	// update touch drag input
+	// =============================
+	if len(gi.touchingBuf) == 1 {
+		if !gi.dragStarted {
+			gi.dragDelta = FPt(0, 0)
+
+			gi.dragStartPos = TouchFPt(gi.touchingBuf[0])
+			gi.dragPastLimit = false
+
+			gi.dragStarted = true
+		} else {
+			pos := TouchFPt(gi.touchingBuf[0])
+			prevX, prevY := ebi.TouchPositionInPreviousTick(gi.touchingBuf[0])
+			prevPos := FPt(f64(prevX), f64(prevY))
+
+			gi.dragDelta = pos.Sub(prevPos)
+			if gi.dragStartPos.Sub(pos).LengthSquared() > 20*20 {
+				gi.dragPastLimit = true
+			}
+		}
+	} else {
+		gi.dragPastLimit = false
+		gi.dragStarted = false
+	}
+
 	gi.gameInput = input
 }
 
 func (gi *GameInputHandler) GetGameInput() GameInput {
 	return gi.gameInput
+}
+
+func (gi *GameInputHandler) GetZoomAndOffset(
+	oldZoom float64, oldOffset FPoint,
+	boardCenter FPoint,
+) (float64, FPoint) {
+	if gi.pinchStarted {
+		zoom := gi.pinch / gi.prevPinch
+		newZoom := oldZoom * zoom
+
+		toBoardCenter := boardCenter.Sub(gi.pinchPos)
+		newBoardCenter := gi.pinchPos.Add(toBoardCenter.Mul(FPt(zoom, zoom)))
+		toNewBoardCenter := newBoardCenter.Sub(boardCenter)
+
+		newOffset := oldOffset.Add(toNewBoardCenter)
+
+		pinchDiff := gi.pinchPos.Sub(gi.prevPinchPos)
+		newOffset = newOffset.Add(pinchDiff)
+
+		if gi.dragStarted {
+			newOffset = newOffset.Add(gi.dragDelta)
+		}
+
+		oldZoom = newZoom
+		oldOffset = newOffset
+	}
+
+	if gi.dragPastLimit {
+		oldOffset = oldOffset.Add(gi.dragDelta)
+	}
+
+	return oldZoom, oldOffset
+}
+
+func (gi *GameInputHandler) IsPinching() bool {
+	return gi.pinchStarted
+}
+
+func (gi *GameInputHandler) IsDragging() bool {
+	return gi.dragPastLimit
 }
 
 type TileFgType int
@@ -529,6 +636,9 @@ type StyleModifier func(
 type Game struct {
 	Rect FRectangle
 
+	Zoom   float64
+	Offset FPoint
+
 	OnAfterBoardReset  func()
 	OnBeforeBoardReset func()
 	OnGameEnd          func(didWin bool)
@@ -583,6 +693,8 @@ type Game struct {
 
 func NewGame(boardWidth, boardHeight, mineCount int) *Game {
 	g := new(Game)
+
+	g.Zoom = 1
 
 	g.InputHandler = NewGameInputHandler()
 
@@ -703,9 +815,18 @@ func (g *Game) Update() {
 	g.playedAddFlagSound = false
 	g.playedRemoveFlagSound = false
 
-	g.InputHandler.Update(g.board, g.Rect)
+	g.InputHandler.Update(g.board, g.TransformedBoardRect())
 
 	gi := g.InputHandler.GetGameInput()
+
+	// =================================
+	// handle pinch zoom
+	// =================================
+	g.Zoom, g.Offset = g.InputHandler.GetZoomAndOffset(g.Zoom, g.Offset, FRectangleCenter(g.TransformedBoardRect()))
+
+	if g.InputHandler.IsPinching() || g.InputHandler.IsDragging() {
+		SetRedraw()
+	}
 
 	// =================================
 	// handle board interaction
@@ -907,7 +1028,7 @@ func (g *Game) Update() {
 	for i := 0; i < len(g.StyleModifiers); i++ {
 		doRedraw := g.StyleModifiers[i](
 			g.prevBoard, g.board,
-			g.Rect,
+			g.TransformedBoardRect(),
 			interaction,
 			stateChanged,
 			prevState, g.GameState,
@@ -926,7 +1047,7 @@ func (g *Game) Update() {
 	{
 		tc := TileParticleUnitConverter{
 			BoardWidth: g.board.Width, BoardHeight: g.board.Height,
-			BoardRect: g.Rect,
+			BoardRect: g.TransformedBoardRect(),
 		}
 
 		foundAlive := false
@@ -1002,10 +1123,12 @@ func (g *Game) Draw(dst *eb.Image) {
 		dst,
 
 		g.board.Width, g.board.Height,
-		g.Rect,
+		g.TransformedBoardRect(),
 		g.RenderTileStyles,
 
 		doWaterEffect, g.WaterAlpha, g.WaterFlowOffset,
+
+		g.InputHandler.IsPinching(),
 	)
 
 	if g.DrawRetryButton {
@@ -1020,7 +1143,7 @@ func (g *Game) Draw(dst *eb.Image) {
 		dst,
 		g.Particles,
 		g.board.Width, g.board.Height,
-		g.Rect,
+		g.TransformedBoardRect(),
 	)
 }
 
@@ -1050,6 +1173,14 @@ func (g *Game) BoardTileCount() (int, int) {
 
 func (g *Game) HadInteraction() bool {
 	return g.hadInteraction
+}
+
+func (g *Game) TransformedBoardRect() FRectangle {
+	rect := g.Rect
+	rect = FRectScaleCentered(rect, g.Zoom, g.Zoom)
+	rect = rect.Add(FPt(g.Offset.X, g.Offset.Y))
+
+	return rect
 }
 
 func isTileFirmlyPlaced(style TileStyle) bool {
@@ -1467,6 +1598,9 @@ var DBC = struct { // DrawBoard cache
 	TileRoundness    Array2D[[4]bool]
 
 	WaterRenderTarget *eb.Image
+
+	FixedSizeFace     *ebt.GoTextFace
+	FixedSizeFaceSize float64
 }{}
 
 func init() {
@@ -1486,10 +1620,9 @@ func DrawBoard(
 	doWaterEffect bool,
 	waterAlpha float64,
 	waterFlowOffset time.Duration,
-) {
-	// TODO : we need flagSpriteBuf only because flag animations are stored in different image
-	// merge flag sprite with other sprites.
 
+	zoomingInOut bool,
+) {
 	modColor := func(
 		c color.Color,
 		alpha float64,
@@ -1535,6 +1668,18 @@ func DrawBoard(
 				&eb.NewImageOptions{Unmanaged: true},
 			)
 		}
+	}
+
+	// ======================
+	// create FixedSizeFace
+	// ======================
+	if DBC.FixedSizeFace == nil {
+		DBC.FixedSizeFaceSize = 128
+		DBC.FixedSizeFace = &ebt.GoTextFace{
+			Source: FaceSource,
+			Size:   DBC.FixedSizeFaceSize,
+		}
+		DBC.FixedSizeFace.SetVariation(ebt.MustParseTag("wght"), 600)
 	}
 
 	// ======================
@@ -1881,13 +2026,22 @@ func DrawBoard(
 
 	// draw numbers
 	var numberFace *ebt.GoTextFace
+	var numberFaceScale float64 = 1
+
 	{
 		_, tileSizeH := GetBoardTileSize(boardRect, boardWidth, boardHeight)
-		numberFace = &ebt.GoTextFace{
-			Source: FaceSource,
-			Size:   tileSizeH * 0.95,
+		faceSize := tileSizeH * 0.95
+
+		if zoomingInOut {
+			numberFace = DBC.FixedSizeFace
+			numberFaceScale = faceSize / DBC.FixedSizeFaceSize
+		} else {
+			numberFace = &ebt.GoTextFace{
+				Source: FaceSource,
+				Size:   faceSize,
+			}
+			numberFace.SetVariation(ebt.MustParseTag("wght"), 600)
 		}
-		numberFace.SetVariation(ebt.MustParseTag("wght"), 600)
 	}
 
 	BeginAntiAlias(false)
@@ -1915,8 +2069,10 @@ func DrawBoard(
 
 				center := FRectangleCenter(fgRect)
 
+				scale := numberFaceScale * fgScale
+
 				op.GeoM.Translate(0, -numberFace.Size*0.58)
-				op.GeoM.Scale(fgScale, fgScale)
+				op.GeoM.Scale(scale, scale)
 
 				op.GeoM.Translate(
 					center.X+style.FgOffsetX, center.Y+style.FgOffsetX,
@@ -2688,7 +2844,7 @@ func (g *Game) QueueRetryButtonAnimation() {
 	toAnimate := make([]image.Point, 0)
 	{
 		minTileX, minTileY := MousePosToBoardPos(
-			g.Rect,
+			g.TransformedBoardRect(),
 			g.board.Width, g.board.Height,
 			buttonRect.Min,
 		)
@@ -2696,7 +2852,7 @@ func (g *Game) QueueRetryButtonAnimation() {
 		minTileY = Clamp(minTileY, 0, g.board.Height-1)
 
 		maxTileX, maxTileY := MousePosToBoardPos(
-			g.Rect,
+			g.TransformedBoardRect(),
 			g.board.Width, g.board.Height,
 			buttonRect.Max,
 		)
@@ -3225,8 +3381,8 @@ func DrawWaterRect(
 }
 
 func (g *Game) RetryButtonRect() FRectangle {
-	boardRect := g.Rect
-	size := g.retryButtonSizeRelative * min(g.Rect.Dx(), g.Rect.Dy())
+	boardRect := g.TransformedBoardRect()
+	size := g.retryButtonSizeRelative * min(g.TransformedBoardRect().Dx(), g.TransformedBoardRect().Dy())
 	rect := FRectWH(size, size)
 	center := FRectangleCenter(boardRect)
 	rect = CenterFRectangle(rect, center.X, center.Y)
