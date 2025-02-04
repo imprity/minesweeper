@@ -11,59 +11,284 @@ import (
 	"time"
 
 	eb "github.com/hajimehoshi/ebiten/v2"
+	ebi "github.com/hajimehoshi/ebiten/v2/inpututil"
 	ebt "github.com/hajimehoshi/ebiten/v2/text/v2"
 	ebv "github.com/hajimehoshi/ebiten/v2/vector"
 )
 
 var _ = fmt.Printf
 
-type MouseState struct {
-	JustPressedL bool
-	JustPressedR bool
-	JustPressedM bool
+type GameInputType int
 
-	PressedL bool
-	PressedR bool
-	PressedM bool
+const (
+	InputTypeNone GameInputType = iota
+	InputTypeStep
+	InputTypeFlag
+	InputTypeCheck
+	InputTypeHL
+)
 
-	CursorX float64
-	CursorY float64
+type GameInput struct {
+	Type GameInputType
 
 	BoardX int
 	BoardY int
+
+	ByTouch bool
 }
 
-func (ms *MouseState) PressedAny() bool {
-	return ms.PressedL || ms.PressedR || ms.PressedM
+type TouchInfo struct {
+	StartedTime time.Duration
+	StartedPos  FPoint
+
+	EndedTime time.Duration
+	EndedPos  FPoint
+	DidEnd    bool
+
+	Dragged bool
 }
 
-func (ms *MouseState) JustPressedAny() bool {
-	return ms.JustPressedL || ms.JustPressedR || ms.JustPressedM
+type GameInputHandler struct {
+	TouchInfos map[eb.TouchID]TouchInfo
+
+	gameInput GameInput
+
+	consumedHolds map[eb.TouchID]bool
+
+	touchingBuf     []eb.TouchID
+	justTouchedBuf  []eb.TouchID
+	justReleasedBuf []eb.TouchID
+
+	safeToCheckTouch bool
 }
 
-func GetMouseState(board Board, boardRect FRectangle) MouseState {
-	var ms MouseState
+func NewGameInputHandler() *GameInputHandler {
+	gi := new(GameInputHandler)
+	gi.TouchInfos = make(map[eb.TouchID]TouchInfo)
+	gi.consumedHolds = make(map[eb.TouchID]bool)
+	return gi
+}
 
-	ms.JustPressedL = IsMouseButtonJustPressed(eb.MouseButtonLeft)
-	ms.JustPressedR = IsMouseButtonJustPressed(eb.MouseButtonRight)
-	ms.JustPressedM = IsMouseButtonJustPressed(eb.MouseButtonMiddle)
+func (gi *GameInputHandler) Update(
+	board Board,
+	boardRect FRectangle,
+) {
+	// TODO : mouse cursor pos doesn't clear by touches
+	// say for example, you were controlling your game with your mouse,
+	// but you used touch screen to do shit,
+	// then mouse just hovers ther
 
-	ms.PressedL = IsMouseButtonPressed(eb.MouseButtonLeft)
-	ms.PressedR = IsMouseButtonPressed(eb.MouseButtonRight)
-	ms.PressedM = IsMouseButtonPressed(eb.MouseButtonMiddle)
+	// =============================
+	// update touch buffers
+	// =============================
+	gi.touchingBuf = eb.AppendTouchIDs(gi.touchingBuf[:0])
+	gi.justTouchedBuf = ebi.AppendJustPressedTouchIDs(gi.justTouchedBuf[:0])
+	gi.justReleasedBuf = ebi.AppendJustReleasedTouchIDs(gi.justReleasedBuf[:0])
+
+	// =============================
+	// update touch infos
+	// =============================
+	for _, touchId := range gi.justTouchedBuf {
+		gi.TouchInfos[touchId] = TouchInfo{
+			StartedTime: GlobalTimerNow(),
+			StartedPos:  TouchFPt(touchId),
+		}
+	}
+
+	for _, touchId := range gi.touchingBuf {
+		if info, ok := gi.TouchInfos[touchId]; ok {
+			curPos := TouchFPt(touchId)
+			if info.StartedPos.Sub(curPos).LengthSquared() > 20*20 {
+				info.Dragged = true
+			}
+			gi.TouchInfos[touchId] = info
+		}
+	}
+
+	for _, touchId := range gi.justReleasedBuf {
+		if info, ok := gi.TouchInfos[touchId]; ok {
+			info.DidEnd = true
+			info.EndedTime = GlobalTimerNow()
+			touchX, touchY := ebi.TouchPositionInPreviousTick(touchId)
+			info.EndedPos = FPt(f64(touchX), f64(touchY))
+			gi.TouchInfos[touchId] = info
+		}
+	}
+
+	touchingMap := make(map[eb.TouchID]bool)
+	for _, touchId := range gi.touchingBuf {
+		touchingMap[touchId] = true
+	}
+
+	isTouching := func(touchId eb.TouchID) bool {
+		return touchingMap[touchId]
+	}
+
+	// for safety
+	// remove touch timers that are unpressed and too old
+	for touchId, info := range gi.TouchInfos {
+		if !isTouching(touchId) && TimeSinceNow(info.StartedTime) > time.Minute*30 {
+			delete(gi.TouchInfos, touchId)
+		}
+	}
+
+	// =============================
+	// update mouse input
+	// =============================
+	input := GameInput{}
+
+	pressedL := IsMouseButtonPressed(eb.MouseButtonLeft)
+	pressedR := IsMouseButtonPressed(eb.MouseButtonRight)
+	pressedM := IsMouseButtonPressed(eb.MouseButtonMiddle)
+
+	justPressedL := IsMouseButtonJustPressed(eb.MouseButtonLeft)
+	justPressedR := IsMouseButtonJustPressed(eb.MouseButtonRight)
+	justPressedM := IsMouseButtonJustPressed(eb.MouseButtonMiddle)
 
 	cursor := CursorFPt()
 
-	ms.CursorX = cursor.X
-	ms.CursorY = cursor.Y
-
-	ms.BoardX, ms.BoardY = MousePosToBoardPos(
+	input.BoardX, input.BoardY = MousePosToBoardPos(
 		boardRect,
 		board.Width, board.Height,
 		cursor,
 	)
 
-	return ms
+	cursorInRect := cursor.In(boardRect)
+
+	if cursorInRect {
+		if (pressedL && pressedR) || pressedM {
+			input.Type = InputTypeHL
+		}
+
+		if justPressedR {
+			input.Type = InputTypeFlag
+		}
+
+		if justPressedL {
+			input.Type = InputTypeStep
+		}
+
+		if (justPressedL && pressedR) || (pressedL && justPressedR) || justPressedM {
+			input.Type = InputTypeCheck
+		}
+	}
+
+	// =============================
+	// update touch input
+	// =============================
+
+	// check if it's safe to check touch
+	// i.e. no two fingers are touching the screen
+	{
+		var touchStart time.Duration
+		var touchEnd time.Duration
+
+		similarTouchStartCount := 0
+		similarTouchEndCount := 0
+
+		for _, info := range gi.TouchInfos {
+			if similarTouchStartCount <= 0 {
+				touchStart = info.StartedTime
+				similarTouchStartCount = 1
+			} else if Abs(touchStart-info.StartedTime) < time.Millisecond*200 {
+				similarTouchStartCount++
+			}
+
+			if info.DidEnd {
+				if similarTouchEndCount <= 0 {
+					touchEnd = info.EndedTime
+					similarTouchEndCount = 1
+				} else if Abs(touchEnd-info.EndedTime) < time.Millisecond*200 {
+					similarTouchEndCount++
+				}
+			}
+		}
+
+		if similarTouchStartCount > 1 || similarTouchEndCount > 1 {
+			gi.safeToCheckTouch = false
+		}
+	}
+
+	if len(gi.touchingBuf) <= 0 && len(gi.justReleasedBuf) <= 0 {
+		gi.safeToCheckTouch = true
+	}
+
+	const holdDuration = 200 * time.Millisecond
+
+	// check touch
+	if gi.safeToCheckTouch {
+		for touchId, info := range gi.TouchInfos {
+			curPos := TouchFPt(touchId)
+
+			curBX, curBY := MousePosToBoardPos(
+				boardRect,
+				board.Width, board.Height,
+				curPos,
+			)
+
+			startedBX, startedBY := MousePosToBoardPos(
+				boardRect,
+				board.Width, board.Height,
+				info.StartedPos,
+			)
+			_ = startedBX
+			_ = startedBY
+
+			endedBX, endedBY := MousePosToBoardPos(
+				boardRect,
+				board.Width, board.Height,
+				info.EndedPos,
+			)
+
+			justReleased := info.DidEnd && info.EndedTime == GlobalTimerNow()
+
+			tapped := (info.EndedTime-info.StartedTime) < holdDuration && justReleased
+
+			if tapped && board.IsPosInBoard(endedBX, endedBY) {
+				input.BoardX, input.BoardY = endedBX, endedBY
+				input.ByTouch = true
+				if board.Revealed.Get(endedBX, endedBY) {
+					input.Type = InputTypeCheck
+				} else {
+					input.Type = InputTypeStep
+				}
+			}
+
+			touchHeld := TimeSinceNow(info.StartedTime) > holdDuration
+			touchHeld = touchHeld && !info.DidEnd
+
+			if touchHeld && board.IsPosInBoard(curBX, curBY) && gi.consumedHolds[touchId] {
+				input.BoardX, input.BoardY = curBX, curBY
+				input.ByTouch = true
+				input.Type = InputTypeHL
+			}
+
+			if touchHeld && !info.Dragged && board.IsPosInBoard(curBX, curBY) && !gi.consumedHolds[touchId] {
+				gi.consumedHolds[touchId] = true
+
+				input.BoardX, input.BoardY = curBX, curBY
+				input.ByTouch = true
+
+				if board.Revealed.Get(curBX, curBY) {
+					input.Type = InputTypeCheck
+				} else {
+					input.Type = InputTypeFlag
+				}
+			}
+		}
+	}
+
+	for touchId := range gi.consumedHolds {
+		if !isTouching(touchId) {
+			delete(gi.consumedHolds, touchId)
+		}
+	}
+
+	gi.gameInput = input
+}
+
+func (gi *GameInputHandler) GetGameInput() GameInput {
+	return gi.gameInput
 }
 
 type TileFgType int
@@ -298,6 +523,7 @@ type StyleModifier func(
 	stateChanged bool, // GameState or board has changed
 	prevGameState, gameState GameState,
 	tileStyles Array2D[TileStyle], // modify these to change style
+	gi GameInput,
 ) bool
 
 type Game struct {
@@ -316,6 +542,8 @@ type Game struct {
 	GameAnimations CircularQueue[CallbackAnimation]
 
 	StyleModifiers []StyleModifier
+
+	InputHandler *GameInputHandler
 
 	RetryButton *RetryButton
 
@@ -355,6 +583,8 @@ type Game struct {
 
 func NewGame(boardWidth, boardHeight, mineCount int) *Game {
 	g := new(Game)
+
+	g.InputHandler = NewGameInputHandler()
 
 	g.mineCount = mineCount
 
@@ -473,7 +703,9 @@ func (g *Game) Update() {
 	g.playedAddFlagSound = false
 	g.playedRemoveFlagSound = false
 
-	ms := GetMouseState(g.board, g.Rect)
+	g.InputHandler.Update(g.board, g.Rect)
+
+	gi := g.InputHandler.GetGameInput()
 
 	// =================================
 	// handle board interaction
@@ -491,18 +723,18 @@ func (g *Game) Update() {
 	var interaction BoardInteractionType = InteractionTypeNone
 	// =======================================
 
-	if g.GameState == GameStatePlaying && g.board.IsPosInBoard(ms.BoardX, ms.BoardY) && ms.JustPressedAny() {
-		if ((ms.JustPressedL && ms.PressedR) || (ms.PressedL && ms.JustPressedR)) || ms.JustPressedM {
+	if g.GameState == GameStatePlaying && gi.Type != InputTypeNone {
+		if gi.Type == InputTypeCheck {
 			interaction = InteractionTypeCheck
-		} else if ms.JustPressedR {
+		} else if gi.Type == InputTypeFlag {
 			interaction = InteractionTypeFlag
-		} else if ms.JustPressedL {
+		} else if gi.Type == InputTypeStep {
 			interaction = InteractionTypeStep
 		}
 
 		if interaction != InteractionTypeNone {
 			g.GameState = g.board.InteractAt(
-				ms.BoardX, ms.BoardY, interaction, g.GameState, g.mineCount, g.Seed)
+				gi.BoardX, gi.BoardY, interaction, g.GameState, g.mineCount, g.Seed)
 
 			needToCheckStateChange = true
 		}
@@ -556,7 +788,11 @@ func (g *Game) Update() {
 	// skipping animations
 	if prevState == GameStateLost || prevState == GameStateWon {
 		// all animations are skippable except AnimationTagRetryButtonReveal
-		if ms.JustPressedAny() {
+		pressedAny := IsMouseButtonJustPressed(eb.MouseButtonLeft)
+		pressedAny = pressedAny || IsMouseButtonJustPressed(eb.MouseButtonRight)
+		pressedAny = pressedAny || IsMouseButtonJustPressed(eb.MouseButtonMiddle)
+		pressedAny = pressedAny || IsTouchJustPressed(FRectWH(ScreenWidth, ScreenHeight), nil)
+		if pressedAny {
 			g.SkipAllAnimationsUntilTag(AnimationTagRetryButtonReveal)
 		}
 	}
@@ -589,8 +825,8 @@ func (g *Game) Update() {
 				// on reveal
 				g.QueueRevealAnimation(
 					g.prevBoard.Revealed, g.board.Revealed,
-					Clamp(ms.BoardX, 0, g.board.Width-1),
-					Clamp(ms.BoardY, 0, g.board.Height-1),
+					Clamp(gi.BoardX, 0, g.board.Width-1),
+					Clamp(gi.BoardY, 0, g.board.Height-1),
 				)
 				break
 			}
@@ -598,9 +834,9 @@ func (g *Game) Update() {
 
 		if prevState != g.GameState {
 			if g.GameState == GameStateLost { // on loss
-				g.QueueDefeatAnimation(ms.BoardX, ms.BoardY)
+				g.QueueDefeatAnimation(gi.BoardX, gi.BoardY)
 			} else if g.GameState == GameStateWon { // on win
-				g.QueueWinAnimation(ms.BoardX, ms.BoardY)
+				g.QueueWinAnimation(gi.BoardX, gi.BoardY)
 			}
 		}
 
@@ -676,6 +912,7 @@ func (g *Game) Update() {
 			stateChanged,
 			prevState, g.GameState,
 			g.RenderTileStyles,
+			gi,
 		)
 
 		if doRedraw {
@@ -1773,6 +2010,7 @@ func NewTileHighlightModifier() StyleModifier {
 		stateChanged bool, // GameState or board has changed
 		prevGameState, gameState GameState,
 		tileStyles Array2D[TileStyle], // modify these to change style
+		gi GameInput,
 	) bool {
 		if gameState != GameStatePlaying {
 			hlTiles = hlTiles[:0]
@@ -1786,25 +2024,21 @@ func NewTileHighlightModifier() StyleModifier {
 
 		hlTiles = hlTiles[:0]
 
-		ms := GetMouseState(board, boardRect)
-
-		goWide := interaction == InteractionTypeCheck
-		goWide = goWide && board.IsPosInBoard(ms.BoardX, ms.BoardY)
-		goWide = goWide && prevBoard.Revealed.Get(ms.BoardX, ms.BoardY)
+		goWide := gi.Type == InputTypeHL || gi.Type == InputTypeCheck
+		goWide = goWide && board.IsPosInBoard(gi.BoardX, gi.BoardY)
+		goWide = goWide && prevBoard.Revealed.Get(gi.BoardX, gi.BoardY)
 		goWide = goWide && !stateChanged
 
 		if goWide {
 			hlWide = true
 		}
 
-		pressingCheck := (ms.PressedL && ms.PressedR) || ms.PressedM
-
-		if !pressingCheck {
+		if !(gi.Type == InputTypeHL || gi.Type == InputTypeCheck) {
 			hlWide = false
 		}
 
-		hlX = ms.BoardX
-		hlY = ms.BoardY
+		hlX = gi.BoardX
+		hlY = gi.BoardY
 
 		var iter BoardIterator
 
@@ -1869,6 +2103,7 @@ func NewFgClickModifier() StyleModifier {
 		stateChanged bool,
 		prevGameState, gameState GameState,
 		tileStyles Array2D[TileStyle],
+		gi GameInput,
 	) bool {
 		if gameState != GameStatePlaying { // only do this when we are actually playing
 			return gameState != prevGameState
@@ -1876,20 +2111,18 @@ func NewFgClickModifier() StyleModifier {
 
 		doRedraw := false
 
-		ms := GetMouseState(board, boardRect)
+		cursorOnFg := board.IsPosInBoard(gi.BoardX, gi.BoardY)
+		cursorOnFg = cursorOnFg && tileStyles.Get(gi.BoardX, gi.BoardY).DrawFg
 
-		cursorOnFg := board.IsPosInBoard(ms.BoardX, ms.BoardY)
-		cursorOnFg = cursorOnFg && tileStyles.Get(ms.BoardX, ms.BoardY).DrawFg
-
-		if cursorOnFg && ms.JustPressedAny() {
+		if cursorOnFg && gi.Type != InputTypeNone {
 			clickTimer.Current = clickTimer.Duration
-			clickX = ms.BoardX
-			clickY = ms.BoardY
+			clickX = gi.BoardX
+			clickY = gi.BoardY
 			focused = true
 			doRedraw = true
 		}
 
-		if !ms.PressedAny() || !(clickX == ms.BoardX && clickY == ms.BoardY) {
+		if gi.Type != InputTypeNone || !(clickX == gi.BoardX && clickY == gi.BoardY) {
 			focused = false
 		}
 

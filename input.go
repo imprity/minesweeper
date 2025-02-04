@@ -117,12 +117,12 @@ func HandleKeyRepeat(
 	return false
 }
 
-var touchIdBuffer []eb.TouchID
+var inputTouchIdBuffer []eb.TouchID
 
 func IsTouchJustPressed(rect FRectangle, touchIdIn *eb.TouchID) bool {
-	touchIdBuffer = ebi.AppendJustPressedTouchIDs(touchIdBuffer[:0])
+	inputTouchIdBuffer = ebi.AppendJustPressedTouchIDs(inputTouchIdBuffer[:0])
 
-	for _, touchId := range touchIdBuffer {
+	for _, touchId := range inputTouchIdBuffer {
 		posX, posY := eb.TouchPosition(touchId)
 
 		pos := FPt(f64(posX), f64(posY))
@@ -139,9 +139,9 @@ func IsTouchJustPressed(rect FRectangle, touchIdIn *eb.TouchID) bool {
 }
 
 func IsTouchJustReleased(rect FRectangle, touchIdIn *eb.TouchID) bool {
-	touchIdBuffer = ebi.AppendJustReleasedTouchIDs(touchIdBuffer[:0])
+	inputTouchIdBuffer = ebi.AppendJustReleasedTouchIDs(inputTouchIdBuffer[:0])
 
-	for _, touchId := range touchIdBuffer {
+	for _, touchId := range inputTouchIdBuffer {
 		posX, posY := ebi.TouchPositionInPreviousTick(touchId)
 
 		pos := FPt(f64(posX), f64(posY))
@@ -158,15 +158,15 @@ func IsTouchJustReleased(rect FRectangle, touchIdIn *eb.TouchID) bool {
 }
 
 func IsTouchFree() bool {
-	touchIdBuffer = eb.AppendTouchIDs(touchIdBuffer[:0])
+	inputTouchIdBuffer = eb.AppendTouchIDs(inputTouchIdBuffer[:0])
 
-	return len(touchIdBuffer) <= 0
+	return len(inputTouchIdBuffer) <= 0
 }
 
 func IsTouching(rect FRectangle, touchIdIn *eb.TouchID) bool {
-	touchIdBuffer = eb.AppendTouchIDs(touchIdBuffer[:0])
+	inputTouchIdBuffer = eb.AppendTouchIDs(inputTouchIdBuffer[:0])
 
-	for _, touchId := range touchIdBuffer {
+	for _, touchId := range inputTouchIdBuffer {
 		posX, posY := eb.TouchPosition(touchId)
 
 		pos := FPt(f64(posX), f64(posY))
