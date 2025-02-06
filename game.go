@@ -46,6 +46,10 @@ type TouchInfo struct {
 	DidEnd    bool
 
 	Dragged bool
+
+	// max number of simultaneous touches during
+	// this was touching
+	MaxTouchCount int
 }
 
 type GameInputHandler struct {
@@ -68,20 +72,18 @@ type GameInputHandler struct {
 	dragStarted   bool
 	dragPastLimit bool
 
-	consumedHolds map[eb.TouchID]bool
+	ignoreForFlag map[eb.TouchID]bool
 
 	touchingBuf     []eb.TouchID
 	justTouchedBuf  []eb.TouchID
 	justReleasedBuf []eb.TouchID
-
-	safeToCheckTouch bool
 }
 
 func NewGameInputHandler() *GameInputHandler {
 	gi := new(GameInputHandler)
 
 	gi.TouchInfos = make(map[eb.TouchID]TouchInfo)
-	gi.consumedHolds = make(map[eb.TouchID]bool)
+	gi.ignoreForFlag = make(map[eb.TouchID]bool)
 
 	return gi
 }
@@ -107,12 +109,17 @@ func (gi *GameInputHandler) Update(
 		}
 	}
 
+	const dragDistance = 15
+
 	for _, touchId := range gi.touchingBuf {
 		if info, ok := gi.TouchInfos[touchId]; ok {
 			curPos := TouchFPt(touchId)
-			if info.StartedPos.Sub(curPos).LengthSquared() > 20*20 {
+			if info.StartedPos.Sub(curPos).LengthSquared() > dragDistance*dragDistance {
 				info.Dragged = true
 			}
+
+			info.MaxTouchCount = max(info.MaxTouchCount, len(gi.touchingBuf))
+
 			gi.TouchInfos[touchId] = info
 		}
 	}
@@ -189,110 +196,216 @@ func (gi *GameInputHandler) Update(
 	// update touch board input
 	// =============================
 
-	// check if it's safe to check touch
-	// i.e. no two fingers are touching the screen
-	{
-		var touchStart time.Duration
-		var touchEnd time.Duration
-
-		similarTouchStartCount := 0
-		similarTouchEndCount := 0
-
-		for _, info := range gi.TouchInfos {
-			if similarTouchStartCount <= 0 {
-				touchStart = info.StartedTime
-				similarTouchStartCount = 1
-			} else if Abs(touchStart-info.StartedTime) < time.Millisecond*200 {
-				similarTouchStartCount++
-			}
-
-			if info.DidEnd {
-				if similarTouchEndCount <= 0 {
-					touchEnd = info.EndedTime
-					similarTouchEndCount = 1
-				} else if Abs(touchEnd-info.EndedTime) < time.Millisecond*200 {
-					similarTouchEndCount++
-				}
-			}
-		}
-
-		if similarTouchStartCount > 1 || similarTouchEndCount > 1 {
-			gi.safeToCheckTouch = false
-		}
-	}
-
-	if len(gi.touchingBuf) <= 0 && len(gi.justReleasedBuf) <= 0 {
-		gi.safeToCheckTouch = true
+	for _, touchId := range gi.justTouchedBuf {
+		delete(gi.ignoreForFlag, touchId)
 	}
 
 	const holdDuration = 200 * time.Millisecond
 
 	// check touch
-	if gi.safeToCheckTouch {
-		for touchId, info := range gi.TouchInfos {
-			curPos := TouchFPt(touchId)
+	for touchId, info := range gi.TouchInfos {
+		if info.MaxTouchCount > 1 {
+			continue
+		}
+		curPos := TouchFPt(touchId)
 
-			curBX, curBY := MousePosToBoardPos(
-				boardRect,
-				board.Width, board.Height,
-				curPos,
-			)
+		curBX, curBY := MousePosToBoardPos(
+			boardRect,
+			board.Width, board.Height,
+			curPos,
+		)
+		_ = curBX
+		_ = curBY
 
-			startedBX, startedBY := MousePosToBoardPos(
-				boardRect,
-				board.Width, board.Height,
-				info.StartedPos,
-			)
-			_ = startedBX
-			_ = startedBY
+		startedBX, startedBY := MousePosToBoardPos(
+			boardRect,
+			board.Width, board.Height,
+			info.StartedPos,
+		)
+		_ = startedBX
+		_ = startedBY
 
-			endedBX, endedBY := MousePosToBoardPos(
-				boardRect,
-				board.Width, board.Height,
-				info.EndedPos,
-			)
+		endedBX, endedBY := MousePosToBoardPos(
+			boardRect,
+			board.Width, board.Height,
+			info.EndedPos,
+		)
 
-			justReleased := info.DidEnd && info.EndedTime == GlobalTimerNow()
+		justReleased := info.DidEnd && info.EndedTime == GlobalTimerNow()
 
-			tapped := (info.EndedTime-info.StartedTime) < holdDuration && justReleased
+		tapped := (info.EndedTime-info.StartedTime) < holdDuration && justReleased && !info.Dragged
 
-			if tapped && board.IsPosInBoard(endedBX, endedBY) {
-				input.BoardX, input.BoardY = endedBX, endedBY
-				input.ByTouch = true
-				if board.Revealed.Get(endedBX, endedBY) {
-					input.Type = InputTypeCheck
-				} else {
-					input.Type = InputTypeStep
-				}
-			}
-
-			touchHeld := TimeSinceNow(info.StartedTime) > holdDuration
-			touchHeld = touchHeld && !info.DidEnd
-
-			if touchHeld && board.IsPosInBoard(curBX, curBY) && gi.consumedHolds[touchId] {
-				input.BoardX, input.BoardY = curBX, curBY
-				input.ByTouch = true
-				input.Type = InputTypeHL
-			}
-
-			if touchHeld && !info.Dragged && board.IsPosInBoard(curBX, curBY) && !gi.consumedHolds[touchId] {
-				gi.consumedHolds[touchId] = true
-
-				input.BoardX, input.BoardY = curBX, curBY
-				input.ByTouch = true
-
-				if board.Revealed.Get(curBX, curBY) {
-					input.Type = InputTypeCheck
-				} else {
-					input.Type = InputTypeFlag
-				}
+		if tapped && board.IsPosInBoard(endedBX, endedBY) {
+			input.BoardX, input.BoardY = endedBX, endedBY
+			input.ByTouch = true
+			if board.Revealed.Get(endedBX, endedBY) {
+				input.Type = InputTypeCheck
+			} else {
+				input.Type = InputTypeStep
 			}
 		}
-	}
 
-	for touchId := range gi.consumedHolds {
-		if !isTouching(touchId) {
-			delete(gi.consumedHolds, touchId)
+		var startedInUnsolvedNum bool
+
+		// check if touch started in number tile
+		startedInUnsolvedNum = board.IsPosInBoard(startedBX, startedBY)
+		startedInUnsolvedNum = startedInUnsolvedNum && board.Revealed.Get(startedBX, startedBY)
+		startedInUnsolvedNum = startedInUnsolvedNum && board.GetNeighborMineCount(startedBX, startedBY) > 0
+
+		// check started in number, check if it's unsolved
+		/*
+			if startedInUnsolvedNum {
+				iter := NewBoardIterator(startedBX-1, startedBY-1, startedBX+1, startedBY+1)
+
+				neededFlagCount := board.GetNeighborMineCount(startedBX, startedBY)
+				tilesCanBeFlagged := 0
+				tilesThatAreFlagged := 0
+
+				for iter.HasNext() {
+					x, y := iter.GetNext()
+
+					if !board.IsPosInBoard(x, y) {
+						continue
+					}
+
+					if !board.Revealed.Get(x, y) {
+						tilesCanBeFlagged++
+					}
+
+					if board.Flags.Get(x, y) {
+						tilesThatAreFlagged++
+					}
+				}
+
+				if neededFlagCount == tilesCanBeFlagged && neededFlagCount == tilesThatAreFlagged {
+					startedInUnsolvedNum = false
+				}
+			}
+		*/
+
+		if !info.DidEnd && startedInUnsolvedNum {
+			tileW, tileH := GetBoardTileSize(boardRect, board.Width, board.Height)
+
+			numberTileRect := GetBoardTileRect(
+				boardRect,
+				board.Width, board.Height,
+				startedBX, startedBY,
+			)
+			numberTileCenter := FRectangleCenter(numberTileRect)
+
+			/*
+				// create rect around started number tile
+				rect3x3 := FRectWH(tileW*3, tileH*3)
+				rect3x3 = CenterFRectangle(rect3x3, numberTileCenter.X, numberTileCenter.Y)
+
+				rect4x4 := FRectWH(tileW*4, tileH*4)
+				rect4x4 = CenterFRectangle(rect4x4, numberTileCenter.X, numberTileCenter.Y)
+
+				if curPos.In(rect3x3) && curPos.In(rect4x4) {
+				} else if curPos.In(rect4x4) { // outside of rect3x3 but still in rect4x4
+					if !board.IsPosInBoard(curBX, curBY) || // pos not in board
+						(board.IsPosInBoard(curBX, curBY) && board.Revealed.Get(curBX, curBY)) { // or reached un reaveald place
+						gi.ignoreForFlag[touchId] = true
+					}
+				} else { // outside of rect4x4
+					gi.ignoreForFlag[touchId] = true
+				}
+			*/
+			rect4x4 := FRectWH(tileW*4, tileH*4)
+			rect4x4 = CenterFRectangle(rect4x4, numberTileCenter.X, numberTileCenter.Y)
+
+			if !curPos.In(rect4x4) {
+				gi.ignoreForFlag[touchId] = true
+			}
+		}
+
+		if !gi.ignoreForFlag[touchId] && startedInUnsolvedNum && !info.DidEnd {
+			input.BoardX, input.BoardY = startedBX, startedBY
+			input.Type = InputTypeHL
+			input.ByTouch = true
+		}
+
+		if !gi.ignoreForFlag[touchId] && startedInUnsolvedNum && info.DidEnd {
+			var foundNeighboar bool = false
+			var neighborX, neighborY int
+
+			if (startedBX != endedBX) || (startedBY != endedBY) {
+				iter := NewBoardIterator(startedBX-1, startedBY-1, startedBX+1, startedBY+1)
+
+				var minDist float64 = math.MaxFloat64
+
+				for iter.HasNext() {
+					x, y := iter.GetNext()
+					if !board.IsPosInBoard(x, y) {
+						continue
+					}
+					if board.Revealed.Get(x, y) {
+						continue
+					}
+					if x == startedBX && y == startedBY {
+						continue
+					}
+					if max(Abs(x-endedBX), Abs(y-endedBY)) > 1 {
+						continue
+					}
+
+					tile := GetBoardTileRect(
+						boardRect,
+						board.Width, board.Height,
+						x, y,
+					)
+					tileCenter := FRectangleCenter(tile)
+					dist := tileCenter.Sub(info.EndedPos).LengthSquared()
+
+					if dist < minDist {
+						minDist = dist
+						foundNeighboar = true
+						neighborX, neighborY = x, y
+					}
+				}
+			}
+
+			if foundNeighboar {
+				gi.ignoreForFlag[touchId] = true
+				input.BoardX, input.BoardY = neighborX, neighborY
+				input.Type = InputTypeFlag
+				input.ByTouch = true
+			}
+		}
+		/*
+			if startedInUnsolvedNum && endedNextToNumber && !gi.ignoreForFlag[touchId] {
+				gi.ignoreForFlag[touchId] = true
+
+				input.BoardX, input.BoardY = endedBX, endedBY
+				input.Type = InputTypeFlag
+				input.ByTouch = true
+			}
+		*/
+
+		// ======================
+		// handle dragging
+		// ======================
+		if (!startedInUnsolvedNum || gi.ignoreForFlag[touchId]) && !info.DidEnd {
+			gi.ignoreForFlag[touchId] = true
+			if !gi.dragStarted {
+				gi.dragDelta = FPt(0, 0)
+
+				gi.dragStartPos = info.StartedPos
+				gi.dragPastLimit = false
+
+				gi.dragStarted = true
+			} else {
+				pos := TouchFPt(touchId)
+				prevPos := PrevTouchFPt(touchId)
+
+				gi.dragDelta = pos.Sub(prevPos)
+				if gi.dragStartPos.Sub(pos).LengthSquared() > 20*20 {
+					gi.dragPastLimit = true
+				}
+			}
+		} else {
+			gi.dragPastLimit = false
+			gi.dragStarted = false
 		}
 	}
 
@@ -328,25 +441,7 @@ func (gi *GameInputHandler) Update(
 	// =============================
 	// update touch drag input
 	// =============================
-	if len(gi.touchingBuf) == 1 {
-		if !gi.dragStarted {
-			gi.dragDelta = FPt(0, 0)
-
-			gi.dragStartPos = TouchFPt(gi.touchingBuf[0])
-			gi.dragPastLimit = false
-
-			gi.dragStarted = true
-		} else {
-			pos := TouchFPt(gi.touchingBuf[0])
-			prevX, prevY := ebi.TouchPositionInPreviousTick(gi.touchingBuf[0])
-			prevPos := FPt(f64(prevX), f64(prevY))
-
-			gi.dragDelta = pos.Sub(prevPos)
-			if gi.dragStartPos.Sub(pos).LengthSquared() > 20*20 {
-				gi.dragPastLimit = true
-			}
-		}
-	} else {
+	if len(gi.touchingBuf) != 1 {
 		gi.dragPastLimit = false
 		gi.dragStarted = false
 	}
@@ -384,7 +479,9 @@ func (gi *GameInputHandler) GetZoomAndOffset(
 	}
 
 	if gi.dragPastLimit {
+		// TEST TEST TEST TEST TEST
 		oldOffset = oldOffset.Add(gi.dragDelta)
+		// TEST TEST TEST TEST TEST
 	}
 
 	return oldZoom, oldOffset

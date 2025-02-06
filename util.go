@@ -9,6 +9,7 @@ import (
 	"time"
 
 	eb "github.com/hajimehoshi/ebiten/v2"
+	ebi "github.com/hajimehoshi/ebiten/v2/inpututil"
 	ebt "github.com/hajimehoshi/ebiten/v2/text/v2"
 )
 
@@ -23,6 +24,11 @@ func CursorFPt() FPoint {
 
 func TouchFPt(touchId eb.TouchID) FPoint {
 	tx, ty := eb.TouchPosition(touchId)
+	return FPt(f64(tx), f64(ty))
+}
+
+func PrevTouchFPt(touchId eb.TouchID) FPoint {
+	tx, ty := ebi.TouchPositionInPreviousTick(touchId)
 	return FPt(f64(tx), f64(ty))
 }
 
