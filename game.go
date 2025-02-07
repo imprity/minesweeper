@@ -72,7 +72,9 @@ type GameInputHandler struct {
 	dragStarted   bool
 	dragPastLimit bool
 
-	ignoreForFlag map[eb.TouchID]bool
+	draggingForFlag bool
+	flagTouchId     eb.TouchID
+	ignoreForFlag   map[eb.TouchID]bool
 
 	touchingBuf     []eb.TouchID
 	justTouchedBuf  []eb.TouchID
@@ -200,8 +202,6 @@ func (gi *GameInputHandler) Update(
 		delete(gi.ignoreForFlag, touchId)
 	}
 
-	const holdDuration = 200 * time.Millisecond
-
 	// check touch
 	for touchId, info := range gi.TouchInfos {
 		if info.MaxTouchCount > 1 {
@@ -233,7 +233,7 @@ func (gi *GameInputHandler) Update(
 
 		justReleased := info.DidEnd && info.EndedTime == GlobalTimerNow()
 
-		tapped := (info.EndedTime-info.StartedTime) < holdDuration && justReleased && !info.Dragged
+		tapped := justReleased && !info.Dragged
 
 		if tapped && board.IsPosInBoard(endedBX, endedBY) {
 			input.BoardX, input.BoardY = endedBX, endedBY
@@ -241,91 +241,121 @@ func (gi *GameInputHandler) Update(
 			if board.Revealed.Get(endedBX, endedBY) {
 				input.Type = InputTypeCheck
 			} else {
-				input.Type = InputTypeStep
+				if board.Flags.Get(endedBX, endedBY) {
+					input.Type = InputTypeFlag
+				} else {
+					input.Type = InputTypeStep
+				}
 			}
 		}
 
-		var startedInUnsolvedNum bool
+		var startedInNum bool
 
 		// check if touch started in number tile
-		startedInUnsolvedNum = board.IsPosInBoard(startedBX, startedBY)
-		startedInUnsolvedNum = startedInUnsolvedNum && board.Revealed.Get(startedBX, startedBY)
-		startedInUnsolvedNum = startedInUnsolvedNum && board.GetNeighborMineCount(startedBX, startedBY) > 0
+		startedInNum = board.IsPosInBoard(startedBX, startedBY)
+		startedInNum = startedInNum && board.Revealed.Get(startedBX, startedBY)
+		startedInNum = startedInNum && board.GetNeighborMineCount(startedBX, startedBY) > 0
 
-		// check started in number, check if it's unsolved
-		/*
-			if startedInUnsolvedNum {
-				iter := NewBoardIterator(startedBX-1, startedBY-1, startedBX+1, startedBY+1)
+		// if it did start in number tile, check it it has any space to left to flag
+		if startedInNum {
+			iter := NewBoardIterator(startedBX-1, startedBY-1, startedBX+1, startedBY+1)
 
-				neededFlagCount := board.GetNeighborMineCount(startedBX, startedBY)
-				tilesCanBeFlagged := 0
-				tilesThatAreFlagged := 0
+			tilesCanBeFlagged := 0
+			tilesThatAreFlagged := 0
 
-				for iter.HasNext() {
-					x, y := iter.GetNext()
+			for iter.HasNext() {
+				x, y := iter.GetNext()
 
-					if !board.IsPosInBoard(x, y) {
-						continue
-					}
-
-					if !board.Revealed.Get(x, y) {
-						tilesCanBeFlagged++
-					}
-
-					if board.Flags.Get(x, y) {
-						tilesThatAreFlagged++
-					}
+				if !board.IsPosInBoard(x, y) {
+					continue
 				}
 
-				if neededFlagCount == tilesCanBeFlagged && neededFlagCount == tilesThatAreFlagged {
-					startedInUnsolvedNum = false
+				if !board.Revealed.Get(x, y) {
+					tilesCanBeFlagged++
+				}
+
+				if board.Flags.Get(x, y) {
+					tilesThatAreFlagged++
 				}
 			}
-		*/
 
-		if !info.DidEnd && startedInUnsolvedNum {
-			tileW, tileH := GetBoardTileSize(boardRect, board.Width, board.Height)
+			if tilesCanBeFlagged == tilesThatAreFlagged {
+				startedInNum = false
+			}
+		}
 
-			numberTileRect := GetBoardTileRect(
-				boardRect,
-				board.Width, board.Height,
-				startedBX, startedBY,
+		if !info.DidEnd && startedInNum {
+			var safeNeighbors [9]bool
+
+			iter := NewBoardIterator(
+				startedBX-1, startedBY-1,
+				startedBX+1, startedBY+1,
 			)
-			numberTileCenter := FRectangleCenter(numberTileRect)
 
-			/*
-				// create rect around started number tile
-				rect3x3 := FRectWH(tileW*3, tileH*3)
-				rect3x3 = CenterFRectangle(rect3x3, numberTileCenter.X, numberTileCenter.Y)
+			for iter.HasNext() {
+				x, y := iter.GetNext()
 
-				rect4x4 := FRectWH(tileW*4, tileH*4)
-				rect4x4 = CenterFRectangle(rect4x4, numberTileCenter.X, numberTileCenter.Y)
+				if board.IsPosInBoard(x, y) && !board.Revealed.Get(x, y) {
+					innerIter := NewBoardIterator(
+						max(x-1, startedBX-1), max(y-1, startedBY-1),
+						min(x+1, startedBX+1), min(y+1, startedBY+1),
+					)
 
-				if curPos.In(rect3x3) && curPos.In(rect4x4) {
-				} else if curPos.In(rect4x4) { // outside of rect3x3 but still in rect4x4
-					if !board.IsPosInBoard(curBX, curBY) || // pos not in board
-						(board.IsPosInBoard(curBX, curBY) && board.Revealed.Get(curBX, curBY)) { // or reached un reaveald place
-						gi.ignoreForFlag[touchId] = true
+					for innerIter.HasNext() {
+						x2, y2 := innerIter.GetNext()
+						if board.IsPosInBoard(x2, y2) {
+							rx, ry := x2-startedBX+1, y2-startedBY+1
+							index := ry*3 + rx
+							safeNeighbors[index] = true
+						}
 					}
-				} else { // outside of rect4x4
-					gi.ignoreForFlag[touchId] = true
 				}
-			*/
-			rect4x4 := FRectWH(tileW*4, tileH*4)
-			rect4x4 = CenterFRectangle(rect4x4, numberTileCenter.X, numberTileCenter.Y)
+			}
 
-			if !curPos.In(rect4x4) {
+			inSafeNeighbor := false
+
+			iter = NewBoardIterator(0, 0, 2, 2)
+			for iter.HasNext() {
+				rx, ry := iter.GetNext()
+				index := ry*3 + rx
+
+				if !safeNeighbors[index] {
+					continue
+				}
+
+				x, y := startedBX+(rx-1), startedBY+(ry-1)
+
+				tileRect := GetBoardTileRect(
+					boardRect,
+					board.Width, board.Height,
+					x, y,
+				)
+
+				tileRect = FRectScaleCentered(tileRect, 2, 2)
+
+				if curPos.In(tileRect) {
+					inSafeNeighbor = true
+					break
+				}
+			}
+
+			if !inSafeNeighbor {
 				gi.ignoreForFlag[touchId] = true
 			}
 		}
 
-		if !gi.ignoreForFlag[touchId] && startedInUnsolvedNum && !info.DidEnd {
+		if !gi.ignoreForFlag[touchId] && startedInNum && !info.DidEnd {
 			input.BoardX, input.BoardY = startedBX, startedBY
 			input.Type = InputTypeHL
 			input.ByTouch = true
+
+			gi.draggingForFlag = true
+			gi.flagTouchId = touchId
+		} else {
+			gi.draggingForFlag = false
 		}
 
-		if !gi.ignoreForFlag[touchId] && startedInUnsolvedNum && info.DidEnd {
+		if !gi.ignoreForFlag[touchId] && startedInNum && info.DidEnd {
 			var foundNeighboar bool = false
 			var neighborX, neighborY int
 
@@ -372,20 +402,11 @@ func (gi *GameInputHandler) Update(
 				input.ByTouch = true
 			}
 		}
-		/*
-			if startedInUnsolvedNum && endedNextToNumber && !gi.ignoreForFlag[touchId] {
-				gi.ignoreForFlag[touchId] = true
-
-				input.BoardX, input.BoardY = endedBX, endedBY
-				input.Type = InputTypeFlag
-				input.ByTouch = true
-			}
-		*/
 
 		// ======================
 		// handle dragging
 		// ======================
-		if (!startedInUnsolvedNum || gi.ignoreForFlag[touchId]) && !info.DidEnd {
+		if (!startedInNum || gi.ignoreForFlag[touchId]) && !info.DidEnd {
 			gi.ignoreForFlag[touchId] = true
 			if !gi.dragStarted {
 				gi.dragDelta = FPt(0, 0)
@@ -479,9 +500,7 @@ func (gi *GameInputHandler) GetZoomAndOffset(
 	}
 
 	if gi.dragPastLimit {
-		// TEST TEST TEST TEST TEST
 		oldOffset = oldOffset.Add(gi.dragDelta)
-		// TEST TEST TEST TEST TEST
 	}
 
 	return oldZoom, oldOffset
@@ -493,6 +512,44 @@ func (gi *GameInputHandler) IsPinching() bool {
 
 func (gi *GameInputHandler) IsDragging() bool {
 	return gi.dragPastLimit
+}
+
+func (gi *GameInputHandler) Draw(dst *eb.Image) {
+	//if gi.displayFlagDragBox {
+	if false {
+		/*
+			StrokeRoundRect(
+				dst,
+				gi.flagDragBox,
+				5,
+				true,
+				1,
+				color.NRGBA{0,255,0,255},
+			)
+		*/
+
+		const stroke = 4
+		strokeColor := color.NRGBA{0, 0, 0, 100}
+
+		curPos := TouchFPt(gi.flagTouchId)
+		StrokeCircle(
+			dst,
+			gi.TouchInfos[gi.flagTouchId].StartedPos.X,
+			gi.TouchInfos[gi.flagTouchId].StartedPos.Y,
+			gi.TouchInfos[gi.flagTouchId].StartedPos.Sub(curPos).Length(),
+			stroke,
+			strokeColor,
+		)
+
+		StrokeLine(
+			dst,
+			gi.TouchInfos[gi.flagTouchId].StartedPos.X,
+			gi.TouchInfos[gi.flagTouchId].StartedPos.Y,
+			curPos.X, curPos.Y,
+			stroke,
+			strokeColor,
+		)
+	}
 }
 
 type TileFgType int
@@ -1242,6 +1299,8 @@ func (g *Game) Draw(dst *eb.Image) {
 		g.board.Width, g.board.Height,
 		g.TransformedBoardRect(),
 	)
+
+	g.InputHandler.Draw(dst)
 }
 
 func (g *Game) Layout(outsideWidth, outsideHeight int) {
@@ -2155,7 +2214,7 @@ func DrawBoard(
 		}
 
 		fgRect := DBC.TileFillRects.Get(x, y)
-		fgScale := style.FgScale
+		fgScale := style.FgScale * style.TileScale
 		fgColor := style.FgColor
 
 		if style.FgType == TileFgTypeNumber {
