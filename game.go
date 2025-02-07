@@ -765,6 +765,9 @@ type StyleModifier func(
 type Game struct {
 	Rect FRectangle
 
+	DisableZoomAndPanControl bool
+	DoingZoomAnimation       bool
+
 	Zoom   float64
 	Offset FPoint
 
@@ -814,8 +817,13 @@ type Game struct {
 	playedAddFlagSound    bool
 	playedRemoveFlagSound bool
 
-	retryButtonSize         float64
-	retryButtonSizeRelative float64 // relative to min(Rect.Dx(), Rect.Dy())
+	retryButtonSize float64
+	// relative to min(TransformedBoardRect().Dx(), TransformedBoardRect().Dy())
+	retryButtonSizeRelative float64
+
+	// relative to center of TransformedBoardRect()
+	retryButtonOffsetX float64
+	retryButtonOffsetY float64
 
 	viBuffers [3]*VIBuffer
 }
@@ -894,6 +902,11 @@ func (g *Game) ResetBoardNotStylesEx(newSeed bool) {
 	g.RetryButtonOffsetX = 0
 	g.RetryButtonOffsetY = 0
 
+	g.Offset = FPt(0, 0)
+	g.Zoom = 1
+	g.DisableZoomAndPanControl = false
+	g.DoingZoomAnimation = false
+
 	g.BaseTileStyles = NewArray2D[TileStyle](width, height)
 	g.RenderTileStyles = NewArray2D[TileStyle](width, height)
 
@@ -951,9 +964,15 @@ func (g *Game) Update() {
 	// =================================
 	// handle pinch zoom
 	// =================================
-	g.Zoom, g.Offset = g.InputHandler.GetZoomAndOffset(g.Zoom, g.Offset, FRectangleCenter(g.TransformedBoardRect()))
+	if !g.DisableZoomAndPanControl {
+		g.Zoom, g.Offset = g.InputHandler.GetZoomAndOffset(g.Zoom, g.Offset, FRectangleCenter(g.TransformedBoardRect()))
+	}
 
 	if g.InputHandler.IsPinching() || g.InputHandler.IsDragging() {
+		SetRedraw()
+	}
+
+	if g.DoingZoomAnimation {
 		SetRedraw()
 	}
 
@@ -1257,7 +1276,7 @@ func (g *Game) Draw(dst *eb.Image) {
 
 		doWaterEffect, g.WaterAlpha, g.WaterFlowOffset,
 
-		g.InputHandler.IsPinching(),
+		g.InputHandler.IsPinching() || g.DoingZoomAnimation,
 	)
 
 	if g.DrawRetryButton {
@@ -2699,6 +2718,60 @@ func (g *Game) QueueRemoveFlagAnimation(flagX, flagY int) {
 	g.TileAnimations.Get(flagX, flagY).Enqueue(anim)
 }
 
+func (g *Game) GetZoomOutAnimation(tag AnimationTag) CallbackAnimation {
+	var timer Timer
+	timer.Duration = time.Millisecond * 500
+
+	startZoom := g.Zoom
+	startOffset := g.Offset
+
+	var gameAnim CallbackAnimation
+
+	gameAnim.Tag = tag
+
+	gameAnim.Update = func() {
+		// during the animation, disable zoom control
+		// this will be cleare at AnimationTagRetryButtonReveal
+		g.DisableZoomAndPanControl = true
+
+		timer.TickUp()
+
+		doAnimation := timer.Current < timer.Duration
+		doAnimation = doAnimation && !(CloseToEx(g.Offset.X, 0, 0.1) && CloseToEx(g.Offset.Y, 0, 0.1))
+		doAnimation = doAnimation && !CloseToEx(g.Zoom, 0, 0.01)
+
+		if doAnimation {
+			g.DoingZoomAnimation = true
+
+			t := timer.Normalize()
+			t = BezierCurveDataAsGraph(TheBezierTable[BezierBoardZoomOut], t)
+
+			g.Zoom = Lerp(startZoom, 1, t)
+			g.Offset = FPointLerp(startOffset, FPt(0, 0), t)
+		} else {
+			g.DoingZoomAnimation = false
+			g.Zoom = 1
+			g.Offset = FPt(0, 0)
+		}
+	}
+
+	gameAnim.Skip = func() {
+		timer.Current = timer.Duration
+		gameAnim.Update()
+	}
+
+	gameAnim.Done = func() bool {
+		return timer.Current >= timer.Duration
+	}
+
+	gameAnim.AfterDone = func() {
+		g.Zoom = 1
+		g.Offset = FPt(0, 0)
+	}
+
+	return gameAnim
+}
+
 func (g *Game) QueueDefeatAnimation(originX, originY int) {
 	// =================================
 	// remove wrongly placed flags
@@ -2829,20 +2902,25 @@ func (g *Game) QueueDefeatAnimation(originX, originY int) {
 	var anim CallbackAnimation
 	anim.Tag = AnimationTagDefeat
 
+	zoomAnim := g.GetZoomOutAnimation(AnimationTagDefeat)
+
 	anim.Update = func() {
+		zoomAnim.Update()
 		defeatAnimTimer.TickUp()
 	}
 
 	anim.Skip = func() {
+		zoomAnim.Skip()
 		defeatAnimTimer.Current = defeatAnimTimer.Duration
 		anim.Update()
 	}
 
 	anim.Done = func() bool {
-		return defeatAnimTimer.Current >= defeatAnimTimer.Duration
+		return defeatAnimTimer.Current >= defeatAnimTimer.Duration && zoomAnim.Done()
 	}
 
 	anim.AfterDone = func() {
+		zoomAnim.AfterDone()
 		g.QueueRetryButtonAnimation()
 	}
 
@@ -2946,7 +3024,11 @@ func (g *Game) QueueWinAnimation(originX, originY int) {
 	var anim CallbackAnimation
 	anim.Tag = AnimationTagWin
 
+	zoomAnim := g.GetZoomOutAnimation(AnimationTagWin)
+
 	anim.Update = func() {
+		zoomAnim.Update()
+
 		winAnimTimer.TickUp()
 
 		t := winAnimTimer.Normalize()
@@ -2959,15 +3041,18 @@ func (g *Game) QueueWinAnimation(originX, originY int) {
 	}
 
 	anim.Skip = func() {
+		zoomAnim.Skip()
+
 		winAnimTimer.Current = winAnimTimer.Duration
 		anim.Update()
 	}
 
 	anim.Done = func() bool {
-		return winAnimTimer.Current >= winAnimTimer.Duration
+		return winAnimTimer.Current >= winAnimTimer.Duration && zoomAnim.Done()
 	}
 
 	anim.AfterDone = func() {
+		zoomAnim.AfterDone()
 		g.QueueRetryButtonAnimation()
 	}
 
@@ -3102,6 +3187,10 @@ func (g *Game) QueueRetryButtonAnimation() {
 
 		anim.Done = func() bool {
 			return timer.Current >= timer.Duration
+		}
+
+		anim.AfterDone = func() {
+			g.DisableZoomAndPanControl = false
 		}
 
 		g.GameAnimations.Enqueue(anim)

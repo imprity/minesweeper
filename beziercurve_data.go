@@ -18,6 +18,8 @@ const (
 	BezierBoardShowTileAlpha
 	BezierBoardShowTileScale
 
+	BezierBoardZoomOut
+
 	BezierTableSize
 )
 

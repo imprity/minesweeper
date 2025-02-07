@@ -91,6 +91,10 @@ func FPointTransform(pt FPoint, geom eb.GeoM) FPoint {
 	return FPt(x, y)
 }
 
+func FPointLerp(a, b FPoint, t float64) FPoint {
+	return FPt(Lerp(a.X, b.X, t), Lerp(a.Y, b.Y, t))
+}
+
 // =================================
 // FRectangle
 // =================================

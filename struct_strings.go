@@ -78,12 +78,13 @@ func _() {
 	_ = x[BezierBoardShowTileOffsetY-5]
 	_ = x[BezierBoardShowTileAlpha-6]
 	_ = x[BezierBoardShowTileScale-7]
-	_ = x[BezierTableSize-8]
+	_ = x[BezierBoardZoomOut-8]
+	_ = x[BezierTableSize-9]
 }
 
-const _BezierTableIndex_name = "BezierTileRevealScaleBezierTileRevealOffsetYBezierBoardHideTileBezierBoardHideTileAlphaBezierBoardHideButtonBezierBoardShowTileOffsetYBezierBoardShowTileAlphaBezierBoardShowTileScaleBezierTableSize"
+const _BezierTableIndex_name = "BezierTileRevealScaleBezierTileRevealOffsetYBezierBoardHideTileBezierBoardHideTileAlphaBezierBoardHideButtonBezierBoardShowTileOffsetYBezierBoardShowTileAlphaBezierBoardShowTileScaleBezierBoardZoomOutBezierTableSize"
 
-var _BezierTableIndex_index = [...]uint8{0, 21, 44, 63, 87, 108, 134, 158, 182, 197}
+var _BezierTableIndex_index = [...]uint8{0, 21, 44, 63, 87, 108, 134, 158, 182, 200, 215}
 
 func (i BezierTableIndex) String() string {
 	if i < 0 || i >= BezierTableIndex(len(_BezierTableIndex_index)-1) {
