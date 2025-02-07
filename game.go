@@ -25,6 +25,7 @@ const (
 	InputTypeStep
 	InputTypeFlag
 	InputTypeCheck
+	InputTypeHover
 	InputTypeHL
 )
 
@@ -55,6 +56,8 @@ type TouchInfo struct {
 type GameInputHandler struct {
 	TouchInfos map[eb.TouchID]TouchInfo
 
+	NoInputZone FRectangle
+
 	gameInput GameInput
 
 	// pinch
@@ -72,6 +75,7 @@ type GameInputHandler struct {
 	dragStarted   bool
 	dragPastLimit bool
 
+	// flggging stuff
 	draggingForFlag bool
 	flagTouchId     eb.TouchID
 	ignoreForFlag   map[eb.TouchID]bool
@@ -176,7 +180,9 @@ func (gi *GameInputHandler) Update(
 
 	cursorInRect := cursor.In(boardRect)
 
-	if cursorInRect {
+	if cursorInRect && !cursor.In(gi.NoInputZone) {
+		input.Type = InputTypeHover
+
 		if (pressedL && pressedR) || pressedM {
 			input.Type = InputTypeHL
 		}
@@ -207,6 +213,10 @@ func (gi *GameInputHandler) Update(
 		if info.MaxTouchCount > 1 {
 			continue
 		}
+		if info.StartedPos.In(gi.NoInputZone) {
+			continue
+		}
+
 		curPos := TouchFPt(touchId)
 
 		curBX, curBY := MousePosToBoardPos(
@@ -470,6 +480,9 @@ func (gi *GameInputHandler) Update(
 	gi.gameInput = input
 }
 
+func (gi *GameInputHandler) Draw(dst *eb.Image) {
+}
+
 func (gi *GameInputHandler) GetGameInput() GameInput {
 	return gi.gameInput
 }
@@ -512,44 +525,6 @@ func (gi *GameInputHandler) IsPinching() bool {
 
 func (gi *GameInputHandler) IsDragging() bool {
 	return gi.dragPastLimit
-}
-
-func (gi *GameInputHandler) Draw(dst *eb.Image) {
-	//if gi.displayFlagDragBox {
-	if false {
-		/*
-			StrokeRoundRect(
-				dst,
-				gi.flagDragBox,
-				5,
-				true,
-				1,
-				color.NRGBA{0,255,0,255},
-			)
-		*/
-
-		const stroke = 4
-		strokeColor := color.NRGBA{0, 0, 0, 100}
-
-		curPos := TouchFPt(gi.flagTouchId)
-		StrokeCircle(
-			dst,
-			gi.TouchInfos[gi.flagTouchId].StartedPos.X,
-			gi.TouchInfos[gi.flagTouchId].StartedPos.Y,
-			gi.TouchInfos[gi.flagTouchId].StartedPos.Sub(curPos).Length(),
-			stroke,
-			strokeColor,
-		)
-
-		StrokeLine(
-			dst,
-			gi.TouchInfos[gi.flagTouchId].StartedPos.X,
-			gi.TouchInfos[gi.flagTouchId].StartedPos.Y,
-			curPos.X, curPos.Y,
-			stroke,
-			strokeColor,
-		)
-	}
 }
 
 type TileFgType int
@@ -1329,6 +1304,15 @@ func (g *Game) BoardTileCount() (int, int) {
 
 func (g *Game) HadInteraction() bool {
 	return g.hadInteraction
+}
+
+func (g *Game) NoInputZone() FRectangle {
+	return g.InputHandler.NoInputZone
+}
+
+func (g *Game) SetNoInputZone(rect FRectangle) {
+	g.InputHandler.NoInputZone = rect
+	g.RetryButton.NoInputZone = rect
 }
 
 func (g *Game) TransformedBoardRect() FRectangle {
@@ -2324,7 +2308,7 @@ func NewTileHighlightModifier() StyleModifier {
 		tileStyles Array2D[TileStyle], // modify these to change style
 		gi GameInput,
 	) bool {
-		if gameState != GameStatePlaying {
+		if gameState != GameStatePlaying || gi.Type == InputTypeNone {
 			hlTiles = hlTiles[:0]
 			prevHlTiles = prevHlTiles[:0]
 

@@ -132,6 +132,8 @@ func (gu *GameUI) Update() {
 	gu.TopUI.Rect = gu.TopUIRect()
 	gu.TopUI.Update()
 
+	gu.Game.SetNoInputZone(gu.TopUI.Rect)
+
 	gu.Game.Rect = gu.BoardRect()
 	gu.Game.SetRetryButtonSize(min(ScreenWidth, ScreenHeight) * gu.ButtonSizeRatio())
 	gu.Game.Update()

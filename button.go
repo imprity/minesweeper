@@ -41,6 +41,8 @@ type BaseButton struct {
 
 	InputId InputGroupId
 
+	NoInputZone FRectangle
+
 	readyToCallOnRelease bool
 }
 
@@ -60,9 +62,9 @@ func (b *BaseButton) Update() {
 	prevState := b.State
 
 	cursor := CursorFPt()
-	touchingInside := IsTouching(b.Rect, nil)
+	touchingInside := (IsTouching(b.Rect, nil) && !IsTouching(b.NoInputZone, nil))
 
-	inRect := cursor.In(b.Rect) || touchingInside
+	inRect := (cursor.In(b.Rect) && !cursor.In(b.NoInputZone)) || touchingInside
 
 	if inRect { // if mouse in rect
 		firedOnJustPress := false
@@ -110,7 +112,7 @@ func (b *BaseButton) Update() {
 	}
 
 	if b.readyToCallOnRelease {
-		touchReleased := IsTouchJustReleased(b.Rect, nil)
+		touchReleased := (IsTouchJustReleased(b.Rect, nil) && !IsTouchJustReleased(b.NoInputZone, nil))
 		mouseReleased := IsMouseButtonJustReleased(eb.MouseButtonLeft) && inRect
 
 		released := touchReleased || mouseReleased
@@ -125,7 +127,7 @@ func (b *BaseButton) Update() {
 			b.readyToCallOnRelease = false
 		}
 	}
-	if (cursor.In(b.Rect) && !(IsMouseButtonPressed(eb.MouseButtonLeft) && b.State == ButtonStateDown)) ||
+	if ((cursor.In(b.Rect) && !cursor.In(b.NoInputZone)) && !(IsMouseButtonPressed(eb.MouseButtonLeft) && b.State == ButtonStateDown)) ||
 		(touchingInside && b.State != ButtonStateDown) {
 		b.State = ButtonStateHover
 	}
