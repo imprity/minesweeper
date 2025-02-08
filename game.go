@@ -74,6 +74,7 @@ func NewGameInputHandler() *GameInputHandler {
 func (gi *GameInputHandler) Update(
 	board Board,
 	boardRect FRectangle,
+	gameState GameState,
 ) {
 	im := &TheInputManager
 	// =============================
@@ -141,6 +142,7 @@ func (gi *GameInputHandler) Update(
 			continue
 		}
 
+		// ignore touches that started in NoInputZones
 		{
 			var startedInNoInputZone bool
 			for _, zone := range gi.NoInputZones {
@@ -353,7 +355,7 @@ func (gi *GameInputHandler) Update(
 		// ======================
 		// handle dragging
 		// ======================
-		if (!startedInNum || gi.ignoreForFlag[touchId]) && !info.DidEnd {
+		if (!startedInNum || gi.ignoreForFlag[touchId] || gameState != GameStatePlaying) && !info.DidEnd {
 			gi.ignoreForFlag[touchId] = true
 			if !gi.dragStarted {
 				gi.dragDelta = FPt(0, 0)
@@ -914,7 +916,7 @@ func (g *Game) Update() {
 
 		g.InputHandler.NoInputZones = noInputZones
 	}
-	g.InputHandler.Update(g.board, g.TransformedBoardRect())
+	g.InputHandler.Update(g.board, g.TransformedBoardRect(), g.GameState)
 
 	gi := g.InputHandler.GetGameInput()
 
