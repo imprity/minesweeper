@@ -7,6 +7,144 @@ import (
 	ebi "github.com/hajimehoshi/ebiten/v2/inpututil"
 )
 
+type TouchInfo struct {
+	TouchID eb.TouchID
+
+	StartedTime time.Duration
+	StartedPos  FPoint
+
+	EndedTime time.Duration
+	EndedPos  FPoint
+	DidEnd    bool
+
+	Dragged bool
+
+	// max number of simultaneous touches during
+	// this was touching
+	MaxTouchCount int
+}
+
+func (ti *TouchInfo) IsTouching() bool {
+	return IsTouchIdTouching(ti.TouchID)
+}
+
+func (ti *TouchInfo) IsJustPressed() bool {
+	return IsTouchIdJustPressed(ti.TouchID)
+}
+
+func (ti *TouchInfo) IsJustReleased() bool {
+	return IsTouchIdJustReleased(ti.TouchID)
+}
+
+var TheInputManager struct {
+	// below fields are updated by TheInputManager
+	// only public for convinience
+	// don't write in to it
+
+	TouchInfos map[eb.TouchID]TouchInfo
+
+	TouchingMap     map[eb.TouchID]bool
+	JustTouchedMap  map[eb.TouchID]bool
+	JustReleasedMap map[eb.TouchID]bool
+
+	TouchingBuf     []eb.TouchID
+	JustTouchedBuf  []eb.TouchID
+	JustReleasedBuf []eb.TouchID
+}
+
+func InitInputManager() {
+	im := &TheInputManager
+
+	im.TouchInfos = make(map[eb.TouchID]TouchInfo)
+}
+
+func UpdateInput() {
+	im := &TheInputManager
+
+	// =============================
+	// update touch buffers
+	// =============================
+	im.TouchingBuf = eb.AppendTouchIDs(im.TouchingBuf[:0])
+	im.JustTouchedBuf = ebi.AppendJustPressedTouchIDs(im.JustTouchedBuf[:0])
+	im.JustReleasedBuf = ebi.AppendJustReleasedTouchIDs(im.JustReleasedBuf[:0])
+
+	// =============================
+	// update touch maps
+	// =============================
+	im.TouchingMap = nil
+	im.JustTouchedMap = nil
+	im.JustReleasedMap = nil
+
+	if len(im.TouchingBuf) > 0 {
+		im.TouchingMap = make(map[eb.TouchID]bool)
+		for _, id := range im.TouchingBuf {
+			im.TouchingMap[id] = true
+		}
+	}
+	if len(im.JustTouchedBuf) > 0 {
+		im.JustTouchedMap = make(map[eb.TouchID]bool)
+		for _, id := range im.JustTouchedBuf {
+			im.JustTouchedMap[id] = true
+		}
+	}
+	if len(im.JustReleasedBuf) > 0 {
+		im.JustReleasedMap = make(map[eb.TouchID]bool)
+		for _, id := range im.JustReleasedBuf {
+			im.JustReleasedMap[id] = true
+		}
+	}
+
+	// =============================
+	// update touch infos
+	// =============================
+	for _, touchId := range im.JustTouchedBuf {
+		im.TouchInfos[touchId] = TouchInfo{
+			StartedTime: GlobalTimerNow(),
+			StartedPos:  TouchFPt(touchId),
+			TouchID:     touchId,
+		}
+	}
+
+	const dragDistance = 15
+
+	for _, touchId := range im.TouchingBuf {
+		if info, ok := im.TouchInfos[touchId]; ok {
+			curPos := TouchFPt(touchId)
+			if info.StartedPos.Sub(curPos).LengthSquared() > dragDistance*dragDistance {
+				info.Dragged = true
+			}
+
+			info.MaxTouchCount = max(info.MaxTouchCount, len(im.TouchingBuf))
+
+			im.TouchInfos[touchId] = info
+		}
+	}
+
+	for _, touchId := range im.JustReleasedBuf {
+		if info, ok := im.TouchInfos[touchId]; ok {
+			info.DidEnd = true
+			info.EndedTime = GlobalTimerNow()
+			touchX, touchY := ebi.TouchPositionInPreviousTick(touchId)
+			info.EndedPos = FPt(f64(touchX), f64(touchY))
+			im.TouchInfos[touchId] = info
+		}
+	}
+
+	// for safety
+	// remove TouchInfo that are unpressed and too old
+	for touchId, info := range im.TouchInfos {
+		if !IsTouchIdTouching(touchId) && TimeSinceNow(info.StartedTime) > time.Minute*30 {
+			delete(im.TouchInfos, touchId)
+		}
+	}
+}
+
+func GetTouchInfo(touchId eb.TouchID) (TouchInfo, bool) {
+	im := &TheInputManager
+	info, ok := im.TouchInfos[touchId]
+	return info, ok
+}
+
 type InputGroupId int64
 
 var inputGroupIdMax InputGroupId
@@ -117,12 +255,35 @@ func HandleKeyRepeat(
 	return false
 }
 
-var inputTouchIdBuffer []eb.TouchID
+func IsTouchFree() bool {
+	im := &TheInputManager
+
+	return len(im.TouchingBuf) <= 0
+}
+
+func IsTouching(rect FRectangle, touchIdIn *eb.TouchID) bool {
+	im := &TheInputManager
+
+	for _, touchId := range im.TouchingBuf {
+		posX, posY := eb.TouchPosition(touchId)
+
+		pos := FPt(f64(posX), f64(posY))
+
+		if pos.In(rect) {
+			if touchIdIn != nil {
+				*touchIdIn = touchId
+			}
+			return true
+		}
+	}
+
+	return false
+}
 
 func IsTouchJustPressed(rect FRectangle, touchIdIn *eb.TouchID) bool {
-	inputTouchIdBuffer = ebi.AppendJustPressedTouchIDs(inputTouchIdBuffer[:0])
+	im := &TheInputManager
 
-	for _, touchId := range inputTouchIdBuffer {
+	for _, touchId := range im.JustTouchedBuf {
 		posX, posY := eb.TouchPosition(touchId)
 
 		pos := FPt(f64(posX), f64(posY))
@@ -139,37 +300,10 @@ func IsTouchJustPressed(rect FRectangle, touchIdIn *eb.TouchID) bool {
 }
 
 func IsTouchJustReleased(rect FRectangle, touchIdIn *eb.TouchID) bool {
-	inputTouchIdBuffer = ebi.AppendJustReleasedTouchIDs(inputTouchIdBuffer[:0])
+	im := &TheInputManager
 
-	for _, touchId := range inputTouchIdBuffer {
-		posX, posY := ebi.TouchPositionInPreviousTick(touchId)
-
-		pos := FPt(f64(posX), f64(posY))
-
-		if pos.In(rect) {
-			if touchIdIn != nil {
-				*touchIdIn = touchId
-			}
-			return true
-		}
-	}
-
-	return false
-}
-
-func IsTouchFree() bool {
-	inputTouchIdBuffer = eb.AppendTouchIDs(inputTouchIdBuffer[:0])
-
-	return len(inputTouchIdBuffer) <= 0
-}
-
-func IsTouching(rect FRectangle, touchIdIn *eb.TouchID) bool {
-	inputTouchIdBuffer = eb.AppendTouchIDs(inputTouchIdBuffer[:0])
-
-	for _, touchId := range inputTouchIdBuffer {
-		posX, posY := eb.TouchPosition(touchId)
-
-		pos := FPt(f64(posX), f64(posY))
+	for _, touchId := range im.JustReleasedBuf {
+		pos := PrevTouchFPt(touchId)
 
 		if pos.In(rect) {
 			if touchIdIn != nil {
@@ -214,4 +348,19 @@ func HandleTouchRepeat(
 	}
 
 	return false
+}
+
+func IsTouchIdTouching(touchId eb.TouchID) bool {
+	im := &TheInputManager
+	return im.TouchingMap[touchId]
+}
+
+func IsTouchIdJustPressed(touchId eb.TouchID) bool {
+	im := &TheInputManager
+	return im.JustTouchedMap[touchId]
+}
+
+func IsTouchIdJustReleased(touchId eb.TouchID) bool {
+	im := &TheInputManager
+	return im.JustReleasedMap[touchId]
 }

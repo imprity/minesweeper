@@ -107,6 +107,8 @@ func (a *App) Update() error {
 	// ==========================
 	UpdateGlobalTimer()
 
+	UpdateInput()
+
 	UpdateSound()
 
 	fpsStr := fmt.Sprintf("%.2f", eb.ActualFPS())
@@ -214,6 +216,8 @@ func AppMain() {
 	InfoLogger.Printf("ScreenshotEnabled: %v", ScreenshotEnabled)
 
 	flag.Parse()
+
+	InitInputManager()
 
 	InitClipboardManager()
 

@@ -11,7 +11,6 @@ import (
 	"time"
 
 	eb "github.com/hajimehoshi/ebiten/v2"
-	ebi "github.com/hajimehoshi/ebiten/v2/inpututil"
 	ebt "github.com/hajimehoshi/ebiten/v2/text/v2"
 	ebv "github.com/hajimehoshi/ebiten/v2/vector"
 )
@@ -38,25 +37,8 @@ type GameInput struct {
 	ByTouch bool
 }
 
-type TouchInfo struct {
-	StartedTime time.Duration
-	StartedPos  FPoint
-
-	EndedTime time.Duration
-	EndedPos  FPoint
-	DidEnd    bool
-
-	Dragged bool
-
-	// max number of simultaneous touches during
-	// this was touching
-	MaxTouchCount int
-}
-
 type GameInputHandler struct {
-	TouchInfos map[eb.TouchID]TouchInfo
-
-	NoInputZone FRectangle
+	NoInputZones []FRectangle
 
 	gameInput GameInput
 
@@ -79,16 +61,11 @@ type GameInputHandler struct {
 	draggingForFlag bool
 	flagTouchId     eb.TouchID
 	ignoreForFlag   map[eb.TouchID]bool
-
-	touchingBuf     []eb.TouchID
-	justTouchedBuf  []eb.TouchID
-	justReleasedBuf []eb.TouchID
 }
 
 func NewGameInputHandler() *GameInputHandler {
 	gi := new(GameInputHandler)
 
-	gi.TouchInfos = make(map[eb.TouchID]TouchInfo)
 	gi.ignoreForFlag = make(map[eb.TouchID]bool)
 
 	return gi
@@ -98,65 +75,7 @@ func (gi *GameInputHandler) Update(
 	board Board,
 	boardRect FRectangle,
 ) {
-	// =============================
-	// update touch buffers
-	// =============================
-	gi.touchingBuf = eb.AppendTouchIDs(gi.touchingBuf[:0])
-	gi.justTouchedBuf = ebi.AppendJustPressedTouchIDs(gi.justTouchedBuf[:0])
-	gi.justReleasedBuf = ebi.AppendJustReleasedTouchIDs(gi.justReleasedBuf[:0])
-
-	// =============================
-	// update touch infos
-	// =============================
-	for _, touchId := range gi.justTouchedBuf {
-		gi.TouchInfos[touchId] = TouchInfo{
-			StartedTime: GlobalTimerNow(),
-			StartedPos:  TouchFPt(touchId),
-		}
-	}
-
-	const dragDistance = 15
-
-	for _, touchId := range gi.touchingBuf {
-		if info, ok := gi.TouchInfos[touchId]; ok {
-			curPos := TouchFPt(touchId)
-			if info.StartedPos.Sub(curPos).LengthSquared() > dragDistance*dragDistance {
-				info.Dragged = true
-			}
-
-			info.MaxTouchCount = max(info.MaxTouchCount, len(gi.touchingBuf))
-
-			gi.TouchInfos[touchId] = info
-		}
-	}
-
-	for _, touchId := range gi.justReleasedBuf {
-		if info, ok := gi.TouchInfos[touchId]; ok {
-			info.DidEnd = true
-			info.EndedTime = GlobalTimerNow()
-			touchX, touchY := ebi.TouchPositionInPreviousTick(touchId)
-			info.EndedPos = FPt(f64(touchX), f64(touchY))
-			gi.TouchInfos[touchId] = info
-		}
-	}
-
-	touchingMap := make(map[eb.TouchID]bool)
-	for _, touchId := range gi.touchingBuf {
-		touchingMap[touchId] = true
-	}
-
-	isTouching := func(touchId eb.TouchID) bool {
-		return touchingMap[touchId]
-	}
-
-	// for safety
-	// remove touch timers that are unpressed and too old
-	for touchId, info := range gi.TouchInfos {
-		if !isTouching(touchId) && TimeSinceNow(info.StartedTime) > time.Minute*30 {
-			delete(gi.TouchInfos, touchId)
-		}
-	}
-
+	im := &TheInputManager
 	// =============================
 	// update mouse input
 	// =============================
@@ -179,8 +98,16 @@ func (gi *GameInputHandler) Update(
 	)
 
 	cursorInRect := cursor.In(boardRect)
+	var cursorInNoInputZone bool
 
-	if cursorInRect && !cursor.In(gi.NoInputZone) {
+	for _, zone := range gi.NoInputZones {
+		if cursor.In(zone) {
+			cursorInNoInputZone = true
+			break
+		}
+	}
+
+	if cursorInRect && !cursorInNoInputZone {
 		input.Type = InputTypeHover
 
 		if (pressedL && pressedR) || pressedM {
@@ -204,17 +131,27 @@ func (gi *GameInputHandler) Update(
 	// update touch board input
 	// =============================
 
-	for _, touchId := range gi.justTouchedBuf {
+	for _, touchId := range im.JustTouchedBuf {
 		delete(gi.ignoreForFlag, touchId)
 	}
 
 	// check touch
-	for touchId, info := range gi.TouchInfos {
+	for touchId, info := range im.TouchInfos {
 		if info.MaxTouchCount > 1 {
 			continue
 		}
-		if info.StartedPos.In(gi.NoInputZone) {
-			continue
+
+		{
+			var startedInNoInputZone bool
+			for _, zone := range gi.NoInputZones {
+				if info.StartedPos.In(zone) {
+					startedInNoInputZone = true
+					break
+				}
+			}
+			if startedInNoInputZone {
+				continue
+			}
 		}
 
 		curPos := TouchFPt(touchId)
@@ -443,9 +380,9 @@ func (gi *GameInputHandler) Update(
 	// =============================
 	// update touch pinch input
 	// =============================
-	if len(gi.touchingBuf) == 2 {
-		pos1 := TouchFPt(gi.touchingBuf[0])
-		pos2 := TouchFPt(gi.touchingBuf[1])
+	if len(im.TouchingBuf) == 2 {
+		pos1 := TouchFPt(im.TouchingBuf[0])
+		pos2 := TouchFPt(im.TouchingBuf[1])
 
 		newPinch := pos1.Sub(pos2).Length()
 		newPinchPos := pos1.Add(pos2).Mul(FPt(0.5, 0.5))
@@ -472,7 +409,7 @@ func (gi *GameInputHandler) Update(
 	// =============================
 	// update touch drag input
 	// =============================
-	if len(gi.touchingBuf) != 1 {
+	if len(im.TouchingBuf) != 1 {
 		gi.dragPastLimit = false
 		gi.dragStarted = false
 	}
@@ -826,6 +763,8 @@ type Game struct {
 	retryButtonOffsetY float64
 
 	viBuffers [3]*VIBuffer
+
+	noInputZone FRectangle
 }
 
 func NewGame(boardWidth, boardHeight, mineCount int) *Game {
@@ -848,11 +787,16 @@ func NewGame(boardWidth, boardHeight, mineCount int) *Game {
 	g.RetryButton.Disabled = true
 	g.RetryButtonScale = 1
 
-	g.RetryButton.OnPress = func(bool) {
-		g.SkipAllAnimationsUntilTag(AnimationTagHideBoard)
-		PlaySoundBytes(SeButtonClick, 1.0)
-		g.RetryButton.Disabled = true
-		g.QueueResetBoardAnimation()
+	g.RetryButton.OnAny = func(byTouch bool, timing ButtonTiming) {
+		trigger := !byTouch && timing == ButtonTimingOnPress
+		trigger = trigger || (byTouch && timing == ButtonTimingOnRelease)
+
+		if trigger {
+			g.SkipAllAnimationsUntilTag(AnimationTagHideBoard)
+			PlaySoundBytes(SeButtonClick, 1.0)
+			g.RetryButton.Disabled = true
+			g.QueueResetBoardAnimation()
+		}
 	}
 
 	g.Seed = GetSeed()
@@ -957,13 +901,23 @@ func (g *Game) Update() {
 	g.playedAddFlagSound = false
 	g.playedRemoveFlagSound = false
 
+	// =============
+	// update input
+	// =============
+	{
+		noInputZones := make([]FRectangle, 0, 2)
+		noInputZones = append(noInputZones, g.noInputZone)
+
+		if g.DrawRetryButton && !g.InputHandler.IsDragging() {
+			noInputZones = append(noInputZones, g.TransformedRetryButtonRect())
+		}
+
+		g.InputHandler.NoInputZones = noInputZones
+	}
 	g.InputHandler.Update(g.board, g.TransformedBoardRect())
 
 	gi := g.InputHandler.GetGameInput()
 
-	// =================================
-	// handle pinch zoom
-	// =================================
 	if !g.DisableZoomAndPanControl {
 		g.Zoom, g.Offset = g.InputHandler.GetZoomAndOffset(g.Zoom, g.Offset, FRectangleCenter(g.TransformedBoardRect()))
 	}
@@ -1237,6 +1191,8 @@ func (g *Game) Update() {
 	// ===================================
 	// update RetryButton
 	// ===================================
+	g.RetryButton.NoInputZone = g.noInputZone
+
 	if !g.DrawRetryButton {
 		g.retryButtonSizeRelative = g.retryButtonSize / min(g.Rect.Dx(), g.Rect.Dy())
 	}
@@ -1276,7 +1232,7 @@ func (g *Game) Draw(dst *eb.Image) {
 
 		doWaterEffect, g.WaterAlpha, g.WaterFlowOffset,
 
-		g.InputHandler.IsPinching() || g.DoingZoomAnimation,
+		(g.InputHandler.IsPinching() && !g.DisableZoomAndPanControl) || g.DoingZoomAnimation,
 	)
 
 	if g.DrawRetryButton {
@@ -1326,12 +1282,11 @@ func (g *Game) HadInteraction() bool {
 }
 
 func (g *Game) NoInputZone() FRectangle {
-	return g.InputHandler.NoInputZone
+	return g.noInputZone
 }
 
 func (g *Game) SetNoInputZone(rect FRectangle) {
-	g.InputHandler.NoInputZone = rect
-	g.RetryButton.NoInputZone = rect
+	g.noInputZone = rect
 }
 
 func (g *Game) TransformedBoardRect() FRectangle {

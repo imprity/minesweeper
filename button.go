@@ -61,8 +61,22 @@ func (b *BaseButton) Update() {
 
 	prevState := b.State
 
+	var touchId eb.TouchID
+
 	cursor := CursorFPt()
-	touchingInside := (IsTouching(b.Rect, nil) && !IsTouching(b.NoInputZone, nil))
+	touchingInside := (IsTouching(b.Rect, &touchId) && !IsTouching(b.NoInputZone, nil))
+
+	if touchingInside {
+		if info, ok := GetTouchInfo(touchId); ok {
+			if info.StartedPos.In(b.NoInputZone) {
+				touchingInside = false
+			}
+
+			if info.MaxTouchCount > 1 {
+				touchingInside = false
+			}
+		}
+	}
 
 	inRect := (cursor.In(b.Rect) && !cursor.In(b.NoInputZone)) || touchingInside
 
@@ -112,7 +126,18 @@ func (b *BaseButton) Update() {
 	}
 
 	if b.readyToCallOnRelease {
-		touchReleased := (IsTouchJustReleased(b.Rect, nil) && !IsTouchJustReleased(b.NoInputZone, nil))
+		touchReleased := (IsTouchJustReleased(b.Rect, &touchId) && !IsTouchJustReleased(b.NoInputZone, nil))
+		if touchReleased {
+			if info, ok := GetTouchInfo(touchId); ok {
+				if info.StartedPos.In(b.NoInputZone) {
+					touchingInside = false
+				}
+
+				if info.MaxTouchCount > 1 {
+					touchingInside = false
+				}
+			}
+		}
 		mouseReleased := IsMouseButtonJustReleased(eb.MouseButtonLeft) && inRect
 
 		released := touchReleased || mouseReleased
@@ -127,6 +152,7 @@ func (b *BaseButton) Update() {
 			b.readyToCallOnRelease = false
 		}
 	}
+
 	if ((cursor.In(b.Rect) && !cursor.In(b.NoInputZone)) && !(IsMouseButtonPressed(eb.MouseButtonLeft) && b.State == ButtonStateDown)) ||
 		(touchingInside && b.State != ButtonStateDown) {
 		b.State = ButtonStateHover
