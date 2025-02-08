@@ -166,6 +166,41 @@ func IsMouseButtonJustReleased(button eb.MouseButton) bool {
 	return ebi.IsMouseButtonJustReleased(button)
 }
 
+var MouseButtons = []eb.MouseButton{
+	eb.MouseButton0,
+	eb.MouseButton1,
+	eb.MouseButton2,
+	eb.MouseButton3,
+	eb.MouseButton4,
+}
+
+func IsAnyMouseButtonPressed() bool {
+	for _, button := range MouseButtons {
+		if IsMouseButtonPressed(button) {
+			return true
+		}
+	}
+	return false
+}
+
+func IsAnyMouseButtonJustPressed() bool {
+	for _, button := range MouseButtons {
+		if IsMouseButtonJustPressed(button) {
+			return true
+		}
+	}
+	return false
+}
+
+func IsAnyMouseButtonJustReleased() bool {
+	for _, button := range MouseButtons {
+		if IsMouseButtonJustReleased(button) {
+			return true
+		}
+	}
+	return false
+}
+
 var mouseButtonRepeatMap = make(
 	map[struct {
 		Id     InputGroupId

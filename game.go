@@ -922,7 +922,7 @@ func (g *Game) Update() {
 		g.Zoom, g.Offset = g.InputHandler.GetZoomAndOffset(g.Zoom, g.Offset, FRectangleCenter(g.TransformedBoardRect()))
 	}
 
-	if g.InputHandler.IsPinching() || g.InputHandler.IsDragging() {
+	if (g.InputHandler.IsPinching() || g.InputHandler.IsDragging()) && !g.DisableZoomAndPanControl {
 		SetRedraw()
 	}
 
@@ -2357,7 +2357,7 @@ func NewTileHighlightModifier() StyleModifier {
 	}
 }
 
-func NewFgClickModifier() StyleModifier {
+func NewFgClickModifier2() StyleModifier {
 	var clickTimer Timer
 
 	clickTimer.Duration = time.Millisecond * 100
@@ -2379,27 +2379,25 @@ func NewFgClickModifier() StyleModifier {
 			return gameState != prevGameState
 		}
 
-		doRedraw := false
+		prevFocuesed := focused
+
+		//doRedraw := false
 
 		cursorOnFg := board.IsPosInBoard(gi.BoardX, gi.BoardY)
 		cursorOnFg = cursorOnFg && tileStyles.Get(gi.BoardX, gi.BoardY).DrawFg
 
-		if cursorOnFg && gi.Type != InputTypeNone {
+		if cursorOnFg && gi.Type != InputTypeNone && gi.Type != InputTypeHover {
 			clickTimer.Current = clickTimer.Duration
 			clickX = gi.BoardX
 			clickY = gi.BoardY
 			focused = true
-			doRedraw = true
 		}
 
-		if gi.Type != InputTypeNone || !(clickX == gi.BoardX && clickY == gi.BoardY) {
+		if gi.Type != InputTypeNone || gi.Type != InputTypeHover || !(clickX == gi.BoardX && clickY == gi.BoardY) {
 			focused = false
 		}
 
 		if !focused {
-			if clickTimer.Current >= 0 {
-				doRedraw = true
-			}
 			clickTimer.TickDown()
 		}
 
@@ -2409,7 +2407,103 @@ func NewFgClickModifier() StyleModifier {
 			}
 		}
 
-		return doRedraw
+		return focused != prevFocuesed || (0 <= clickTimer.Current && clickTimer.Current <= clickTimer.Duration)
+		// _=prevFocuesed
+		// return false
+	}
+}
+
+func NewFgClickModifier() StyleModifier {
+	const clickTimeDuration = time.Millisecond * 100
+
+	clickTimers := make(map[image.Point]Timer)
+
+	return func(
+		prevBoard, board Board,
+		boardRect FRectangle,
+		interaction BoardInteractionType,
+		stateChanged bool,
+		prevGameState, gameState GameState,
+		tileStyles Array2D[TileStyle],
+		gi GameInput,
+	) bool {
+		prevClickTimers := make(map[image.Point]time.Duration)
+
+		for point, timer := range clickTimers {
+			prevClickTimers[point] = timer.Current
+		}
+
+		if IsAnyMouseButtonPressed() {
+			cursor := CursorFPt()
+			boardX, boardY := MousePosToBoardPos(
+				boardRect,
+				board.Width, board.Height,
+				cursor,
+			)
+			clickTimers[image.Pt(boardX, boardY)] = Timer{
+				Current:  clickTimeDuration,
+				Duration: clickTimeDuration,
+			}
+		}
+
+		im := &TheInputManager
+
+		for _, id := range im.TouchingBuf {
+			if info, ok := GetTouchInfo(id); ok {
+				boardX, boardY := MousePosToBoardPos(
+					boardRect,
+					board.Width, board.Height,
+					info.StartedPos,
+				)
+				clickTimers[image.Pt(boardX, boardY)] = Timer{
+					Current:  clickTimeDuration,
+					Duration: clickTimeDuration,
+				}
+			}
+		}
+
+		// remove timers outside the board
+		for point := range clickTimers {
+			if !board.IsPosInBoard(point.X, point.Y) {
+				delete(clickTimers, point)
+			}
+		}
+
+		// apply tile style
+		for point, timer := range clickTimers {
+			tileStyles.Data[point.X+point.Y*tileStyles.Width].FgScale *= 1 + timer.Normalize()*0.07
+		}
+
+		// decrease timers
+		for point, timer := range clickTimers {
+			timer.TickDown()
+			clickTimers[point] = timer
+		}
+		// remove timers below zero
+		for point, timer := range clickTimers {
+			if timer.Current < 0 {
+				delete(clickTimers, point)
+			}
+		}
+
+		redraw := false
+
+		if len(clickTimers) != len(prevClickTimers) {
+			redraw = true
+		}
+
+		if !redraw {
+			for point, timer := range clickTimers {
+				t := Clamp(timer.Current, 0, timer.Duration)
+				otherT := Clamp(prevClickTimers[point], 0, timer.Duration)
+				if t != otherT {
+					redraw = true
+					break
+				}
+			}
+		}
+
+		return redraw
 	}
 }
 
