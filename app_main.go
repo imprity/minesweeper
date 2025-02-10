@@ -89,12 +89,15 @@ type App struct {
 	ScreenshotQueued bool
 
 	Scene Scene
+
+	FirstTimeUpdate bool
 }
 
 func NewApp() *App {
 	a := new(App)
+	a.FirstTimeUpdate = true
 	// TEST TEST TEST TEST
-	a.ShowDebugConsole = true
+	//a.ShowDebugConsole = true
 	// TEST TEST TEST TEST
 	return a
 }
@@ -156,6 +159,11 @@ func (a *App) Update() error {
 
 	if IsDevVersion {
 		DebugPrint("ProbablyOnMobile", ProbablyOnMobile())
+	}
+
+	if a.FirstTimeUpdate {
+		a.FirstTimeUpdate = false
+		SetRedraw()
 	}
 
 	return nil

@@ -51,6 +51,16 @@ func (t *Timer) NormalizeUnclamped() float64 {
 	return f64(t.Current) / f64(t.Duration)
 }
 
+func (t *Timer) InRange(rangeStart, rangeEnd time.Duration) bool {
+	return rangeStart <= t.Current && t.Current <= rangeEnd
+}
+
+func (t *Timer) NormalizeRange(rangeStart, rangeEnd time.Duration) float64 {
+	normalized := f64(t.Current-rangeStart) / f64(rangeEnd-rangeStart)
+	normalized = Clamp(normalized, 0, 1)
+	return normalized
+}
+
 // Timer for profiling.
 // Usage :
 //

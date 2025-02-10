@@ -20,8 +20,11 @@ import (
 //go:embed assets
 var EmbeddedAssets embed.FS
 
-var TileSprite Sprite
-var UISprite Sprite
+var (
+	TileSprite   Sprite
+	UISprite     Sprite
+	CursorSprite Sprite
+)
 
 var RetryButtonImage *eb.Image
 
@@ -167,7 +170,7 @@ func LoadAssets() {
 		return sprite
 	}
 
-	// load TileSprite
+	// load sprites
 	TileSprite = loadSprite(
 		"assets/tile-spritesheet-50x50-5x5.png",
 		"assets/tile-spritesheet-50x50-5x5.json",
@@ -176,6 +179,11 @@ func LoadAssets() {
 	UISprite = loadSprite(
 		"assets/ui-spritesheet-100x100-5x5.png",
 		"assets/ui-spritesheet-100x100-5x5.json",
+	)
+
+	CursorSprite = loadSprite(
+		"assets/cursor.png",
+		"assets/cursor.json",
 	)
 
 	// load RetryButtonImage

@@ -742,6 +742,8 @@ type Game struct {
 
 	Seed [32]byte
 
+	FlagTutorial *FlagTutorial
+
 	board     Board
 	prevBoard Board
 
@@ -776,6 +778,8 @@ func NewGame(boardWidth, boardHeight, mineCount int) *Game {
 
 	g.InputHandler = NewGameInputHandler()
 
+	g.FlagTutorial = NewFlagTutorial()
+
 	g.mineCount = mineCount
 
 	g.resetBoardWidth = boardWidth
@@ -784,6 +788,7 @@ func NewGame(boardWidth, boardHeight, mineCount int) *Game {
 
 	g.StyleModifiers = append(g.StyleModifiers, NewTileHighlightModifier())
 	g.StyleModifiers = append(g.StyleModifiers, NewFgClickModifier())
+	g.StyleModifiers = append(g.StyleModifiers, g.FlagTutorial.GetFlagTutorialStyleModifier())
 
 	g.RetryButton = NewRetryButton()
 	g.RetryButton.Disabled = true
@@ -931,6 +936,12 @@ func (g *Game) Update() {
 	if g.DoingZoomAnimation {
 		SetRedraw()
 	}
+
+	g.FlagTutorial.Update(
+		g.board,
+		g.TransformedBoardRect(),
+		g.Rect,
+	)
 
 	// =================================
 	// handle board interaction
@@ -1253,6 +1264,12 @@ func (g *Game) Draw(dst *eb.Image) {
 	)
 
 	g.InputHandler.Draw(dst)
+
+	g.FlagTutorial.Draw(
+		dst,
+		g.board,
+		g.TransformedBoardRect(),
+	)
 }
 
 func (g *Game) Layout(outsideWidth, outsideHeight int) {
@@ -1739,6 +1756,7 @@ func DrawBoard(
 
 	zoomingInOut bool,
 ) {
+	// TODO: don't draw stuff that are outside the screen
 	modColor := func(
 		c color.Color,
 		alpha float64,
@@ -2356,62 +2374,6 @@ func NewTileHighlightModifier() StyleModifier {
 		}
 
 		return false
-	}
-}
-
-func NewFgClickModifier2() StyleModifier {
-	var clickTimer Timer
-
-	clickTimer.Duration = time.Millisecond * 100
-
-	var clickX, clickY int
-
-	var focused bool
-
-	return func(
-		prevBoard, board Board,
-		boardRect FRectangle,
-		interaction BoardInteractionType,
-		stateChanged bool,
-		prevGameState, gameState GameState,
-		tileStyles Array2D[TileStyle],
-		gi GameInput,
-	) bool {
-		if gameState != GameStatePlaying { // only do this when we are actually playing
-			return gameState != prevGameState
-		}
-
-		prevFocuesed := focused
-
-		//doRedraw := false
-
-		cursorOnFg := board.IsPosInBoard(gi.BoardX, gi.BoardY)
-		cursorOnFg = cursorOnFg && tileStyles.Get(gi.BoardX, gi.BoardY).DrawFg
-
-		if cursorOnFg && gi.Type != InputTypeNone && gi.Type != InputTypeHover {
-			clickTimer.Current = clickTimer.Duration
-			clickX = gi.BoardX
-			clickY = gi.BoardY
-			focused = true
-		}
-
-		if gi.Type != InputTypeNone || gi.Type != InputTypeHover || !(clickX == gi.BoardX && clickY == gi.BoardY) {
-			focused = false
-		}
-
-		if !focused {
-			clickTimer.TickDown()
-		}
-
-		if clickTimer.Current > 0 {
-			if board.IsPosInBoard(clickX, clickY) {
-				tileStyles.Data[clickX+clickY*tileStyles.Width].FgScale *= 1 + clickTimer.Normalize()*0.07
-			}
-		}
-
-		return focused != prevFocuesed || (0 <= clickTimer.Current && clickTimer.Current <= clickTimer.Duration)
-		// _=prevFocuesed
-		// return false
 	}
 }
 
@@ -3984,4 +3946,378 @@ func (rb *RetryButton) Draw(dst *eb.Image) {
 	op.ColorScale.ScaleWithColor(color4)
 
 	DrawImage(dst, RetryButtonImage, op)
+}
+
+// =====================
+// Tutorial
+// =====================
+
+type FlagTutorial struct {
+	ShowFlagTutorial bool
+
+	foundGoodTile bool
+
+	numberTileX int
+	numberTileY int
+
+	flagTileX int
+	flagTileY int
+
+	animationTimer Timer
+
+	// animation constants
+	fadeInStart time.Duration
+	fadeInEnd   time.Duration
+
+	fadeOutStart time.Duration
+	fadeOutEnd   time.Duration
+
+	animationDelay time.Duration // constant
+
+	cursorMoveStart time.Duration // constant
+	cursorMoveEnd   time.Duration
+
+	flagAnimationStart time.Duration
+	flagAnimationEnd   time.Duration
+}
+
+func NewFlagTutorial() *FlagTutorial {
+	ft := new(FlagTutorial)
+	ft.numberTileX = -1
+	ft.numberTileY = -1
+
+	ft.flagTileX = -1
+	ft.flagTileY = -1
+
+	ft.animationDelay = time.Millisecond * 500
+
+	ft.fadeInStart = time.Millisecond * 0
+	ft.fadeInEnd = ft.fadeInStart + time.Millisecond*200
+
+	ft.fadeOutStart = time.Millisecond * 1500
+	ft.fadeOutEnd = ft.fadeOutStart + time.Millisecond*200
+
+	ft.cursorMoveStart = time.Millisecond * 200
+	ft.cursorMoveEnd = time.Millisecond * 1000
+
+	ft.flagAnimationStart = time.Millisecond * 900
+	ft.flagAnimationEnd = time.Millisecond * 1300
+
+	ft.animationTimer.Current = -ft.animationDelay
+	ft.animationTimer.Duration = max(
+		ft.fadeInEnd,
+		ft.fadeOutEnd,
+		ft.cursorMoveEnd,
+		ft.flagAnimationEnd,
+	) + time.Millisecond*100
+
+	return ft
+}
+
+func (ft *FlagTutorial) getAlpha() float64 {
+	if ft.animationTimer.Current <= ft.fadeInEnd {
+		return ft.animationTimer.NormalizeRange(ft.fadeInStart, ft.fadeInEnd)
+	}
+
+	if ft.animationTimer.Current >= ft.fadeOutStart {
+		return 1 - ft.animationTimer.NormalizeRange(ft.fadeOutStart, ft.fadeOutEnd)
+	}
+
+	return 1
+}
+
+func (ft *FlagTutorial) GetFlagTutorialStyleModifier() StyleModifier {
+	return func(
+		prevBoard, board Board,
+		boardRect FRectangle,
+		interaction BoardInteractionType,
+		stateChanged bool,
+		prevGameState, gameState GameState,
+		tileStyles Array2D[TileStyle],
+		gi GameInput,
+	) bool {
+		if !ft.foundGoodTile {
+			return false
+		}
+
+		if ft.animationTimer.Current < 0 {
+			return false
+		}
+
+		iter := NewBoardIterator(
+			ft.numberTileX-1, ft.numberTileY-1,
+			ft.numberTileX+1, ft.numberTileY+1,
+		)
+
+		for iter.HasNext() {
+			x, y := iter.GetNext()
+			if !board.IsPosInBoard(x, y) {
+				continue
+			}
+			if !(x == ft.numberTileX && y == ft.numberTileY) && board.Revealed.Get(x, y) {
+				continue
+			}
+			tileStyles.Data[x+tileStyles.Width*y].Highlight = ft.getAlpha()
+		}
+
+		if ft.animationTimer.Current >= ft.flagAnimationStart {
+			t := ft.animationTimer.NormalizeRange(ft.flagAnimationStart, ft.flagAnimationEnd)
+
+			style := tileStyles.Get(ft.flagTileX, ft.flagTileY)
+
+			style.DrawFg = true
+			style.FgType = TileFgTypeFlag
+			style.FgColor = ColorFade(ColorFlag, ft.getAlpha())
+			style.FgFlagAnim = t
+
+			style.Highlight = 0
+
+			tileStyles.Set(ft.flagTileX, ft.flagTileY, style)
+		}
+
+		return true
+	}
+}
+
+func (ft *FlagTutorial) Update(
+	board Board,
+	boardRect FRectangle,
+	gameRect FRectangle,
+) {
+	gameRectCenter := FRectangleCenter(gameRect)
+
+	centerBX, centerBY := MousePosToBoardPos(
+		boardRect,
+		board.Width, board.Height,
+		FPt(ScreenWidth*0.5, ScreenHeight*0.5),
+	)
+
+	isGoodNumberTile := func(numberAt image.Point) bool {
+		if !board.IsPosInBoard(numberAt.X, numberAt.Y) {
+			return false
+		}
+		if !board.Revealed.Get(numberAt.X, numberAt.Y) {
+			return false
+		}
+		if board.GetNeighborMineCount(numberAt.X, numberAt.Y) <= 0 {
+			return false
+		}
+		numberTile := GetBoardTileRect(
+			boardRect,
+			board.Width, board.Height,
+			numberAt.X, numberAt.Y,
+		)
+		if !numberTile.In(gameRect) {
+			return false
+		}
+		return true
+	}
+
+	isGoodFlagTile := func(flagAt image.Point) bool {
+		if !board.IsPosInBoard(flagAt.X, flagAt.Y) {
+			return false
+		}
+		if board.Revealed.Get(flagAt.X, flagAt.Y) {
+			return false
+		}
+		if !board.Mines.Get(flagAt.X, flagAt.Y) {
+			return false
+		}
+		if board.Flags.Get(flagAt.X, flagAt.Y) {
+			return false
+		}
+		tile := GetBoardTileRect(
+			boardRect,
+			board.Width, board.Height,
+			flagAt.X, flagAt.Y,
+		)
+		if !tile.In(gameRect) {
+			return false
+		}
+
+		return true
+	}
+
+	getGoodFlagTile := func(numberAt image.Point) (bool, image.Point) {
+		if !isGoodNumberTile(numberAt) {
+			return false, image.Point{}
+		}
+
+		iter := NewBoardIterator(numberAt.X-1, numberAt.Y-1, numberAt.X+1, numberAt.Y+1)
+		for iter.HasNext() {
+			x, y := iter.GetNext()
+			if x == numberAt.X && y == numberAt.Y {
+				continue
+			}
+			if !isGoodFlagTile(image.Pt(x, y)) {
+				continue
+			}
+
+			return true, image.Pt(x, y)
+		}
+
+		return false, image.Point{}
+	}
+
+	clampX := func(x int) int {
+		return Clamp(x, 0, board.Width-1)
+	}
+
+	clampY := func(y int) int {
+		return Clamp(y, 0, board.Height-1)
+	}
+
+	findGoodTile := false
+
+	if !ft.foundGoodTile {
+		findGoodTile = true
+		ft.foundGoodTile = false
+		ft.animationTimer.Current = -ft.animationDelay
+	}
+	if !isGoodNumberTile(image.Pt(ft.numberTileX, ft.numberTileY)) || !isGoodFlagTile(image.Pt(ft.flagTileX, ft.flagTileY)) {
+		findGoodTile = true
+		ft.foundGoodTile = false
+		ft.animationTimer.Current = -ft.animationDelay
+	}
+
+	if findGoodTile {
+		searchDist := 0
+	SEARCH_LOOP:
+		for {
+			var minPoint, maxPoint image.Point
+
+			minPoint.X = centerBX - searchDist
+			minPoint.Y = centerBY - searchDist
+
+			maxPoint.X = centerBX + searchDist
+			maxPoint.Y = centerBY + searchDist
+
+			{
+				tileW, tileH := GetBoardTileSize(boardRect, board.Width, board.Height)
+				size := f64((searchDist * 2) + 1)
+				searchRect := FRectWH(size*tileW, size*tileH)
+				searchRect = CenterFRectangle(searchRect, gameRectCenter.X, gameRectCenter.Y)
+				if gameRect.In(searchRect) {
+					break
+				}
+			}
+
+			minPoint.X = clampX(minPoint.X)
+			minPoint.Y = clampY(minPoint.Y)
+
+			maxPoint.X = clampX(maxPoint.X)
+			maxPoint.Y = clampY(maxPoint.Y)
+
+			for x := minPoint.X; x <= maxPoint.X; x++ {
+				y := minPoint.Y
+				if isGood, flagAt := getGoodFlagTile(image.Pt(x, y)); isGood {
+					ft.numberTileX, ft.numberTileY = x, y
+					ft.flagTileX, ft.flagTileY = flagAt.X, flagAt.Y
+					ft.foundGoodTile = true
+					break SEARCH_LOOP
+				}
+			}
+			for x := minPoint.X; x <= maxPoint.X; x++ {
+				y := maxPoint.Y
+				if isGood, flagAt := getGoodFlagTile(image.Pt(x, y)); isGood {
+					ft.numberTileX, ft.numberTileY = x, y
+					ft.flagTileX, ft.flagTileY = flagAt.X, flagAt.Y
+					ft.foundGoodTile = true
+					break SEARCH_LOOP
+				}
+			}
+			for y := minPoint.Y; y <= maxPoint.Y; y++ {
+				x := minPoint.X
+				if isGood, flagAt := getGoodFlagTile(image.Pt(x, y)); isGood {
+					ft.numberTileX, ft.numberTileY = x, y
+					ft.flagTileX, ft.flagTileY = flagAt.X, flagAt.Y
+					ft.foundGoodTile = true
+					break SEARCH_LOOP
+				}
+			}
+			for y := minPoint.Y; y <= maxPoint.Y; y++ {
+				x := maxPoint.X
+				if isGood, flagAt := getGoodFlagTile(image.Pt(x, y)); isGood {
+					ft.numberTileX, ft.numberTileY = x, y
+					ft.flagTileX, ft.flagTileY = flagAt.X, flagAt.Y
+					ft.foundGoodTile = true
+					break SEARCH_LOOP
+				}
+			}
+
+			searchDist += 1
+		}
+	}
+
+	if ft.foundGoodTile {
+		ft.animationTimer.TickUp()
+		if ft.animationTimer.Current > ft.animationTimer.Duration {
+			ft.animationTimer.Current = -ft.animationDelay
+		}
+	} else {
+		ft.animationTimer.Current = -ft.animationDelay
+	}
+}
+
+func (ft *FlagTutorial) Draw(
+	dst *eb.Image,
+	board Board,
+	boardRect FRectangle,
+) {
+	if ft.foundGoodTile && ft.animationTimer.Current >= 0 {
+		numberTile := GetBoardTileRect(
+			boardRect,
+			board.Width, board.Height,
+			ft.numberTileX, ft.numberTileY,
+		)
+		flagTile := GetBoardTileRect(
+			boardRect,
+			board.Width, board.Height,
+			ft.flagTileX, ft.flagTileY,
+		)
+
+		cursorPos := FPointLerp(
+			FRectangleCenter(numberTile),
+			FRectangleCenter(flagTile),
+			EaseInCirc(ft.animationTimer.NormalizeRange(
+				ft.cursorMoveStart,
+				ft.cursorMoveEnd,
+			)),
+		)
+
+		{
+			tileW, tileH := GetBoardTileSize(boardRect, board.Width, board.Height)
+
+			cursorScale := min(tileW/f64(CursorSprite.Width), tileH/f64(CursorSprite.Height)) * 1.2
+			op := &DrawSubViewOptions{}
+			op.GeoM.Concat(TransformToCenter(
+				f64(CursorSprite.Width), f64(CursorSprite.Height),
+				cursorScale, cursorScale,
+				0,
+			))
+			op.GeoM.Translate(
+				cursorPos.X,
+				cursorPos.Y+f64(CursorSprite.Height)*cursorScale*0.6,
+			)
+
+			op.ColorScale.ScaleWithColor(
+				ColorFade(color.NRGBA{255, 255, 255, 255}, ft.getAlpha()),
+			)
+			DrawSubView(dst, SpriteSubView(CursorSprite, 0), op)
+			op.ColorScale.Reset()
+			op.ColorScale.ScaleWithColor(
+				ColorFade(color.NRGBA{0, 0, 0, 255}, ft.getAlpha()),
+			)
+
+			BeginFilter(eb.FilterLinear)
+			BeginMipMap(true)
+			BeginAntiAlias(true)
+			DrawSubView(dst, SpriteSubView(CursorSprite, 1), op)
+			EndAntiAlias()
+			EndMipMap()
+			EndFilter()
+		}
+
+		SetRedraw()
+	}
 }
