@@ -1127,7 +1127,10 @@ func (g *Game) Update() {
 		g.plantedFlag = true
 	}
 
-	if g.revealdTilesUsingTouch && !g.plantedFlag && gi.Type == InputTypeNone {
+	if g.revealdTilesUsingTouch &&
+		!g.plantedFlag &&
+		gi.Type == InputTypeNone &&
+		g.GameState == GameStatePlaying {
 		g.FlagTutorial.ShowFlagTutorial = true
 	} else {
 		g.FlagTutorial.ShowFlagTutorial = false
