@@ -834,7 +834,7 @@ func ZipFiles(
 		fmt.Printf("  %s\n", file)
 	}
 	fmt.Printf("\n")
-	fmt.Printf("to %s", dst)
+	fmt.Printf("to %s\n", dst)
 
 	zipBuffer := new(bytes.Buffer)
 	writer := zip.NewWriter(zipBuffer)
