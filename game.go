@@ -4378,12 +4378,18 @@ func (ft *FlagTutorial) Draw(
 		BeginAntiAlias(true)
 
 		cursorOp.ColorScale.ScaleWithColor(
-			ColorFade(color.NRGBA{255, 255, 255, 255}, ft.cursorFade.GetFade(ft.animationTimer)),
+			ColorFade(
+				ColorFlagTutorialStroke,
+				ft.cursorFade.GetFade(ft.animationTimer),
+			),
 		)
 		DrawSubView(dst, SpriteSubView(CursorSprite, 0), cursorOp)
 		cursorOp.ColorScale.Reset()
 		cursorOp.ColorScale.ScaleWithColor(
-			ColorFade(color.NRGBA{0, 0, 0, 255}, ft.cursorFade.GetFade(ft.animationTimer)),
+			ColorFade(
+				ColorFlagTutorialFill,
+				ft.cursorFade.GetFade(ft.animationTimer),
+			),
 		)
 		DrawSubView(dst, SpriteSubView(CursorSprite, 1), cursorOp)
 
@@ -4419,13 +4425,19 @@ func (ft *FlagTutorial) Draw(
 		BeginMipMap(true)
 		BeginAntiAlias(true)
 		signOp.ColorScale.ScaleWithColor(
-			ColorFade(color.NRGBA{255, 255, 255, 255}, ft.fade.GetFade(ft.animationTimer)),
+			ColorFade(
+				ColorFlagTutorialStroke,
+				ft.fade.GetFade(ft.animationTimer),
+			),
 		)
 		DrawSubView(dst, SpriteSubView(DragSignSprite, 1), signOp)
 
 		signOp.ColorScale.Reset()
 		signOp.ColorScale.ScaleWithColor(
-			ColorFade(color.NRGBA{0, 0, 0, 255}, ft.fade.GetFade(ft.animationTimer)),
+			ColorFade(
+				ColorFlagTutorialFill,
+				ft.fade.GetFade(ft.animationTimer),
+			),
 		)
 		DrawSubView(dst, SpriteSubView(DragSignSprite, 0), signOp)
 

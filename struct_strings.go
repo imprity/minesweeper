@@ -53,12 +53,14 @@ func _() {
 	_ = x[ColorRetryWater2-42]
 	_ = x[ColorRetryWater3-43]
 	_ = x[ColorRetryWater4-44]
-	_ = x[ColorTableSize-45]
+	_ = x[ColorFlagTutorialFill-45]
+	_ = x[ColorFlagTutorialStroke-46]
+	_ = x[ColorTableSize-47]
 }
 
-const _ColorTableIndex_name = "ColorBgColorTopUIBgColorTopUITitleColorTopUIButtonColorTopUIButtonOnHoverColorTopUIButtonOnDownColorTopUIFlagColorTileNormal1ColorTileNormal2ColorTileNormalStrokeColorTileRevealed1ColorTileRevealed2ColorTileRevealedStrokeColorNumber1ColorNumber2ColorNumber3ColorNumber4ColorNumber5ColorNumber6ColorNumber7ColorNumber8ColorFlagColorElementWonColorMineBg1ColorMineBg2ColorMineColorBgHighLightColorTileHighLightColorFgHighLightColorWater1ColorWater2ColorWater3ColorWater4ColorRetryA1ColorRetryA2ColorRetryA3ColorRetryA4ColorRetryB1ColorRetryB2ColorRetryB3ColorRetryB4ColorRetryWater1ColorRetryWater2ColorRetryWater3ColorRetryWater4ColorTableSize"
+const _ColorTableIndex_name = "ColorBgColorTopUIBgColorTopUITitleColorTopUIButtonColorTopUIButtonOnHoverColorTopUIButtonOnDownColorTopUIFlagColorTileNormal1ColorTileNormal2ColorTileNormalStrokeColorTileRevealed1ColorTileRevealed2ColorTileRevealedStrokeColorNumber1ColorNumber2ColorNumber3ColorNumber4ColorNumber5ColorNumber6ColorNumber7ColorNumber8ColorFlagColorElementWonColorMineBg1ColorMineBg2ColorMineColorBgHighLightColorTileHighLightColorFgHighLightColorWater1ColorWater2ColorWater3ColorWater4ColorRetryA1ColorRetryA2ColorRetryA3ColorRetryA4ColorRetryB1ColorRetryB2ColorRetryB3ColorRetryB4ColorRetryWater1ColorRetryWater2ColorRetryWater3ColorRetryWater4ColorFlagTutorialFillColorFlagTutorialStrokeColorTableSize"
 
-var _ColorTableIndex_index = [...]uint16{0, 7, 19, 34, 50, 73, 95, 109, 125, 141, 162, 180, 198, 221, 233, 245, 257, 269, 281, 293, 305, 317, 326, 341, 353, 365, 374, 390, 408, 424, 435, 446, 457, 468, 480, 492, 504, 516, 528, 540, 552, 564, 580, 596, 612, 628, 642}
+var _ColorTableIndex_index = [...]uint16{0, 7, 19, 34, 50, 73, 95, 109, 125, 141, 162, 180, 198, 221, 233, 245, 257, 269, 281, 293, 305, 317, 326, 341, 353, 365, 374, 390, 408, 424, 435, 446, 457, 468, 480, 492, 504, 516, 528, 540, 552, 564, 580, 596, 612, 628, 649, 672, 686}
 
 func (i ColorTableIndex) String() string {
 	if i < 0 || i >= ColorTableIndex(len(_ColorTableIndex_index)-1) {
