@@ -704,6 +704,10 @@ type StyleModifier func(
 type Game struct {
 	Rect FRectangle
 
+	// maximum screen space
+	// available to game
+	MaxRect FRectangle
+
 	DisableZoomAndPanControl bool
 	DoingZoomAnimation       bool
 
@@ -940,7 +944,7 @@ func (g *Game) Update() {
 	g.FlagTutorial.Update(
 		g.board,
 		g.TransformedBoardRect(),
-		g.Rect,
+		g.MaxRect,
 	)
 
 	// =================================
@@ -3952,6 +3956,26 @@ func (rb *RetryButton) Draw(dst *eb.Image) {
 // Tutorial
 // =====================
 
+type FadeSegment struct {
+	FadeInStart time.Duration
+	FadeInEnd   time.Duration
+
+	FadeOutStart time.Duration
+	FadeOutEnd   time.Duration
+}
+
+func (fs *FadeSegment) GetFade(timer Timer) float64 {
+	if timer.Current <= fs.FadeInEnd {
+		return timer.NormalizeRange(fs.FadeInStart, fs.FadeInEnd)
+	}
+
+	if timer.Current >= fs.FadeOutStart {
+		return 1 - timer.NormalizeRange(fs.FadeOutStart, fs.FadeOutEnd)
+	}
+
+	return 1
+}
+
 type FlagTutorial struct {
 	ShowFlagTutorial bool
 
@@ -3966,16 +3990,16 @@ type FlagTutorial struct {
 	animationTimer Timer
 
 	// animation constants
-	fadeInStart time.Duration
-	fadeInEnd   time.Duration
+	animationDelay time.Duration
 
-	fadeOutStart time.Duration
-	fadeOutEnd   time.Duration
+	fade FadeSegment
 
-	animationDelay time.Duration // constant
-
-	cursorMoveStart time.Duration // constant
+	cursorMoveStart time.Duration
 	cursorMoveEnd   time.Duration
+
+	cursorFade FadeSegment
+
+	hlFade FadeSegment
 
 	flagAnimationStart time.Duration
 	flagAnimationEnd   time.Duration
@@ -3991,39 +4015,39 @@ func NewFlagTutorial() *FlagTutorial {
 
 	ft.animationDelay = time.Millisecond * 500
 
-	ft.fadeInStart = time.Millisecond * 0
-	ft.fadeInEnd = ft.fadeInStart + time.Millisecond*200
+	ft.fade.FadeInStart = time.Millisecond * 0
+	ft.fade.FadeInEnd = ft.fade.FadeInStart + time.Millisecond*100
 
-	ft.fadeOutStart = time.Millisecond * 1500
-	ft.fadeOutEnd = ft.fadeOutStart + time.Millisecond*200
+	ft.fade.FadeOutStart = time.Millisecond * 1800
+	ft.fade.FadeOutEnd = ft.fade.FadeOutStart + time.Millisecond*50
+
+	ft.flagAnimationStart = time.Millisecond * 1100
+	ft.flagAnimationEnd = time.Millisecond * 1600
+
+	ft.cursorFade.FadeInStart = ft.fade.FadeInStart
+	ft.cursorFade.FadeInEnd = ft.fade.FadeInEnd
+
+	ft.cursorFade.FadeOutStart = time.Millisecond * 1200
+	ft.cursorFade.FadeOutEnd = time.Millisecond * 1300
 
 	ft.cursorMoveStart = time.Millisecond * 200
-	ft.cursorMoveEnd = time.Millisecond * 1000
+	ft.cursorMoveEnd = time.Millisecond * 1100
 
-	ft.flagAnimationStart = time.Millisecond * 900
-	ft.flagAnimationEnd = time.Millisecond * 1300
+	ft.hlFade.FadeInStart = ft.fade.FadeInStart
+	ft.hlFade.FadeInEnd = ft.fade.FadeInEnd
+
+	ft.hlFade.FadeOutEnd = ft.flagAnimationStart + time.Millisecond*50
+	ft.hlFade.FadeOutStart = ft.hlFade.FadeOutEnd - time.Millisecond*10
 
 	ft.animationTimer.Current = -ft.animationDelay
 	ft.animationTimer.Duration = max(
-		ft.fadeInEnd,
-		ft.fadeOutEnd,
-		ft.cursorMoveEnd,
+		ft.fade.FadeOutEnd,
+		ft.cursorFade.FadeOutEnd,
+		ft.hlFade.FadeOutEnd,
 		ft.flagAnimationEnd,
 	) + time.Millisecond*100
 
 	return ft
-}
-
-func (ft *FlagTutorial) getAlpha() float64 {
-	if ft.animationTimer.Current <= ft.fadeInEnd {
-		return ft.animationTimer.NormalizeRange(ft.fadeInStart, ft.fadeInEnd)
-	}
-
-	if ft.animationTimer.Current >= ft.fadeOutStart {
-		return 1 - ft.animationTimer.NormalizeRange(ft.fadeOutStart, ft.fadeOutEnd)
-	}
-
-	return 1
 }
 
 func (ft *FlagTutorial) GetFlagTutorialStyleModifier() StyleModifier {
@@ -4057,7 +4081,7 @@ func (ft *FlagTutorial) GetFlagTutorialStyleModifier() StyleModifier {
 			if !(x == ft.numberTileX && y == ft.numberTileY) && board.Revealed.Get(x, y) {
 				continue
 			}
-			tileStyles.Data[x+tileStyles.Width*y].Highlight = ft.getAlpha()
+			tileStyles.Data[x+tileStyles.Width*y].Highlight = ft.hlFade.GetFade(ft.animationTimer)
 		}
 
 		if ft.animationTimer.Current >= ft.flagAnimationStart {
@@ -4067,7 +4091,7 @@ func (ft *FlagTutorial) GetFlagTutorialStyleModifier() StyleModifier {
 
 			style.DrawFg = true
 			style.FgType = TileFgTypeFlag
-			style.FgColor = ColorFade(ColorFlag, ft.getAlpha())
+			style.FgColor = ColorFade(ColorFlag, ft.fade.GetFade(ft.animationTimer))
 			style.FgFlagAnim = t
 
 			style.Highlight = 0
@@ -4082,9 +4106,9 @@ func (ft *FlagTutorial) GetFlagTutorialStyleModifier() StyleModifier {
 func (ft *FlagTutorial) Update(
 	board Board,
 	boardRect FRectangle,
-	gameRect FRectangle,
+	maxRect FRectangle,
 ) {
-	gameRectCenter := FRectangleCenter(gameRect)
+	maxRectCenter := FRectangleCenter(maxRect)
 
 	centerBX, centerBY := MousePosToBoardPos(
 		boardRect,
@@ -4107,7 +4131,7 @@ func (ft *FlagTutorial) Update(
 			board.Width, board.Height,
 			numberAt.X, numberAt.Y,
 		)
-		if !numberTile.In(gameRect) {
+		if !numberTile.In(maxRect) {
 			return false
 		}
 		return true
@@ -4131,7 +4155,7 @@ func (ft *FlagTutorial) Update(
 			board.Width, board.Height,
 			flagAt.X, flagAt.Y,
 		)
-		if !tile.In(gameRect) {
+		if !tile.In(maxRect) {
 			return false
 		}
 
@@ -4143,12 +4167,22 @@ func (ft *FlagTutorial) Update(
 			return false, image.Point{}
 		}
 
-		iter := NewBoardIterator(numberAt.X-1, numberAt.Y-1, numberAt.X+1, numberAt.Y+1)
-		for iter.HasNext() {
-			x, y := iter.GetNext()
-			if x == numberAt.X && y == numberAt.Y {
-				continue
-			}
+		toSearch := [...]image.Point{
+			// search vertically and horizontally first
+			image.Pt(numberAt.X-1, numberAt.Y),
+			image.Pt(numberAt.X+1, numberAt.Y),
+			image.Pt(numberAt.X, numberAt.Y-1),
+			image.Pt(numberAt.X, numberAt.Y+1),
+
+			// search diagonal last
+			image.Pt(numberAt.X-1, numberAt.Y-1),
+			image.Pt(numberAt.X+1, numberAt.Y-1),
+			image.Pt(numberAt.X-1, numberAt.Y+1),
+			image.Pt(numberAt.X+1, numberAt.Y+1),
+		}
+
+		for _, pt := range toSearch {
+			x, y := pt.X, pt.Y
 			if !isGoodFlagTile(image.Pt(x, y)) {
 				continue
 			}
@@ -4196,8 +4230,8 @@ func (ft *FlagTutorial) Update(
 				tileW, tileH := GetBoardTileSize(boardRect, board.Width, board.Height)
 				size := f64((searchDist * 2) + 1)
 				searchRect := FRectWH(size*tileW, size*tileH)
-				searchRect = CenterFRectangle(searchRect, gameRectCenter.X, gameRectCenter.Y)
-				if gameRect.In(searchRect) {
+				searchRect = CenterFRectangle(searchRect, maxRectCenter.X, maxRectCenter.Y)
+				if maxRect.In(searchRect) {
 					break
 				}
 			}
@@ -4265,6 +4299,8 @@ func (ft *FlagTutorial) Draw(
 	boardRect FRectangle,
 ) {
 	if ft.foundGoodTile && ft.animationTimer.Current >= 0 {
+		tileW, tileH := GetBoardTileSize(boardRect, board.Width, board.Height)
+
 		numberTile := GetBoardTileRect(
 			boardRect,
 			board.Width, board.Height,
@@ -4276,7 +4312,7 @@ func (ft *FlagTutorial) Draw(
 			ft.flagTileX, ft.flagTileY,
 		)
 
-		cursorPos := FPointLerp(
+		lerpedPos := FPointLerp(
 			FRectangleCenter(numberTile),
 			FRectangleCenter(flagTile),
 			EaseInCirc(ft.animationTimer.NormalizeRange(
@@ -4285,38 +4321,83 @@ func (ft *FlagTutorial) Draw(
 			)),
 		)
 
-		{
-			tileW, tileH := GetBoardTileSize(boardRect, board.Width, board.Height)
+		// =======================
+		// draw cursor
+		// =======================
+		cursorScale := min(tileW/f64(CursorSprite.Width), tileH/f64(CursorSprite.Height)) * 1.2
+		cursorOp := &DrawSubViewOptions{}
+		cursorOp.GeoM.Concat(TransformToCenter(
+			f64(CursorSprite.Width), f64(CursorSprite.Height),
+			cursorScale, cursorScale,
+			0,
+		))
 
-			cursorScale := min(tileW/f64(CursorSprite.Width), tileH/f64(CursorSprite.Height)) * 1.2
-			op := &DrawSubViewOptions{}
-			op.GeoM.Concat(TransformToCenter(
-				f64(CursorSprite.Width), f64(CursorSprite.Height),
-				cursorScale, cursorScale,
-				0,
-			))
-			op.GeoM.Translate(
-				cursorPos.X,
-				cursorPos.Y+f64(CursorSprite.Height)*cursorScale*0.6,
-			)
+		cursorCenter := lerpedPos.Add(FPt(0, f64(CursorSprite.Height)*cursorScale*0.6))
 
-			op.ColorScale.ScaleWithColor(
-				ColorFade(color.NRGBA{255, 255, 255, 255}, ft.getAlpha()),
-			)
-			DrawSubView(dst, SpriteSubView(CursorSprite, 0), op)
-			op.ColorScale.Reset()
-			op.ColorScale.ScaleWithColor(
-				ColorFade(color.NRGBA{0, 0, 0, 255}, ft.getAlpha()),
-			)
+		cursorOp.GeoM.Translate(
+			cursorCenter.X,
+			cursorCenter.Y,
+		)
 
-			BeginFilter(eb.FilterLinear)
-			BeginMipMap(true)
-			BeginAntiAlias(true)
-			DrawSubView(dst, SpriteSubView(CursorSprite, 1), op)
-			EndAntiAlias()
-			EndMipMap()
-			EndFilter()
+		BeginFilter(eb.FilterLinear)
+		BeginMipMap(true)
+		BeginAntiAlias(true)
+
+		cursorOp.ColorScale.ScaleWithColor(
+			ColorFade(color.NRGBA{255, 255, 255, 255}, ft.cursorFade.GetFade(ft.animationTimer)),
+		)
+		DrawSubView(dst, SpriteSubView(CursorSprite, 0), cursorOp)
+		cursorOp.ColorScale.Reset()
+		cursorOp.ColorScale.ScaleWithColor(
+			ColorFade(color.NRGBA{0, 0, 0, 255}, ft.cursorFade.GetFade(ft.animationTimer)),
+		)
+		DrawSubView(dst, SpriteSubView(CursorSprite, 1), cursorOp)
+
+		EndAntiAlias()
+		EndMipMap()
+		EndFilter()
+
+		// =======================
+		// draw drag sign
+		// =======================
+		signPos := FRectangleCenter(numberTile)
+
+		signHeight := min(tileH, tileW) * 0.8
+
+		if ft.flagTileY > ft.numberTileY { // flag is below the number
+			// display the drag text above
+			signPos.Y -= tileH * 0.5      // above tile
+			signPos.Y -= signHeight * 1.2 // account for text height
+		} else {
+			// display the drag text below
+			signPos.Y += f64(CursorSprite.Height) * cursorScale * (0.6 + 0.5) // below cursor
+			signPos.Y += tileH * 0.1                                          // with extra margin
 		}
+
+		signScale := signHeight / f64(DragSignSprite.Height)
+
+		signOp := &DrawSubViewOptions{}
+		signOp.GeoM.Translate(-f64(DragSignSprite.Width)*0.5, 0)
+		signOp.GeoM.Scale(signScale, signScale)
+		signOp.GeoM.Translate(signPos.X, signPos.Y)
+
+		BeginFilter(eb.FilterLinear)
+		BeginMipMap(true)
+		BeginAntiAlias(true)
+		signOp.ColorScale.ScaleWithColor(
+			ColorFade(color.NRGBA{255, 255, 255, 255}, ft.fade.GetFade(ft.animationTimer)),
+		)
+		DrawSubView(dst, SpriteSubView(DragSignSprite, 1), signOp)
+
+		signOp.ColorScale.Reset()
+		signOp.ColorScale.ScaleWithColor(
+			ColorFade(color.NRGBA{0, 0, 0, 255}, ft.fade.GetFade(ft.animationTimer)),
+		)
+		DrawSubView(dst, SpriteSubView(DragSignSprite, 0), signOp)
+
+		EndAntiAlias()
+		EndMipMap()
+		EndFilter()
 
 		SetRedraw()
 	}

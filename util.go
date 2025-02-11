@@ -47,6 +47,18 @@ func TransformToCenter(
 	return geom
 }
 
+func RotateAround(
+	pivotX, pivotY float64,
+	angle float64,
+) eb.GeoM {
+	geom := eb.GeoM{}
+	geom.Translate(-pivotX, -pivotY)
+	geom.Rotate(angle)
+	geom.Translate(pivotX, pivotY)
+
+	return geom
+}
+
 // calculate scale to fit srcRect inside dstRect
 func GetScaleToFitRectInRect(
 	srcRectW, srcRectH float64,

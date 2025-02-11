@@ -21,9 +21,10 @@ import (
 var EmbeddedAssets embed.FS
 
 var (
-	TileSprite   Sprite
-	UISprite     Sprite
-	CursorSprite Sprite
+	TileSprite     Sprite
+	UISprite       Sprite
+	CursorSprite   Sprite
+	DragSignSprite Sprite
 )
 
 var RetryButtonImage *eb.Image
@@ -184,6 +185,11 @@ func LoadAssets() {
 	CursorSprite = loadSprite(
 		"assets/cursor.png",
 		"assets/cursor.json",
+	)
+
+	DragSignSprite = loadSprite(
+		"assets/drag-sign.png",
+		"assets/drag-sign.json",
 	)
 
 	// load RetryButtonImage

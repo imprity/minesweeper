@@ -134,6 +134,7 @@ func (gu *GameUI) Update() {
 
 	gu.Game.SetNoInputZone(gu.TopUI.Rect)
 
+	gu.Game.MaxRect = gu.MaxGameRect()
 	gu.Game.Rect = gu.BoardRect()
 	gu.Game.SetRetryButtonSize(min(ScreenWidth, ScreenHeight) * gu.ButtonSizeRatio())
 	gu.Game.Update()
@@ -185,18 +186,18 @@ func (gu *GameUI) ButtonSizeRatio() float64 {
 	}
 }
 
-func (gu *GameUI) BoardRect() FRectangle {
+func (gu *GameUI) MaxGameRect() FRectangle {
 	topRect := gu.TopUI.RenderedRect()
 
-	parentRect := FRect(
+	return FRect(
 		gu.BoardMarginHorizontal, topRect.Max.Y+gu.BoardMarginTop,
 		ScreenWidth-gu.BoardMarginHorizontal, ScreenHeight-gu.BoardMarginBottom,
 	)
+}
 
-	/*
-		boardTileWidth = gu.BoardTileCounts[difficulty].X
-		boardTileHeight = gu.BoardTileCounts[difficulty].Y
-	*/
+func (gu *GameUI) BoardRect() FRectangle {
+	parentRect := gu.MaxGameRect()
+
 	boardTileWidth, boardTileHeight := gu.Game.BoardTileCount()
 
 	scale := min(
