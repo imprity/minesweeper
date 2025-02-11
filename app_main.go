@@ -15,9 +15,14 @@ import (
 	eb "github.com/hajimehoshi/ebiten/v2"
 )
 
+const (
+	NormalScreenWidth  = 580
+	NormalScreenHeight = 620
+)
+
 var (
-	ScreenWidth  float64 = 580
-	ScreenHeight float64 = 620
+	ScreenWidth  float64 = NormalScreenWidth
+	ScreenHeight float64 = NormalScreenHeight
 )
 
 var (
@@ -84,10 +89,16 @@ type App struct {
 	ScreenshotQueued bool
 
 	Scene Scene
+
+	FirstTimeUpdate bool
 }
 
 func NewApp() *App {
 	a := new(App)
+	a.FirstTimeUpdate = true
+	// TEST TEST TEST TEST
+	//a.ShowDebugConsole = true
+	// TEST TEST TEST TEST
 	return a
 }
 
@@ -98,6 +109,8 @@ func (a *App) Update() error {
 	// update global timer
 	// ==========================
 	UpdateGlobalTimer()
+
+	UpdateInput()
 
 	UpdateSound()
 
@@ -143,6 +156,15 @@ func (a *App) Update() error {
 	}
 
 	a.Scene.Update()
+
+	if IsDevVersion {
+		DebugPrint("ProbablyOnMobile", ProbablyOnMobile())
+	}
+
+	if a.FirstTimeUpdate {
+		a.FirstTimeUpdate = false
+		SetRedraw()
+	}
 
 	return nil
 }
@@ -202,6 +224,8 @@ func AppMain() {
 	InfoLogger.Printf("ScreenshotEnabled: %v", ScreenshotEnabled)
 
 	flag.Parse()
+
+	InitInputManager()
 
 	InitClipboardManager()
 

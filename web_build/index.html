@@ -1,7 +1,8 @@
 <!DOCTYPE html>
 <html>
-
 <head>
+    <meta name="viewport" content="width=device-width, maximum-scale=1.0, initial-scale=1.0, user-scalable=no" />
+
     <style>
         :root {
             --background: #FFFBF8FF;
@@ -11,14 +12,19 @@
         /*margin border padding zero*/
         .mbp-zero {
             margin: 0px;
-            border-width: 0px;
-            padding: 0px;
+            border-width : 0px;
+            padding : 0px;
+            outline : none;
+        }
+
+        html, body {
+            touch-action: none;
         }
 
         body {
             background-color: var(--background);
-            width: 100vw;
-            height: 100vh;
+            width : 100dvw;
+            height : 100dvh;
         }
 
         canvas {

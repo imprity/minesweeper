@@ -17,53 +17,453 @@ import (
 
 var _ = fmt.Printf
 
-type MouseState struct {
-	JustPressedL bool
-	JustPressedR bool
-	JustPressedM bool
+type GameInputType int
 
-	PressedL bool
-	PressedR bool
-	PressedM bool
+const (
+	InputTypeNone GameInputType = iota
+	InputTypeStep
+	InputTypeFlag
+	InputTypeCheck
+	InputTypeHover
+	InputTypeHL
+)
 
-	CursorX float64
-	CursorY float64
+type GameInput struct {
+	Type GameInputType
 
 	BoardX int
 	BoardY int
+
+	ByTouch bool
 }
 
-func (ms *MouseState) PressedAny() bool {
-	return ms.PressedL || ms.PressedR || ms.PressedM
+type GameInputHandler struct {
+	NoInputZones []FRectangle
+
+	gameInput GameInput
+
+	// pinch
+	pinchPos     FPoint
+	prevPinchPos FPoint
+
+	pinch     float64
+	prevPinch float64
+
+	pinchStarted bool
+
+	// dragging
+	dragDelta     FPoint
+	dragStartPos  FPoint
+	dragStarted   bool
+	dragPastLimit bool
+
+	// flggging stuff
+	draggingForFlag bool
+	flagTouchId     eb.TouchID
+	ignoreForFlag   map[eb.TouchID]bool
 }
 
-func (ms *MouseState) JustPressedAny() bool {
-	return ms.JustPressedL || ms.JustPressedR || ms.JustPressedM
+func NewGameInputHandler() *GameInputHandler {
+	gi := new(GameInputHandler)
+
+	gi.ignoreForFlag = make(map[eb.TouchID]bool)
+
+	return gi
 }
 
-func GetMouseState(board Board, boardRect FRectangle) MouseState {
-	var ms MouseState
+func (gi *GameInputHandler) Update(
+	board Board,
+	boardRect FRectangle,
+	gameState GameState,
+) {
+	im := &TheInputManager
+	// =============================
+	// update mouse input
+	// =============================
+	input := GameInput{}
 
-	ms.JustPressedL = IsMouseButtonJustPressed(eb.MouseButtonLeft)
-	ms.JustPressedR = IsMouseButtonJustPressed(eb.MouseButtonRight)
-	ms.JustPressedM = IsMouseButtonJustPressed(eb.MouseButtonMiddle)
+	pressedL := IsMouseButtonPressed(eb.MouseButtonLeft)
+	pressedR := IsMouseButtonPressed(eb.MouseButtonRight)
+	pressedM := IsMouseButtonPressed(eb.MouseButtonMiddle)
 
-	ms.PressedL = IsMouseButtonPressed(eb.MouseButtonLeft)
-	ms.PressedR = IsMouseButtonPressed(eb.MouseButtonRight)
-	ms.PressedM = IsMouseButtonPressed(eb.MouseButtonMiddle)
+	justPressedL := IsMouseButtonJustPressed(eb.MouseButtonLeft)
+	justPressedR := IsMouseButtonJustPressed(eb.MouseButtonRight)
+	justPressedM := IsMouseButtonJustPressed(eb.MouseButtonMiddle)
 
 	cursor := CursorFPt()
 
-	ms.CursorX = cursor.X
-	ms.CursorY = cursor.Y
-
-	ms.BoardX, ms.BoardY = MousePosToBoardPos(
+	input.BoardX, input.BoardY = MousePosToBoardPos(
 		boardRect,
 		board.Width, board.Height,
 		cursor,
 	)
 
-	return ms
+	cursorInRect := cursor.In(boardRect)
+	var cursorInNoInputZone bool
+
+	for _, zone := range gi.NoInputZones {
+		if cursor.In(zone) {
+			cursorInNoInputZone = true
+			break
+		}
+	}
+
+	if cursorInRect && !cursorInNoInputZone {
+		input.Type = InputTypeHover
+
+		if (pressedL && pressedR) || pressedM {
+			input.Type = InputTypeHL
+		}
+
+		if justPressedR {
+			input.Type = InputTypeFlag
+		}
+
+		if justPressedL {
+			input.Type = InputTypeStep
+		}
+
+		if (justPressedL && pressedR) || (pressedL && justPressedR) || justPressedM {
+			input.Type = InputTypeCheck
+		}
+	}
+
+	// =============================
+	// update touch board input
+	// =============================
+
+	for _, touchId := range im.JustTouchedBuf {
+		delete(gi.ignoreForFlag, touchId)
+	}
+
+	// check touch
+	for touchId, info := range im.TouchInfos {
+		if info.MaxTouchCount > 1 {
+			continue
+		}
+
+		// ignore touches that started in NoInputZones
+		{
+			var startedInNoInputZone bool
+			for _, zone := range gi.NoInputZones {
+				if info.StartedPos.In(zone) {
+					startedInNoInputZone = true
+					break
+				}
+			}
+			if startedInNoInputZone {
+				continue
+			}
+		}
+
+		curPos := TouchFPt(touchId)
+
+		curBX, curBY := MousePosToBoardPos(
+			boardRect,
+			board.Width, board.Height,
+			curPos,
+		)
+		_ = curBX
+		_ = curBY
+
+		startedBX, startedBY := MousePosToBoardPos(
+			boardRect,
+			board.Width, board.Height,
+			info.StartedPos,
+		)
+		_ = startedBX
+		_ = startedBY
+
+		endedBX, endedBY := MousePosToBoardPos(
+			boardRect,
+			board.Width, board.Height,
+			info.EndedPos,
+		)
+
+		justReleased := info.DidEnd && info.EndedTime == GlobalTimerNow()
+
+		tapped := justReleased && !info.Dragged
+
+		if tapped && board.IsPosInBoard(endedBX, endedBY) {
+			input.BoardX, input.BoardY = endedBX, endedBY
+			input.ByTouch = true
+			if board.Revealed.Get(endedBX, endedBY) {
+				input.Type = InputTypeCheck
+			} else {
+				if board.Flags.Get(endedBX, endedBY) {
+					input.Type = InputTypeFlag
+				} else {
+					input.Type = InputTypeStep
+				}
+			}
+		}
+
+		var startedInNum bool
+
+		// check if touch started in number tile
+		startedInNum = board.IsPosInBoard(startedBX, startedBY)
+		startedInNum = startedInNum && board.Revealed.Get(startedBX, startedBY)
+		startedInNum = startedInNum && board.GetNeighborMineCount(startedBX, startedBY) > 0
+
+		// if it did start in number tile, check it it has any space to left to flag
+		if startedInNum {
+			iter := NewBoardIterator(startedBX-1, startedBY-1, startedBX+1, startedBY+1)
+
+			tilesCanBeFlagged := 0
+			tilesThatAreFlagged := 0
+
+			for iter.HasNext() {
+				x, y := iter.GetNext()
+
+				if !board.IsPosInBoard(x, y) {
+					continue
+				}
+
+				if !board.Revealed.Get(x, y) {
+					tilesCanBeFlagged++
+				}
+
+				if board.Flags.Get(x, y) {
+					tilesThatAreFlagged++
+				}
+			}
+
+			if tilesCanBeFlagged == tilesThatAreFlagged {
+				startedInNum = false
+			}
+		}
+
+		if !info.DidEnd && startedInNum {
+			var safeNeighbors [9]bool
+
+			iter := NewBoardIterator(
+				startedBX-1, startedBY-1,
+				startedBX+1, startedBY+1,
+			)
+
+			for iter.HasNext() {
+				x, y := iter.GetNext()
+
+				if board.IsPosInBoard(x, y) && !board.Revealed.Get(x, y) {
+					innerIter := NewBoardIterator(
+						max(x-1, startedBX-1), max(y-1, startedBY-1),
+						min(x+1, startedBX+1), min(y+1, startedBY+1),
+					)
+
+					for innerIter.HasNext() {
+						x2, y2 := innerIter.GetNext()
+						if board.IsPosInBoard(x2, y2) {
+							rx, ry := x2-startedBX+1, y2-startedBY+1
+							index := ry*3 + rx
+							safeNeighbors[index] = true
+						}
+					}
+				}
+			}
+
+			inSafeNeighbor := false
+
+			iter = NewBoardIterator(0, 0, 2, 2)
+			for iter.HasNext() {
+				rx, ry := iter.GetNext()
+				index := ry*3 + rx
+
+				if !safeNeighbors[index] {
+					continue
+				}
+
+				x, y := startedBX+(rx-1), startedBY+(ry-1)
+
+				tileRect := GetBoardTileRect(
+					boardRect,
+					board.Width, board.Height,
+					x, y,
+				)
+
+				tileRect = FRectScaleCentered(tileRect, 2, 2)
+
+				if curPos.In(tileRect) {
+					inSafeNeighbor = true
+					break
+				}
+			}
+
+			if !inSafeNeighbor {
+				gi.ignoreForFlag[touchId] = true
+			}
+		}
+
+		if !gi.ignoreForFlag[touchId] && startedInNum && !info.DidEnd {
+			input.BoardX, input.BoardY = startedBX, startedBY
+			input.Type = InputTypeHL
+			input.ByTouch = true
+
+			gi.draggingForFlag = true
+			gi.flagTouchId = touchId
+		} else {
+			gi.draggingForFlag = false
+		}
+
+		if !gi.ignoreForFlag[touchId] && startedInNum && info.DidEnd {
+			var foundNeighboar bool = false
+			var neighborX, neighborY int
+
+			if (startedBX != endedBX) || (startedBY != endedBY) {
+				iter := NewBoardIterator(startedBX-1, startedBY-1, startedBX+1, startedBY+1)
+
+				var minDist float64 = math.MaxFloat64
+
+				for iter.HasNext() {
+					x, y := iter.GetNext()
+					if !board.IsPosInBoard(x, y) {
+						continue
+					}
+					if board.Revealed.Get(x, y) {
+						continue
+					}
+					if x == startedBX && y == startedBY {
+						continue
+					}
+					if max(Abs(x-endedBX), Abs(y-endedBY)) > 1 {
+						continue
+					}
+
+					tile := GetBoardTileRect(
+						boardRect,
+						board.Width, board.Height,
+						x, y,
+					)
+					tileCenter := FRectangleCenter(tile)
+					dist := tileCenter.Sub(info.EndedPos).LengthSquared()
+
+					if dist < minDist {
+						minDist = dist
+						foundNeighboar = true
+						neighborX, neighborY = x, y
+					}
+				}
+			}
+
+			if foundNeighboar {
+				gi.ignoreForFlag[touchId] = true
+				input.BoardX, input.BoardY = neighborX, neighborY
+				input.Type = InputTypeFlag
+				input.ByTouch = true
+			}
+		}
+
+		// ======================
+		// handle dragging
+		// ======================
+		if (!startedInNum || gi.ignoreForFlag[touchId] || gameState != GameStatePlaying) && !info.DidEnd {
+			gi.ignoreForFlag[touchId] = true
+			if !gi.dragStarted {
+				gi.dragDelta = FPt(0, 0)
+
+				gi.dragStartPos = info.StartedPos
+				gi.dragPastLimit = false
+
+				gi.dragStarted = true
+			} else {
+				pos := TouchFPt(touchId)
+				prevPos := PrevTouchFPt(touchId)
+
+				gi.dragDelta = pos.Sub(prevPos)
+				if gi.dragStartPos.Sub(pos).LengthSquared() > 20*20 {
+					gi.dragPastLimit = true
+				}
+			}
+		} else {
+			gi.dragPastLimit = false
+			gi.dragStarted = false
+		}
+	}
+
+	// =============================
+	// update touch pinch input
+	// =============================
+	if len(im.TouchingBuf) == 2 {
+		pos1 := TouchFPt(im.TouchingBuf[0])
+		pos2 := TouchFPt(im.TouchingBuf[1])
+
+		newPinch := pos1.Sub(pos2).Length()
+		newPinchPos := pos1.Add(pos2).Mul(FPt(0.5, 0.5))
+
+		if !gi.pinchStarted {
+			gi.pinchPos = newPinchPos
+			gi.prevPinchPos = newPinchPos
+
+			gi.pinch = newPinch
+			gi.prevPinch = newPinch
+
+			gi.pinchStarted = true
+		} else {
+			gi.prevPinch = gi.pinch
+			gi.prevPinchPos = gi.pinchPos
+
+			gi.pinch = newPinch
+			gi.pinchPos = newPinchPos
+		}
+	} else {
+		gi.pinchStarted = false
+	}
+
+	// =============================
+	// update touch drag input
+	// =============================
+	if len(im.TouchingBuf) != 1 {
+		gi.dragPastLimit = false
+		gi.dragStarted = false
+	}
+
+	gi.gameInput = input
+}
+
+func (gi *GameInputHandler) Draw(dst *eb.Image) {
+}
+
+func (gi *GameInputHandler) GetGameInput() GameInput {
+	return gi.gameInput
+}
+
+func (gi *GameInputHandler) GetZoomAndOffset(
+	oldZoom float64, oldOffset FPoint,
+	boardCenter FPoint,
+) (float64, FPoint) {
+	if gi.pinchStarted {
+		zoom := gi.pinch / gi.prevPinch
+		newZoom := oldZoom * zoom
+
+		toBoardCenter := boardCenter.Sub(gi.pinchPos)
+		newBoardCenter := gi.pinchPos.Add(toBoardCenter.Mul(FPt(zoom, zoom)))
+		toNewBoardCenter := newBoardCenter.Sub(boardCenter)
+
+		newOffset := oldOffset.Add(toNewBoardCenter)
+
+		pinchDiff := gi.pinchPos.Sub(gi.prevPinchPos)
+		newOffset = newOffset.Add(pinchDiff)
+
+		if gi.dragStarted {
+			newOffset = newOffset.Add(gi.dragDelta)
+		}
+
+		oldZoom = newZoom
+		oldOffset = newOffset
+	}
+
+	if gi.dragPastLimit {
+		oldOffset = oldOffset.Add(gi.dragDelta)
+	}
+
+	return oldZoom, oldOffset
+}
+
+func (gi *GameInputHandler) IsPinching() bool {
+	return gi.pinchStarted
+}
+
+func (gi *GameInputHandler) IsDragging() bool {
+	return gi.dragPastLimit
 }
 
 type TileFgType int
@@ -298,12 +698,24 @@ type StyleModifier func(
 	stateChanged bool, // GameState or board has changed
 	prevGameState, gameState GameState,
 	tileStyles Array2D[TileStyle], // modify these to change style
+	gi GameInput,
 ) bool
 
 type Game struct {
 	Rect FRectangle
 
-	OnBoardReset       func()
+	// maximum screen space
+	// available to game
+	MaxRect FRectangle
+
+	DisableZoomAndPanControl bool
+	DoingZoomAnimation       bool
+
+	Zoom   float64
+	Offset FPoint
+
+	OnAfterBoardReset  func()
+	OnBeforeBoardReset func()
 	OnGameEnd          func(didWin bool)
 	OnFirstInteraction func()
 
@@ -316,9 +728,9 @@ type Game struct {
 
 	StyleModifiers []StyleModifier
 
-	RetryButton *RetryButton
+	InputHandler *GameInputHandler
 
-	RetryButtonSize float64
+	RetryButton *RetryButton
 
 	DrawRetryButton    bool
 	RetryButtonScale   float64
@@ -334,33 +746,66 @@ type Game struct {
 
 	Seed [32]byte
 
+	FlagTutorial *FlagTutorial
+
+	revealdTilesUsingTouch bool
+	plantedFlag            bool
+
 	board     Board
 	prevBoard Board
 
-	shouldCallOnFirstInteraction bool
-
 	mineCount int
+
+	resetBoardWidth  int
+	resetBoardHeight int
+	resetMineCount   int
+
+	hadInteraction bool
 
 	playedAddFlagSound    bool
 	playedRemoveFlagSound bool
 
+	retryButtonSize float64
+	// relative to min(TransformedBoardRect().Dx(), TransformedBoardRect().Dy())
+	retryButtonSizeRelative float64
+
+	// relative to center of TransformedBoardRect()
+	retryButtonOffsetX float64
+	retryButtonOffsetY float64
+
 	viBuffers [3]*VIBuffer
+
+	noInputZone FRectangle
 }
 
 func NewGame(boardWidth, boardHeight, mineCount int) *Game {
 	g := new(Game)
 
+	g.Zoom = 1
+
+	g.InputHandler = NewGameInputHandler()
+
+	g.FlagTutorial = NewFlagTutorial()
+
 	g.mineCount = mineCount
+
+	g.resetBoardWidth = boardWidth
+	g.resetBoardHeight = boardHeight
+	g.resetMineCount = mineCount
 
 	g.StyleModifiers = append(g.StyleModifiers, NewTileHighlightModifier())
 	g.StyleModifiers = append(g.StyleModifiers, NewFgClickModifier())
+	g.StyleModifiers = append(g.StyleModifiers, g.FlagTutorial.GetFlagTutorialStyleModifier())
 
 	g.RetryButton = NewRetryButton()
 	g.RetryButton.Disabled = true
 	g.RetryButtonScale = 1
 
-	g.RetryButton.OnPress = func(justPressed bool) {
-		if justPressed {
+	g.RetryButton.OnAny = func(byTouch bool, timing ButtonTiming) {
+		trigger := !byTouch && timing == ButtonTimingOnPress
+		trigger = trigger || (byTouch && timing == ButtonTimingOnRelease)
+
+		if trigger {
 			g.SkipAllAnimationsUntilTag(AnimationTagHideBoard)
 			PlaySoundBytes(SeButtonClick, 1.0)
 			g.RetryButton.Disabled = true
@@ -374,18 +819,32 @@ func NewGame(boardWidth, boardHeight, mineCount int) *Game {
 
 	g.Particles = make([]TileParticle, 0, 256)
 
-	g.ResetBoard(boardWidth, boardHeight, g.mineCount)
+	g.ResetBoard()
 
 	return g
 }
 
-func (g *Game) ResetBoardNotStylesEx(width, height, mineCount int, newSeed bool) {
+func (g *Game) SetResetParameter(boardWidth, boardHeight, mineCount int) {
+	g.resetBoardWidth = boardWidth
+	g.resetBoardHeight = boardHeight
+	g.resetMineCount = mineCount
+}
+
+func (g *Game) ResetBoardNotStylesEx(newSeed bool) {
+	if g.OnBeforeBoardReset != nil {
+		g.OnBeforeBoardReset()
+	}
+
+	width := g.resetBoardWidth
+	height := g.resetBoardHeight
+	mineCount := g.resetMineCount
+
 	if newSeed {
 		g.Seed = GetSeed()
 	}
 	InfoLogger.Printf("resetting, seed : %s", SeedToString(g.Seed))
 
-	g.shouldCallOnFirstInteraction = true
+	g.hadInteraction = false
 
 	g.GameState = GameStatePlaying
 	g.GameAnimations.Clear()
@@ -400,6 +859,11 @@ func (g *Game) ResetBoardNotStylesEx(width, height, mineCount int, newSeed bool)
 	g.RetryButtonScale = 1
 	g.RetryButtonOffsetX = 0
 	g.RetryButtonOffsetY = 0
+
+	g.Offset = FPt(0, 0)
+	g.Zoom = 1
+	g.DisableZoomAndPanControl = false
+	g.DoingZoomAnimation = false
 
 	g.BaseTileStyles = NewArray2D[TileStyle](width, height)
 	g.RenderTileStyles = NewArray2D[TileStyle](width, height)
@@ -422,16 +886,16 @@ func (g *Game) ResetBoardNotStylesEx(width, height, mineCount int, newSeed bool)
 
 	g.Particles = g.Particles[:0]
 
-	if g.OnBoardReset != nil {
-		g.OnBoardReset()
+	if g.OnAfterBoardReset != nil {
+		g.OnAfterBoardReset()
 	}
 }
 
-func (g *Game) ResetBoardEx(width, height, mineCount int, newSeed bool) {
-	g.ResetBoardNotStylesEx(width, height, mineCount, newSeed)
+func (g *Game) ResetBoardEx(newSeed bool) {
+	g.ResetBoardNotStylesEx(newSeed)
 
-	for x := range width {
-		for y := range height {
+	for x := range g.resetBoardWidth {
+		for y := range g.resetBoardHeight {
 			targetStyle := GetAnimationTargetTileStyle(g.board, x, y)
 			g.BaseTileStyles.Set(x, y, targetStyle)
 			g.RenderTileStyles.Set(x, y, targetStyle)
@@ -439,19 +903,55 @@ func (g *Game) ResetBoardEx(width, height, mineCount int, newSeed bool) {
 	}
 }
 
-func (g *Game) ResetBoardNotStyles(width, height, mineCount int) {
-	g.ResetBoardNotStylesEx(width, height, mineCount, true)
+func (g *Game) ResetBoardNotStyles() {
+	g.ResetBoardNotStylesEx(true)
 }
 
-func (g *Game) ResetBoard(width, height, mineCount int) {
-	g.ResetBoardEx(width, height, mineCount, true)
+func (g *Game) ResetBoard() {
+	g.ResetBoardEx(true)
 }
 
 func (g *Game) Update() {
 	g.playedAddFlagSound = false
 	g.playedRemoveFlagSound = false
 
-	ms := GetMouseState(g.board, g.Rect)
+	// =============
+	// update input
+	// =============
+	{
+		noInputZones := make([]FRectangle, 0, 2)
+		noInputZones = append(noInputZones, g.noInputZone)
+
+		if g.DrawRetryButton && !g.InputHandler.IsDragging() {
+			noInputZones = append(noInputZones, g.TransformedRetryButtonRect())
+		}
+
+		g.InputHandler.NoInputZones = noInputZones
+	}
+	g.InputHandler.Update(g.board, g.TransformedBoardRect(), g.GameState)
+
+	gi := g.InputHandler.GetGameInput()
+
+	if !g.DisableZoomAndPanControl {
+		g.Zoom, g.Offset = g.InputHandler.GetZoomAndOffset(g.Zoom, g.Offset, FRectangleCenter(g.TransformedBoardRect()))
+	}
+
+	if (g.InputHandler.IsPinching() || g.InputHandler.IsDragging()) && !g.DisableZoomAndPanControl {
+		SetRedraw()
+	}
+
+	if g.DoingZoomAnimation {
+		SetRedraw()
+	}
+
+	// =================================
+	// update flag tutorial
+	// =================================
+	g.FlagTutorial.Update(
+		g.board,
+		g.TransformedBoardRect(),
+		g.MaxRect,
+	)
 
 	// =================================
 	// handle board interaction
@@ -469,18 +969,18 @@ func (g *Game) Update() {
 	var interaction BoardInteractionType = InteractionTypeNone
 	// =======================================
 
-	if g.GameState == GameStatePlaying && g.board.IsPosInBoard(ms.BoardX, ms.BoardY) && ms.JustPressedAny() {
-		if ((ms.JustPressedL && ms.PressedR) || (ms.PressedL && ms.JustPressedR)) || ms.JustPressedM {
+	if g.GameState == GameStatePlaying && gi.Type != InputTypeNone {
+		if gi.Type == InputTypeCheck {
 			interaction = InteractionTypeCheck
-		} else if ms.JustPressedR {
+		} else if gi.Type == InputTypeFlag {
 			interaction = InteractionTypeFlag
-		} else if ms.JustPressedL {
+		} else if gi.Type == InputTypeStep {
 			interaction = InteractionTypeStep
 		}
 
 		if interaction != InteractionTypeNone {
 			g.GameState = g.board.InteractAt(
-				ms.BoardX, ms.BoardY, interaction, g.GameState, g.mineCount, g.Seed)
+				gi.BoardX, gi.BoardY, interaction, g.GameState, g.mineCount, g.Seed)
 
 			needToCheckStateChange = true
 		}
@@ -534,10 +1034,19 @@ func (g *Game) Update() {
 	// skipping animations
 	if prevState == GameStateLost || prevState == GameStateWon {
 		// all animations are skippable except AnimationTagRetryButtonReveal
-		if ms.JustPressedAny() {
+		pressedAny := IsMouseButtonJustPressed(eb.MouseButtonLeft)
+		pressedAny = pressedAny || IsMouseButtonJustPressed(eb.MouseButtonRight)
+		pressedAny = pressedAny || IsMouseButtonJustPressed(eb.MouseButtonMiddle)
+		pressedAny = pressedAny || IsTouchJustPressed(FRectWH(ScreenWidth, ScreenHeight), nil)
+		if pressedAny {
 			g.SkipAllAnimationsUntilTag(AnimationTagRetryButtonReveal)
 		}
 	}
+
+	// ======================
+	var newTilesRevealed = false
+	var newFlagsPlanted = false
+	// ======================
 
 	if stateChanged {
 		g.SkipAllAnimations()
@@ -551,6 +1060,7 @@ func (g *Game) Update() {
 		for iter.HasNext() {
 			x, y := iter.GetNext()
 			if g.prevBoard.Flags.Get(x, y) != g.board.Flags.Get(x, y) {
+				newFlagsPlanted = true
 				if g.board.Flags.Get(x, y) {
 					g.QueueAddFlagAnimation(x, y)
 				} else {
@@ -565,10 +1075,11 @@ func (g *Game) Update() {
 			x, y := iter.GetNext()
 			if g.board.Revealed.Get(x, y) && !g.prevBoard.Revealed.Get(x, y) {
 				// on reveal
+				newTilesRevealed = true
 				g.QueueRevealAnimation(
 					g.prevBoard.Revealed, g.board.Revealed,
-					Clamp(ms.BoardX, 0, g.board.Width-1),
-					Clamp(ms.BoardY, 0, g.board.Height-1),
+					Clamp(gi.BoardX, 0, g.board.Width-1),
+					Clamp(gi.BoardY, 0, g.board.Height-1),
 				)
 				break
 			}
@@ -576,15 +1087,15 @@ func (g *Game) Update() {
 
 		if prevState != g.GameState {
 			if g.GameState == GameStateLost { // on loss
-				g.QueueDefeatAnimation(ms.BoardX, ms.BoardY)
+				g.QueueDefeatAnimation(gi.BoardX, gi.BoardY)
 			} else if g.GameState == GameStateWon { // on win
-				g.QueueWinAnimation(ms.BoardX, ms.BoardY)
+				g.QueueWinAnimation(gi.BoardX, gi.BoardY)
 			}
 		}
 
 		// call OnFirstInteraction
-		if g.shouldCallOnFirstInteraction {
-			g.shouldCallOnFirstInteraction = false
+		if !g.hadInteraction {
+			g.hadInteraction = true
 			if g.OnFirstInteraction != nil {
 				g.OnFirstInteraction()
 			}
@@ -604,6 +1115,22 @@ func (g *Game) Update() {
 		} else { // something did happened
 			// pass
 		}
+	}
+
+	// ============================================
+	// check if we need to show flag tutorial
+	// ============================================
+	if newTilesRevealed && gi.ByTouch {
+		g.revealdTilesUsingTouch = true
+	}
+	if newFlagsPlanted {
+		g.plantedFlag = true
+	}
+
+	if g.revealdTilesUsingTouch && !g.plantedFlag && gi.Type == InputTypeNone {
+		g.FlagTutorial.ShowFlagTutorial = true
+	} else {
+		g.FlagTutorial.ShowFlagTutorial = false
 	}
 
 	// ============================
@@ -649,11 +1176,12 @@ func (g *Game) Update() {
 	for i := 0; i < len(g.StyleModifiers); i++ {
 		doRedraw := g.StyleModifiers[i](
 			g.prevBoard, g.board,
-			g.Rect,
+			g.TransformedBoardRect(),
 			interaction,
 			stateChanged,
 			prevState, g.GameState,
 			g.RenderTileStyles,
+			gi,
 		)
 
 		if doRedraw {
@@ -667,7 +1195,7 @@ func (g *Game) Update() {
 	{
 		tc := TileParticleUnitConverter{
 			BoardWidth: g.board.Width, BoardHeight: g.board.Height,
-			BoardRect: g.Rect,
+			BoardRect: g.TransformedBoardRect(),
 		}
 
 		foundAlive := false
@@ -709,6 +1237,12 @@ func (g *Game) Update() {
 	// ===================================
 	// update RetryButton
 	// ===================================
+	g.RetryButton.NoInputZone = g.noInputZone
+
+	if !g.DrawRetryButton {
+		g.retryButtonSizeRelative = g.retryButtonSize / min(g.Rect.Dx(), g.Rect.Dy())
+	}
+
 	g.RetryButton.Rect = g.TransformedRetryButtonRect()
 	if !g.DrawRetryButton {
 		g.RetryButton.Disabled = true
@@ -716,11 +1250,11 @@ func (g *Game) Update() {
 	g.RetryButton.Update()
 
 	if IsKeyJustPressed(ResetBoardKey) && IsDevVersion {
-		g.ResetBoard(g.board.Width, g.board.Height, g.mineCount)
+		g.ResetBoard()
 		SetRedraw()
 	}
 	if IsKeyJustPressed(ResetToSameBoardKey) && IsDevVersion {
-		g.ResetBoardEx(g.board.Width, g.board.Height, g.mineCount, false)
+		g.ResetBoardEx(false)
 		SetRedraw()
 	}
 }
@@ -739,10 +1273,12 @@ func (g *Game) Draw(dst *eb.Image) {
 		dst,
 
 		g.board.Width, g.board.Height,
-		g.Rect,
+		g.TransformedBoardRect(),
 		g.RenderTileStyles,
 
 		doWaterEffect, g.WaterAlpha, g.WaterFlowOffset,
+
+		(g.InputHandler.IsPinching() && !g.DisableZoomAndPanControl) || g.DoingZoomAnimation,
 	)
 
 	if g.DrawRetryButton {
@@ -757,7 +1293,15 @@ func (g *Game) Draw(dst *eb.Image) {
 		dst,
 		g.Particles,
 		g.board.Width, g.board.Height,
-		g.Rect,
+		g.TransformedBoardRect(),
+	)
+
+	g.InputHandler.Draw(dst)
+
+	g.FlagTutorial.Draw(
+		dst,
+		g.board,
+		g.TransformedBoardRect(),
 	)
 }
 
@@ -779,6 +1323,30 @@ func (g *Game) FlagCount() int {
 	}
 
 	return flagCount
+}
+
+func (g *Game) BoardTileCount() (int, int) {
+	return g.board.Width, g.board.Height
+}
+
+func (g *Game) HadInteraction() bool {
+	return g.hadInteraction
+}
+
+func (g *Game) NoInputZone() FRectangle {
+	return g.noInputZone
+}
+
+func (g *Game) SetNoInputZone(rect FRectangle) {
+	g.noInputZone = rect
+}
+
+func (g *Game) TransformedBoardRect() FRectangle {
+	rect := g.Rect
+	rect = FRectScaleCentered(rect, g.Zoom, g.Zoom)
+	rect = rect.Add(FPt(g.Offset.X, g.Offset.Y))
+
+	return rect
 }
 
 func isTileFirmlyPlaced(style TileStyle) bool {
@@ -1196,6 +1764,9 @@ var DBC = struct { // DrawBoard cache
 	TileRoundness    Array2D[[4]bool]
 
 	WaterRenderTarget *eb.Image
+
+	FixedSizeFace     *ebt.GoTextFace
+	FixedSizeFaceSize float64
 }{}
 
 func init() {
@@ -1215,10 +1786,10 @@ func DrawBoard(
 	doWaterEffect bool,
 	waterAlpha float64,
 	waterFlowOffset time.Duration,
-) {
-	// TODO : we need flagSpriteBuf only because flag animations are stored in different image
-	// merge flag sprite with other sprites.
 
+	zoomingInOut bool,
+) {
+	// TODO: don't draw stuff that are outside the screen
 	modColor := func(
 		c color.Color,
 		alpha float64,
@@ -1264,6 +1835,18 @@ func DrawBoard(
 				&eb.NewImageOptions{Unmanaged: true},
 			)
 		}
+	}
+
+	// ======================
+	// create FixedSizeFace
+	// ======================
+	if DBC.FixedSizeFace == nil {
+		DBC.FixedSizeFaceSize = 128
+		DBC.FixedSizeFace = &ebt.GoTextFace{
+			Source: FaceSource,
+			Size:   DBC.FixedSizeFaceSize,
+		}
+		DBC.FixedSizeFace.SetVariation(ebt.MustParseTag("wght"), 600)
 	}
 
 	// ======================
@@ -1610,13 +2193,22 @@ func DrawBoard(
 
 	// draw numbers
 	var numberFace *ebt.GoTextFace
+	var numberFaceScale float64 = 1
+
 	{
 		_, tileSizeH := GetBoardTileSize(boardRect, boardWidth, boardHeight)
-		numberFace = &ebt.GoTextFace{
-			Source: FaceSource,
-			Size:   tileSizeH * 0.95,
+		faceSize := tileSizeH * 0.95
+
+		if zoomingInOut {
+			numberFace = DBC.FixedSizeFace
+			numberFaceScale = faceSize / DBC.FixedSizeFaceSize
+		} else {
+			numberFace = &ebt.GoTextFace{
+				Source: FaceSource,
+				Size:   faceSize,
+			}
+			numberFace.SetVariation(ebt.MustParseTag("wght"), 600)
 		}
-		numberFace.SetVariation(ebt.MustParseTag("wght"), 600)
 	}
 
 	BeginAntiAlias(false)
@@ -1633,7 +2225,7 @@ func DrawBoard(
 		}
 
 		fgRect := DBC.TileFillRects.Get(x, y)
-		fgScale := style.FgScale
+		fgScale := style.FgScale * style.TileScale
 		fgColor := style.FgColor
 
 		if style.FgType == TileFgTypeNumber {
@@ -1644,8 +2236,10 @@ func DrawBoard(
 
 				center := FRectangleCenter(fgRect)
 
+				scale := numberFaceScale * fgScale
+
 				op.GeoM.Translate(0, -numberFace.Size*0.58)
-				op.GeoM.Scale(fgScale, fgScale)
+				op.GeoM.Scale(scale, scale)
 
 				op.GeoM.Translate(
 					center.X+style.FgOffsetX, center.Y+style.FgOffsetX,
@@ -1739,8 +2333,9 @@ func NewTileHighlightModifier() StyleModifier {
 		stateChanged bool, // GameState or board has changed
 		prevGameState, gameState GameState,
 		tileStyles Array2D[TileStyle], // modify these to change style
+		gi GameInput,
 	) bool {
-		if gameState != GameStatePlaying {
+		if gameState != GameStatePlaying || gi.Type == InputTypeNone {
 			hlTiles = hlTiles[:0]
 			prevHlTiles = prevHlTiles[:0]
 
@@ -1752,25 +2347,21 @@ func NewTileHighlightModifier() StyleModifier {
 
 		hlTiles = hlTiles[:0]
 
-		ms := GetMouseState(board, boardRect)
-
-		goWide := interaction == InteractionTypeCheck
-		goWide = goWide && board.IsPosInBoard(ms.BoardX, ms.BoardY)
-		goWide = goWide && prevBoard.Revealed.Get(ms.BoardX, ms.BoardY)
+		goWide := gi.Type == InputTypeHL || gi.Type == InputTypeCheck
+		goWide = goWide && board.IsPosInBoard(gi.BoardX, gi.BoardY)
+		goWide = goWide && prevBoard.Revealed.Get(gi.BoardX, gi.BoardY)
 		goWide = goWide && !stateChanged
 
 		if goWide {
 			hlWide = true
 		}
 
-		pressingCheck := (ms.PressedL && ms.PressedR) || ms.PressedM
-
-		if !pressingCheck {
+		if !(gi.Type == InputTypeHL || gi.Type == InputTypeCheck) {
 			hlWide = false
 		}
 
-		hlX = ms.BoardX
-		hlY = ms.BoardY
+		hlX = gi.BoardX
+		hlY = gi.BoardY
 
 		var iter BoardIterator
 
@@ -1820,13 +2411,9 @@ func NewTileHighlightModifier() StyleModifier {
 }
 
 func NewFgClickModifier() StyleModifier {
-	var clickTimer Timer
+	const clickTimeDuration = time.Millisecond * 100
 
-	clickTimer.Duration = time.Millisecond * 100
-
-	var clickX, clickY int
-
-	var focused bool
+	clickTimers := make(map[image.Point]Timer)
 
 	return func(
 		prevBoard, board Board,
@@ -1835,44 +2422,85 @@ func NewFgClickModifier() StyleModifier {
 		stateChanged bool,
 		prevGameState, gameState GameState,
 		tileStyles Array2D[TileStyle],
+		gi GameInput,
 	) bool {
-		if gameState != GameStatePlaying { // only do this when we are actually playing
-			return gameState != prevGameState
+		prevClickTimers := make(map[image.Point]time.Duration)
+
+		for point, timer := range clickTimers {
+			prevClickTimers[point] = timer.Current
 		}
 
-		doRedraw := false
-
-		ms := GetMouseState(board, boardRect)
-
-		cursorOnFg := board.IsPosInBoard(ms.BoardX, ms.BoardY)
-		cursorOnFg = cursorOnFg && tileStyles.Get(ms.BoardX, ms.BoardY).DrawFg
-
-		if cursorOnFg && ms.JustPressedAny() {
-			clickTimer.Current = clickTimer.Duration
-			clickX = ms.BoardX
-			clickY = ms.BoardY
-			focused = true
-			doRedraw = true
-		}
-
-		if !ms.PressedAny() || !(clickX == ms.BoardX && clickY == ms.BoardY) {
-			focused = false
-		}
-
-		if !focused {
-			if clickTimer.Current >= 0 {
-				doRedraw = true
-			}
-			clickTimer.TickDown()
-		}
-
-		if clickTimer.Current > 0 {
-			if board.IsPosInBoard(clickX, clickY) {
-				tileStyles.Data[clickX+clickY*tileStyles.Width].FgScale *= 1 + clickTimer.Normalize()*0.07
+		if IsAnyMouseButtonPressed() {
+			cursor := CursorFPt()
+			boardX, boardY := MousePosToBoardPos(
+				boardRect,
+				board.Width, board.Height,
+				cursor,
+			)
+			clickTimers[image.Pt(boardX, boardY)] = Timer{
+				Current:  clickTimeDuration,
+				Duration: clickTimeDuration,
 			}
 		}
 
-		return doRedraw
+		im := &TheInputManager
+
+		for _, id := range im.TouchingBuf {
+			if info, ok := GetTouchInfo(id); ok {
+				boardX, boardY := MousePosToBoardPos(
+					boardRect,
+					board.Width, board.Height,
+					info.StartedPos,
+				)
+				clickTimers[image.Pt(boardX, boardY)] = Timer{
+					Current:  clickTimeDuration,
+					Duration: clickTimeDuration,
+				}
+			}
+		}
+
+		// remove timers outside the board
+		for point := range clickTimers {
+			if !board.IsPosInBoard(point.X, point.Y) {
+				delete(clickTimers, point)
+			}
+		}
+
+		// apply tile style
+		for point, timer := range clickTimers {
+			tileStyles.Data[point.X+point.Y*tileStyles.Width].FgScale *= 1 + timer.Normalize()*0.07
+		}
+
+		// decrease timers
+		for point, timer := range clickTimers {
+			timer.TickDown()
+			clickTimers[point] = timer
+		}
+		// remove timers below zero
+		for point, timer := range clickTimers {
+			if timer.Current < 0 {
+				delete(clickTimers, point)
+			}
+		}
+
+		redraw := false
+
+		if len(clickTimers) != len(prevClickTimers) {
+			redraw = true
+		}
+
+		if !redraw {
+			for point, timer := range clickTimers {
+				t := Clamp(timer.Current, 0, timer.Duration)
+				otherT := Clamp(prevClickTimers[point], 0, timer.Duration)
+				if t != otherT {
+					redraw = true
+					break
+				}
+			}
+		}
+
+		return redraw
 	}
 }
 
@@ -2136,6 +2764,60 @@ func (g *Game) QueueRemoveFlagAnimation(flagX, flagY int) {
 	g.TileAnimations.Get(flagX, flagY).Enqueue(anim)
 }
 
+func (g *Game) GetZoomOutAnimation(tag AnimationTag) CallbackAnimation {
+	var timer Timer
+	timer.Duration = time.Millisecond * 500
+
+	startZoom := g.Zoom
+	startOffset := g.Offset
+
+	var gameAnim CallbackAnimation
+
+	gameAnim.Tag = tag
+
+	gameAnim.Update = func() {
+		// during the animation, disable zoom control
+		// this will be cleare at AnimationTagRetryButtonReveal
+		g.DisableZoomAndPanControl = true
+
+		timer.TickUp()
+
+		doAnimation := timer.Current < timer.Duration
+		doAnimation = doAnimation && !(CloseToEx(g.Offset.X, 0, 0.1) && CloseToEx(g.Offset.Y, 0, 0.1))
+		doAnimation = doAnimation && !CloseToEx(g.Zoom, 0, 0.01)
+
+		if doAnimation {
+			g.DoingZoomAnimation = true
+
+			t := timer.Normalize()
+			t = BezierCurveDataAsGraph(TheBezierTable[BezierBoardZoomOut], t)
+
+			g.Zoom = Lerp(startZoom, 1, t)
+			g.Offset = FPointLerp(startOffset, FPt(0, 0), t)
+		} else {
+			g.DoingZoomAnimation = false
+			g.Zoom = 1
+			g.Offset = FPt(0, 0)
+		}
+	}
+
+	gameAnim.Skip = func() {
+		timer.Current = timer.Duration
+		gameAnim.Update()
+	}
+
+	gameAnim.Done = func() bool {
+		return timer.Current >= timer.Duration
+	}
+
+	gameAnim.AfterDone = func() {
+		g.Zoom = 1
+		g.Offset = FPt(0, 0)
+	}
+
+	return gameAnim
+}
+
 func (g *Game) QueueDefeatAnimation(originX, originY int) {
 	// =================================
 	// remove wrongly placed flags
@@ -2266,20 +2948,25 @@ func (g *Game) QueueDefeatAnimation(originX, originY int) {
 	var anim CallbackAnimation
 	anim.Tag = AnimationTagDefeat
 
+	zoomAnim := g.GetZoomOutAnimation(AnimationTagDefeat)
+
 	anim.Update = func() {
+		zoomAnim.Update()
 		defeatAnimTimer.TickUp()
 	}
 
 	anim.Skip = func() {
+		zoomAnim.Skip()
 		defeatAnimTimer.Current = defeatAnimTimer.Duration
 		anim.Update()
 	}
 
 	anim.Done = func() bool {
-		return defeatAnimTimer.Current >= defeatAnimTimer.Duration
+		return defeatAnimTimer.Current >= defeatAnimTimer.Duration && zoomAnim.Done()
 	}
 
 	anim.AfterDone = func() {
+		zoomAnim.AfterDone()
 		g.QueueRetryButtonAnimation()
 	}
 
@@ -2383,7 +3070,11 @@ func (g *Game) QueueWinAnimation(originX, originY int) {
 	var anim CallbackAnimation
 	anim.Tag = AnimationTagWin
 
+	zoomAnim := g.GetZoomOutAnimation(AnimationTagWin)
+
 	anim.Update = func() {
+		zoomAnim.Update()
+
 		winAnimTimer.TickUp()
 
 		t := winAnimTimer.Normalize()
@@ -2396,15 +3087,18 @@ func (g *Game) QueueWinAnimation(originX, originY int) {
 	}
 
 	anim.Skip = func() {
+		zoomAnim.Skip()
+
 		winAnimTimer.Current = winAnimTimer.Duration
 		anim.Update()
 	}
 
 	anim.Done = func() bool {
-		return winAnimTimer.Current >= winAnimTimer.Duration
+		return winAnimTimer.Current >= winAnimTimer.Duration && zoomAnim.Done()
 	}
 
 	anim.AfterDone = func() {
+		zoomAnim.AfterDone()
 		g.QueueRetryButtonAnimation()
 	}
 
@@ -2413,23 +3107,36 @@ func (g *Game) QueueWinAnimation(originX, originY int) {
 
 func (g *Game) QueueRetryButtonAnimation() {
 	buttonRect := g.RetryButtonRect()
-	buttonRect = buttonRect.Inset(-max(buttonRect.Dx(), buttonRect.Dy()) * 0.03)
 
+	// give 5 pixel margin
+	buttonRect = buttonRect.Inset(-5)
+
+	// collect tiles to animate
 	toAnimate := make([]image.Point, 0)
+	{
+		minTileX, minTileY := MousePosToBoardPos(
+			g.TransformedBoardRect(),
+			g.board.Width, g.board.Height,
+			buttonRect.Min,
+		)
+		minTileX = Clamp(minTileX, 0, g.board.Width-1)
+		minTileY = Clamp(minTileY, 0, g.board.Height-1)
 
-	for x := range g.board.Width {
-		for y := range g.board.Height {
-			tileRect := GetBoardTileRect(g.Rect, g.board.Width, g.board.Height, x, y)
+		maxTileX, maxTileY := MousePosToBoardPos(
+			g.TransformedBoardRect(),
+			g.board.Width, g.board.Height,
+			buttonRect.Max,
+		)
+		maxTileX = Clamp(maxTileX, 0, g.board.Width-1)
+		maxTileY = Clamp(maxTileY, 0, g.board.Height-1)
 
-			animate := false
+		iter := NewBoardIterator(
+			minTileX, minTileY, maxTileX, maxTileY,
+		)
 
-			if tileRect.Overlaps(buttonRect) {
-				animate = true
-			}
-
-			if animate {
-				toAnimate = append(toAnimate, image.Pt(x, y))
-			}
+		for iter.HasNext() {
+			x, y := iter.GetNext()
+			toAnimate = append(toAnimate, image.Pt(x, y))
 		}
 	}
 
@@ -2526,6 +3233,10 @@ func (g *Game) QueueRetryButtonAnimation() {
 
 		anim.Done = func() bool {
 			return timer.Current >= timer.Duration
+		}
+
+		anim.AfterDone = func() {
+			g.DisableZoomAndPanControl = false
 		}
 
 		g.GameAnimations.Enqueue(anim)
@@ -2646,7 +3357,7 @@ func (g *Game) QueueResetBoardAnimation() {
 
 		anim.AfterDone = func() {
 			g.DrawRetryButton = true
-			g.ResetBoardNotStyles(g.board.Width, g.board.Height, g.mineCount)
+			g.ResetBoardNotStyles()
 			g.QueueShowBoardAnimation(
 				g.board.Width/2,
 				g.board.Height/2,
@@ -2945,8 +3656,9 @@ func DrawWaterRect(
 }
 
 func (g *Game) RetryButtonRect() FRectangle {
-	boardRect := g.Rect
-	rect := FRectWH(g.RetryButtonSize, g.RetryButtonSize)
+	boardRect := g.TransformedBoardRect()
+	size := g.retryButtonSizeRelative * min(g.TransformedBoardRect().Dx(), g.TransformedBoardRect().Dy())
+	rect := FRectWH(size, size)
 	center := FRectangleCenter(boardRect)
 	rect = CenterFRectangle(rect, center.X, center.Y)
 
@@ -2981,7 +3693,8 @@ func (g *Game) SetDebugBoardForDecoration() {
 	newBoardHeight := len(newBoard)
 	newBoardWidth := len(newBoard[0])
 
-	g.ResetBoard(max(g.board.Width, newBoardWidth), max(g.board.Height, newBoardHeight), 0)
+	g.SetResetParameter(max(g.board.Width, newBoardWidth), max(g.board.Height, newBoardHeight), 0)
+	g.ResetBoard()
 	g.QueueShowBoardAnimation(
 		(g.board.Width-1)/2,
 		(g.board.Height-1)/2,
@@ -3086,6 +3799,10 @@ REVEAL_LOOP:
 // RetryButton
 // =====================
 
+func (g *Game) SetRetryButtonSize(size float64) {
+	g.retryButtonSize = size
+}
+
 type RetryButton struct {
 	BaseButton
 
@@ -3102,6 +3819,7 @@ type RetryButton struct {
 
 func NewRetryButton() *RetryButton {
 	rb := new(RetryButton)
+	rb.BaseButton = NewBaseButton()
 	rb.waterRenderTarget = eb.NewImageWithOptions(
 		RectWH(256, 256),
 		&eb.NewImageOptions{Unmanaged: true},
@@ -3261,4 +3979,472 @@ func (rb *RetryButton) Draw(dst *eb.Image) {
 	op.ColorScale.ScaleWithColor(color4)
 
 	DrawImage(dst, RetryButtonImage, op)
+}
+
+// =====================
+// Tutorial
+// =====================
+
+type FadeSegment struct {
+	FadeInStart time.Duration
+	FadeInEnd   time.Duration
+
+	FadeOutStart time.Duration
+	FadeOutEnd   time.Duration
+}
+
+func (fs *FadeSegment) GetFade(timer Timer) float64 {
+	if timer.Current <= fs.FadeInEnd {
+		return timer.NormalizeRange(fs.FadeInStart, fs.FadeInEnd)
+	}
+
+	if timer.Current >= fs.FadeOutStart {
+		return 1 - timer.NormalizeRange(fs.FadeOutStart, fs.FadeOutEnd)
+	}
+
+	return 1
+}
+
+type FlagTutorial struct {
+	ShowFlagTutorial bool
+
+	foundGoodTile bool
+
+	numberTileX int
+	numberTileY int
+
+	flagTileX int
+	flagTileY int
+
+	animationTimer Timer
+
+	// animation constants
+	animationDelay time.Duration
+
+	fade FadeSegment
+
+	cursorMoveStart time.Duration
+	cursorMoveEnd   time.Duration
+
+	cursorFade FadeSegment
+
+	hlFade FadeSegment
+
+	flagAnimationStart time.Duration
+	flagAnimationEnd   time.Duration
+}
+
+func NewFlagTutorial() *FlagTutorial {
+	ft := new(FlagTutorial)
+	ft.numberTileX = -1
+	ft.numberTileY = -1
+
+	ft.flagTileX = -1
+	ft.flagTileY = -1
+
+	ft.animationDelay = time.Millisecond * 500
+
+	ft.fade.FadeInStart = time.Millisecond * 0
+	ft.fade.FadeInEnd = ft.fade.FadeInStart + time.Millisecond*100
+
+	ft.fade.FadeOutStart = time.Millisecond * 1800
+	ft.fade.FadeOutEnd = ft.fade.FadeOutStart + time.Millisecond*50
+
+	ft.flagAnimationStart = time.Millisecond * 1100
+	ft.flagAnimationEnd = time.Millisecond * 1600
+
+	ft.cursorFade.FadeInStart = ft.fade.FadeInStart
+	ft.cursorFade.FadeInEnd = ft.fade.FadeInEnd
+
+	ft.cursorFade.FadeOutStart = time.Millisecond * 1200
+	ft.cursorFade.FadeOutEnd = time.Millisecond * 1300
+
+	ft.cursorMoveStart = time.Millisecond * 200
+	ft.cursorMoveEnd = time.Millisecond * 1100
+
+	ft.hlFade.FadeInStart = ft.fade.FadeInStart
+	ft.hlFade.FadeInEnd = ft.fade.FadeInEnd
+
+	ft.hlFade.FadeOutEnd = ft.flagAnimationStart + time.Millisecond*50
+	ft.hlFade.FadeOutStart = ft.hlFade.FadeOutEnd - time.Millisecond*10
+
+	ft.animationTimer.Current = -ft.animationDelay
+	ft.animationTimer.Duration = max(
+		ft.fade.FadeOutEnd,
+		ft.cursorFade.FadeOutEnd,
+		ft.hlFade.FadeOutEnd,
+		ft.flagAnimationEnd,
+	) + time.Millisecond*100
+
+	return ft
+}
+
+func (ft *FlagTutorial) GetFlagTutorialStyleModifier() StyleModifier {
+	return func(
+		prevBoard, board Board,
+		boardRect FRectangle,
+		interaction BoardInteractionType,
+		stateChanged bool,
+		prevGameState, gameState GameState,
+		tileStyles Array2D[TileStyle],
+		gi GameInput,
+	) bool {
+		if !ft.foundGoodTile {
+			return false
+		}
+
+		if ft.animationTimer.Current < 0 {
+			return false
+		}
+
+		iter := NewBoardIterator(
+			ft.numberTileX-1, ft.numberTileY-1,
+			ft.numberTileX+1, ft.numberTileY+1,
+		)
+
+		for iter.HasNext() {
+			x, y := iter.GetNext()
+			if !board.IsPosInBoard(x, y) {
+				continue
+			}
+			if !(x == ft.numberTileX && y == ft.numberTileY) && board.Revealed.Get(x, y) {
+				continue
+			}
+			tileStyles.Data[x+tileStyles.Width*y].Highlight = ft.hlFade.GetFade(ft.animationTimer)
+		}
+
+		if ft.animationTimer.Current >= ft.flagAnimationStart {
+			t := ft.animationTimer.NormalizeRange(ft.flagAnimationStart, ft.flagAnimationEnd)
+
+			style := tileStyles.Get(ft.flagTileX, ft.flagTileY)
+
+			style.DrawFg = true
+			style.FgType = TileFgTypeFlag
+			style.FgColor = ColorFade(ColorFlag, ft.fade.GetFade(ft.animationTimer))
+			style.FgFlagAnim = t
+
+			style.Highlight = 0
+
+			tileStyles.Set(ft.flagTileX, ft.flagTileY, style)
+		}
+
+		return true
+	}
+}
+
+func (ft *FlagTutorial) Update(
+	board Board,
+	boardRect FRectangle,
+	maxRect FRectangle,
+) {
+	maxRectCenter := FRectangleCenter(maxRect)
+
+	centerBX, centerBY := MousePosToBoardPos(
+		boardRect,
+		board.Width, board.Height,
+		FPt(ScreenWidth*0.5, ScreenHeight*0.5),
+	)
+
+	isGoodNumberTile := func(numberAt image.Point) bool {
+		if !board.IsPosInBoard(numberAt.X, numberAt.Y) {
+			return false
+		}
+		if !board.Revealed.Get(numberAt.X, numberAt.Y) {
+			return false
+		}
+		if board.GetNeighborMineCount(numberAt.X, numberAt.Y) <= 0 {
+			return false
+		}
+		numberTile := GetBoardTileRect(
+			boardRect,
+			board.Width, board.Height,
+			numberAt.X, numberAt.Y,
+		)
+		if !numberTile.In(maxRect) {
+			return false
+		}
+		return true
+	}
+
+	isGoodFlagTile := func(flagAt image.Point) bool {
+		if !board.IsPosInBoard(flagAt.X, flagAt.Y) {
+			return false
+		}
+		if board.Revealed.Get(flagAt.X, flagAt.Y) {
+			return false
+		}
+		if !board.Mines.Get(flagAt.X, flagAt.Y) {
+			return false
+		}
+		if board.Flags.Get(flagAt.X, flagAt.Y) {
+			return false
+		}
+		tile := GetBoardTileRect(
+			boardRect,
+			board.Width, board.Height,
+			flagAt.X, flagAt.Y,
+		)
+		if !tile.In(maxRect) {
+			return false
+		}
+
+		return true
+	}
+
+	getGoodFlagTile := func(numberAt image.Point) (bool, image.Point) {
+		if !isGoodNumberTile(numberAt) {
+			return false, image.Point{}
+		}
+
+		toSearch := [...]image.Point{
+			// search vertically and horizontally first
+			image.Pt(numberAt.X-1, numberAt.Y),
+			image.Pt(numberAt.X+1, numberAt.Y),
+			image.Pt(numberAt.X, numberAt.Y-1),
+			image.Pt(numberAt.X, numberAt.Y+1),
+
+			// search diagonal last
+			image.Pt(numberAt.X-1, numberAt.Y-1),
+			image.Pt(numberAt.X+1, numberAt.Y-1),
+			image.Pt(numberAt.X-1, numberAt.Y+1),
+			image.Pt(numberAt.X+1, numberAt.Y+1),
+		}
+
+		for _, pt := range toSearch {
+			x, y := pt.X, pt.Y
+			if !isGoodFlagTile(image.Pt(x, y)) {
+				continue
+			}
+
+			return true, image.Pt(x, y)
+		}
+
+		return false, image.Point{}
+	}
+
+	clampX := func(x int) int {
+		return Clamp(x, 0, board.Width-1)
+	}
+
+	clampY := func(y int) int {
+		return Clamp(y, 0, board.Height-1)
+	}
+
+	findGoodTile := false
+
+	if !ft.foundGoodTile {
+		findGoodTile = true
+		ft.foundGoodTile = false
+		ft.animationTimer.Current = -ft.animationDelay
+	}
+	if !isGoodNumberTile(image.Pt(ft.numberTileX, ft.numberTileY)) || !isGoodFlagTile(image.Pt(ft.flagTileX, ft.flagTileY)) {
+		findGoodTile = true
+		ft.foundGoodTile = false
+		ft.animationTimer.Current = -ft.animationDelay
+	}
+	if !ft.ShowFlagTutorial {
+		findGoodTile = false
+		ft.foundGoodTile = false
+		ft.animationTimer.Current = -ft.animationDelay
+	}
+
+	if findGoodTile {
+		searchDist := 0
+	SEARCH_LOOP:
+		for {
+			var minPoint, maxPoint image.Point
+
+			minPoint.X = centerBX - searchDist
+			minPoint.Y = centerBY - searchDist
+
+			maxPoint.X = centerBX + searchDist
+			maxPoint.Y = centerBY + searchDist
+
+			{
+				tileW, tileH := GetBoardTileSize(boardRect, board.Width, board.Height)
+				size := f64((searchDist * 2) + 1)
+				searchRect := FRectWH(size*tileW, size*tileH)
+				searchRect = CenterFRectangle(searchRect, maxRectCenter.X, maxRectCenter.Y)
+				if maxRect.In(searchRect) {
+					break
+				}
+			}
+
+			minPoint.X = clampX(minPoint.X)
+			minPoint.Y = clampY(minPoint.Y)
+
+			maxPoint.X = clampX(maxPoint.X)
+			maxPoint.Y = clampY(maxPoint.Y)
+
+			for x := minPoint.X; x <= maxPoint.X; x++ {
+				y := minPoint.Y
+				if isGood, flagAt := getGoodFlagTile(image.Pt(x, y)); isGood {
+					ft.numberTileX, ft.numberTileY = x, y
+					ft.flagTileX, ft.flagTileY = flagAt.X, flagAt.Y
+					ft.foundGoodTile = true
+					break SEARCH_LOOP
+				}
+			}
+			for x := minPoint.X; x <= maxPoint.X; x++ {
+				y := maxPoint.Y
+				if isGood, flagAt := getGoodFlagTile(image.Pt(x, y)); isGood {
+					ft.numberTileX, ft.numberTileY = x, y
+					ft.flagTileX, ft.flagTileY = flagAt.X, flagAt.Y
+					ft.foundGoodTile = true
+					break SEARCH_LOOP
+				}
+			}
+			for y := minPoint.Y; y <= maxPoint.Y; y++ {
+				x := minPoint.X
+				if isGood, flagAt := getGoodFlagTile(image.Pt(x, y)); isGood {
+					ft.numberTileX, ft.numberTileY = x, y
+					ft.flagTileX, ft.flagTileY = flagAt.X, flagAt.Y
+					ft.foundGoodTile = true
+					break SEARCH_LOOP
+				}
+			}
+			for y := minPoint.Y; y <= maxPoint.Y; y++ {
+				x := maxPoint.X
+				if isGood, flagAt := getGoodFlagTile(image.Pt(x, y)); isGood {
+					ft.numberTileX, ft.numberTileY = x, y
+					ft.flagTileX, ft.flagTileY = flagAt.X, flagAt.Y
+					ft.foundGoodTile = true
+					break SEARCH_LOOP
+				}
+			}
+
+			searchDist += 1
+		}
+	}
+
+	if ft.foundGoodTile {
+		ft.animationTimer.TickUp()
+		if ft.animationTimer.Current > ft.animationTimer.Duration {
+			ft.animationTimer.Current = -ft.animationDelay
+		}
+	} else {
+		ft.animationTimer.Current = -ft.animationDelay
+	}
+}
+
+func (ft *FlagTutorial) Draw(
+	dst *eb.Image,
+	board Board,
+	boardRect FRectangle,
+) {
+	if ft.foundGoodTile && ft.animationTimer.Current >= 0 && ft.ShowFlagTutorial {
+		tileW, tileH := GetBoardTileSize(boardRect, board.Width, board.Height)
+
+		numberTile := GetBoardTileRect(
+			boardRect,
+			board.Width, board.Height,
+			ft.numberTileX, ft.numberTileY,
+		)
+		flagTile := GetBoardTileRect(
+			boardRect,
+			board.Width, board.Height,
+			ft.flagTileX, ft.flagTileY,
+		)
+
+		lerpedPos := FPointLerp(
+			FRectangleCenter(numberTile),
+			FRectangleCenter(flagTile),
+			EaseInCirc(ft.animationTimer.NormalizeRange(
+				ft.cursorMoveStart,
+				ft.cursorMoveEnd,
+			)),
+		)
+
+		// =======================
+		// draw cursor
+		// =======================
+		cursorScale := min(tileW/f64(CursorSprite.Width), tileH/f64(CursorSprite.Height)) * 1.2
+		cursorOp := &DrawSubViewOptions{}
+		cursorOp.GeoM.Concat(TransformToCenter(
+			f64(CursorSprite.Width), f64(CursorSprite.Height),
+			cursorScale, cursorScale,
+			0,
+		))
+
+		cursorCenter := lerpedPos.Add(FPt(0, f64(CursorSprite.Height)*cursorScale*0.6))
+
+		cursorOp.GeoM.Translate(
+			cursorCenter.X,
+			cursorCenter.Y,
+		)
+
+		BeginFilter(eb.FilterLinear)
+		BeginMipMap(true)
+		BeginAntiAlias(true)
+
+		cursorOp.ColorScale.ScaleWithColor(
+			ColorFade(
+				ColorFlagTutorialStroke,
+				ft.cursorFade.GetFade(ft.animationTimer),
+			),
+		)
+		DrawSubView(dst, SpriteSubView(CursorSprite, 0), cursorOp)
+		cursorOp.ColorScale.Reset()
+		cursorOp.ColorScale.ScaleWithColor(
+			ColorFade(
+				ColorFlagTutorialFill,
+				ft.cursorFade.GetFade(ft.animationTimer),
+			),
+		)
+		DrawSubView(dst, SpriteSubView(CursorSprite, 1), cursorOp)
+
+		EndAntiAlias()
+		EndMipMap()
+		EndFilter()
+
+		// =======================
+		// draw drag sign
+		// =======================
+		signPos := FRectangleCenter(numberTile)
+
+		signHeight := min(tileH, tileW) * 0.8
+
+		if ft.flagTileY > ft.numberTileY { // flag is below the number
+			// display the drag text above
+			signPos.Y -= tileH * 0.5      // above tile
+			signPos.Y -= signHeight * 1.2 // account for text height
+		} else {
+			// display the drag text below
+			signPos.Y += f64(CursorSprite.Height) * cursorScale * (0.6 + 0.5) // below cursor
+			signPos.Y += tileH * 0.1                                          // with extra margin
+		}
+
+		signScale := signHeight / f64(DragSignSprite.Height)
+
+		signOp := &DrawSubViewOptions{}
+		signOp.GeoM.Translate(-f64(DragSignSprite.Width)*0.5, 0)
+		signOp.GeoM.Scale(signScale, signScale)
+		signOp.GeoM.Translate(signPos.X, signPos.Y)
+
+		BeginFilter(eb.FilterLinear)
+		BeginMipMap(true)
+		BeginAntiAlias(true)
+		signOp.ColorScale.ScaleWithColor(
+			ColorFade(
+				ColorFlagTutorialStroke,
+				ft.fade.GetFade(ft.animationTimer),
+			),
+		)
+		DrawSubView(dst, SpriteSubView(DragSignSprite, 1), signOp)
+
+		signOp.ColorScale.Reset()
+		signOp.ColorScale.ScaleWithColor(
+			ColorFade(
+				ColorFlagTutorialFill,
+				ft.fade.GetFade(ft.animationTimer),
+			),
+		)
+		DrawSubView(dst, SpriteSubView(DragSignSprite, 0), signOp)
+
+		EndAntiAlias()
+		EndMipMap()
+		EndFilter()
+
+		SetRedraw()
+	}
 }

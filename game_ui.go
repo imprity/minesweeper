@@ -32,9 +32,16 @@ type GameUI struct {
 
 	Difficulty Difficulty
 
-	MineCounts      [DifficultySize]int         // constant
-	BoardTileCounts [DifficultySize]image.Point // constant
-	BoardSizeRatios [DifficultySize]float64     // constant, relative to board area
+	MineCounts [DifficultySize]int
+
+	BoardTileCountsNormal [DifficultySize]image.Point // constant
+	BoardTileCountsMobile [DifficultySize]image.Point // constant
+
+	BoardSizeRatiosNormal [DifficultySize]float64 // constant, relative to board area
+	BoardSizeRatiosMobile [DifficultySize]float64 // constant, relative to board area
+
+	ButtonSizeRatioNormal float64 // constant, relative to min(ScreenWidth, ScreenHeight)
+	ButtonSizeRatioMobile float64 // constant, relative to min(ScreenWidth, ScreenHeight)
 
 	BoardMarginTop        float64 // constant
 	BoardMarginBottom     float64 // constant
@@ -45,17 +52,30 @@ type GameUI struct {
 	TopUIHeight float64 // constant, relative to ScreenHeight
 
 	ResourceEditor *ResourceEditor
+
+	wasOnMobile bool
 }
 
 func NewGameUI() *GameUI {
 	gu := new(GameUI)
 
+	gu.wasOnMobile = ProbablyOnMobile()
+
 	// set constants
 	gu.MineCounts = [DifficultySize]int{10, 40, 99}
-	gu.BoardTileCounts = [DifficultySize]image.Point{
+
+	gu.BoardTileCountsNormal = [DifficultySize]image.Point{
 		image.Pt(10, 10), image.Pt(16, 16), image.Pt(22, 22),
 	}
-	gu.BoardSizeRatios = [DifficultySize]float64{0.75, 0.9, 1}
+	gu.BoardTileCountsMobile = [DifficultySize]image.Point{
+		image.Pt(10, 10), image.Pt(13, 20), image.Pt(18, 27),
+	}
+
+	gu.BoardSizeRatiosNormal = [DifficultySize]float64{0.75, 0.9, 1}
+	gu.BoardSizeRatiosMobile = [DifficultySize]float64{1, 1, 1}
+
+	gu.ButtonSizeRatioNormal = 0.2
+	gu.ButtonSizeRatioMobile = 0.33
 
 	gu.TopUIHeight = 0.075
 
@@ -64,7 +84,7 @@ func NewGameUI() *GameUI {
 	gu.BoardMarginHorizontal = 10
 
 	gu.Game = NewGame(
-		gu.BoardTileCounts[DifficultyEasy].X, gu.BoardTileCounts[DifficultyEasy].Y,
+		gu.BoardTileCount(DifficultyEasy).X, gu.BoardTileCount(DifficultyEasy).Y,
 		gu.MineCounts[DifficultyEasy],
 	)
 	gu.Game.OnFirstInteraction = func() {
@@ -73,18 +93,22 @@ func NewGameUI() *GameUI {
 	gu.Game.OnGameEnd = func(didWin bool) {
 		gu.TopUI.TimerUI.Pause()
 	}
-	gu.Game.OnBoardReset = func() {
+	gu.Game.OnBeforeBoardReset = func() {
+		gu.Game.SetResetParameter(
+			gu.BoardTileCount(gu.Difficulty).X, gu.BoardTileCount(gu.Difficulty).Y,
+			gu.MineCounts[gu.Difficulty],
+		)
 		gu.TopUI.TimerUI.Reset()
 	}
 
 	gu.TopUI = NewTopUI()
 	gu.TopUI.DifficultySelectUI.OnDifficultyChange = func(newDifficulty Difficulty) {
 		gu.Difficulty = newDifficulty
-		gu.Game.ResetBoard(
-			gu.BoardTileCounts[newDifficulty].X, gu.BoardTileCounts[newDifficulty].Y,
-			gu.MineCounts[newDifficulty],
+		gu.Game.SetResetParameter(
+			gu.BoardTileCount(gu.Difficulty).X, gu.BoardTileCount(gu.Difficulty).Y,
+			gu.MineCounts[gu.Difficulty],
 		)
-		gu.Game.Rect = gu.BoardRect(newDifficulty)
+		gu.Game.ResetBoard()
 	}
 
 	gu.ResourceEditor = NewResourceEditor()
@@ -93,11 +117,26 @@ func NewGameUI() *GameUI {
 }
 
 func (gu *GameUI) Update() {
+	if gu.wasOnMobile != ProbablyOnMobile() {
+		gu.wasOnMobile = ProbablyOnMobile()
+
+		if !gu.Game.HadInteraction() {
+			gu.Game.SetResetParameter(
+				gu.BoardTileCount(gu.Difficulty).X, gu.BoardTileCount(gu.Difficulty).Y,
+				gu.MineCounts[gu.Difficulty],
+			)
+			gu.Game.ResetBoard()
+		}
+	}
+
 	gu.TopUI.Rect = gu.TopUIRect()
 	gu.TopUI.Update()
 
-	gu.Game.Rect = gu.BoardRect(gu.Difficulty)
-	gu.Game.RetryButtonSize = min(ScreenWidth, ScreenHeight) * 0.2
+	gu.Game.SetNoInputZone(gu.TopUI.Rect)
+
+	gu.Game.MaxRect = gu.MaxGameRect()
+	gu.Game.Rect = gu.BoardRect()
+	gu.Game.SetRetryButtonSize(min(ScreenWidth, ScreenHeight) * gu.ButtonSizeRatio())
 	gu.Game.Update()
 
 	gu.TopUI.FlagUI.FlagCount = gu.Game.MineCount() - gu.Game.FlagCount()
@@ -123,22 +162,47 @@ func (gu *GameUI) Layout(outsideWidth, outsideHeight int) {
 	gu.Game.Layout(outsideWidth, outsideHeight)
 }
 
-func (gu *GameUI) BoardRect(difficulty Difficulty) FRectangle {
+func (gu *GameUI) BoardTileCount(difficulty Difficulty) image.Point {
+	if ProbablyOnMobile() {
+		return gu.BoardTileCountsMobile[difficulty]
+	} else {
+		return gu.BoardTileCountsNormal[difficulty]
+	}
+}
+
+func (gu *GameUI) BoardSizeRatio(difficulty Difficulty) float64 {
+	if ProbablyOnMobile() {
+		return gu.BoardSizeRatiosMobile[difficulty]
+	} else {
+		return gu.BoardSizeRatiosNormal[difficulty]
+	}
+}
+
+func (gu *GameUI) ButtonSizeRatio() float64 {
+	if ProbablyOnMobile() {
+		return gu.ButtonSizeRatioMobile
+	} else {
+		return gu.ButtonSizeRatioNormal
+	}
+}
+
+func (gu *GameUI) MaxGameRect() FRectangle {
 	topRect := gu.TopUI.RenderedRect()
 
-	parentRect := FRect(
+	return FRect(
 		gu.BoardMarginHorizontal, topRect.Max.Y+gu.BoardMarginTop,
 		ScreenWidth-gu.BoardMarginHorizontal, ScreenHeight-gu.BoardMarginBottom,
 	)
+}
 
-	var boardTileWidth, boardTileHeight int
+func (gu *GameUI) BoardRect() FRectangle {
+	parentRect := gu.MaxGameRect()
 
-	boardTileWidth = gu.BoardTileCounts[difficulty].X
-	boardTileHeight = gu.BoardTileCounts[difficulty].Y
+	boardTileWidth, boardTileHeight := gu.Game.BoardTileCount()
 
 	scale := min(
-		parentRect.Dx()*gu.BoardSizeRatios[difficulty]/f64(boardTileWidth),
-		parentRect.Dy()*gu.BoardSizeRatios[difficulty]/f64(boardTileHeight),
+		parentRect.Dx()*gu.BoardSizeRatio(gu.Difficulty)/f64(boardTileWidth),
+		parentRect.Dy()*gu.BoardSizeRatio(gu.Difficulty)/f64(boardTileHeight),
 	)
 
 	boardWidth := f64(boardTileWidth) * scale
@@ -699,7 +763,7 @@ func NewMuteButtonUI() *MuteButtonUI {
 		mu.MuteButton.ImageColorOnHover = ColorTopUIButtonOnHover
 		mu.MuteButton.ImageColorOnDown = ColorTopUIButtonOnDown
 
-		mu.MuteButton.OnPress = func(justPressed bool) {
+		mu.MuteButton.OnPress = func(bool) {
 			mu.IsMute = !mu.IsMute
 			if mu.IsMute {
 				mu.MuteButton.Image = SpriteSubView(UISprite, 5)

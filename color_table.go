@@ -70,6 +70,9 @@ const (
 	ColorRetryWater3
 	ColorRetryWater4
 
+	ColorFlagTutorialFill
+	ColorFlagTutorialStroke
+
 	ColorTableSize
 )
 
@@ -141,6 +144,9 @@ func init() {
 	setColor(ColorRetryWater2, color.NRGBA{0x4F, 0x75, 0xFF, 0xFF})
 	setColor(ColorRetryWater3, color.NRGBA{0x00, 0xCC, 0xDD, 0xFF})
 	setColor(ColorRetryWater4, color.NRGBA{0x7C, 0xF5, 0xFF, 0xFF})
+
+	setColor(ColorFlagTutorialFill, color.NRGBA{0, 0, 0, 0xFF})
+	setColor(ColorFlagTutorialStroke, color.NRGBA{0xFF, 0xFF, 0xFF, 0xFF})
 
 	for i := ColorTableIndex(0); i < ColorTableSize; i++ {
 		if !colorSet[i] {
