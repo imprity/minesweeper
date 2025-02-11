@@ -96,9 +96,7 @@ type App struct {
 func NewApp() *App {
 	a := new(App)
 	a.FirstTimeUpdate = true
-	// TEST TEST TEST TEST
-	//a.ShowDebugConsole = true
-	// TEST TEST TEST TEST
+	// a.ShowDebugConsole = true
 	return a
 }
 

@@ -1763,6 +1763,8 @@ var DBC = struct { // DrawBoard cache
 	TileStrokeRects Array2D[FRectangle]
 	TileFillRects   Array2D[FRectangle]
 
+	FgTileRects Array2D[FRectangle]
+
 	TileFirmlyPlaced Array2D[bool]
 	TileRoundness    Array2D[[4]bool]
 
@@ -1792,7 +1794,6 @@ func DrawBoard(
 
 	zoomingInOut bool,
 ) {
-	// TODO: don't draw stuff that are outside the screen
 	modColor := func(
 		c color.Color,
 		alpha float64,
@@ -1871,6 +1872,8 @@ func DrawBoard(
 	DBC.TileStrokeRects.Resize(boardWidth, boardHeight)
 	DBC.TileFillRects.Resize(boardWidth, boardHeight)
 
+	DBC.FgTileRects.Resize(boardWidth, boardHeight)
+
 	DBC.TileRoundness.Resize(boardWidth, boardHeight)
 	DBC.TileFirmlyPlaced.Resize(boardWidth, boardHeight)
 
@@ -1878,6 +1881,7 @@ func DrawBoard(
 	// recalculate cache
 	// ===============================
 	{
+		dstRect := RectToFRect(dst.Bounds())
 		tileSizeW, tileSizeH := GetBoardTileSize(boardRect, boardWidth, boardHeight)
 
 		for iter.HasNext() {
@@ -1898,6 +1902,9 @@ func DrawBoard(
 				bgTileRect = FRectScaleCentered(bgTileRect, style.BgScale, style.BgScale)
 
 				DBC.BgTileRects.Set(x, y, bgTileRect)
+				if !bgTileRect.Overlaps(dstRect) {
+					DBC.ShouldDrawBgTile.Set(x, y, false)
+				}
 			}
 
 			// TileFillRects
@@ -1919,6 +1926,21 @@ func DrawBoard(
 
 				DBC.TileStrokeRects.Set(x, y, strokeRect)
 				DBC.TileFillRects.Set(x, y, fillRect)
+				if !strokeRect.Overlaps(dstRect) {
+					DBC.ShouldDrawTile.Set(x, y, false)
+				}
+			}
+
+			// FgTileRects
+			if DBC.ShouldDrawFgTile.Get(x, y) {
+				fgRect := DBC.TileFillRects.Get(x, y)
+				fgRect = fgRect.Add(FPt(style.FgOffsetX, style.FgOffsetY))
+				fgRect = FRectScaleCentered(fgRect, style.FgScale, style.FgScale)
+
+				DBC.FgTileRects.Set(x, y, fgRect)
+				if !fgRect.Overlaps(dstRect) {
+					DBC.ShouldDrawFgTile.Set(x, y, false)
+				}
 			}
 
 			// TileFirmlyPlaced
@@ -2097,14 +2119,14 @@ func DrawBoard(
 			continue
 		}
 
-		fgRect := DBC.TileFillRects.Get(x, y)
+		fgRect := DBC.FgTileRects.Get(x, y)
 		fgColor := style.FgColor
 
 		VIaddSubViewInRect(
 			spriteBuf,
 			fgRect,
-			style.FgScale,
-			style.FgOffsetX, style.FgOffsetY,
+			1,
+			0, 0,
 			modColor(fgColor, style.FgAlpha, style.Highlight, ColorFgHighLight),
 			GetFlagTile(style.FgFlagAnim),
 		)
@@ -2227,7 +2249,7 @@ func DrawBoard(
 			continue
 		}
 
-		fgRect := DBC.TileFillRects.Get(x, y)
+		fgRect := DBC.FgTileRects.Get(x, y)
 		fgScale := style.FgScale * style.TileScale
 		fgColor := style.FgColor
 
@@ -2245,7 +2267,7 @@ func DrawBoard(
 				op.GeoM.Scale(scale, scale)
 
 				op.GeoM.Translate(
-					center.X+style.FgOffsetX, center.Y+style.FgOffsetX,
+					center.X, center.Y,
 				)
 				op.ColorScale.ScaleWithColor(modColor(fgColor, style.FgAlpha, style.Highlight, ColorFgHighLight))
 
