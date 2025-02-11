@@ -285,6 +285,7 @@ func (a *App) Draw(dst *eb.Image) {
 		a.TileStyles,
 
 		false, 0, 0,
+		false,
 	)
 
 	if a.SaveConfigurationQueued {
