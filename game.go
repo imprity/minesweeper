@@ -748,6 +748,9 @@ type Game struct {
 
 	FlagTutorial *FlagTutorial
 
+	revealdTilesUsingTouch bool
+	plantedFlag            bool
+
 	board     Board
 	prevBoard Board
 
@@ -941,6 +944,9 @@ func (g *Game) Update() {
 		SetRedraw()
 	}
 
+	// =================================
+	// update flag tutorial
+	// =================================
 	g.FlagTutorial.Update(
 		g.board,
 		g.TransformedBoardRect(),
@@ -1037,6 +1043,11 @@ func (g *Game) Update() {
 		}
 	}
 
+	// ======================
+	var newTilesRevealed = false
+	var newFlagsPlanted = false
+	// ======================
+
 	if stateChanged {
 		g.SkipAllAnimations()
 
@@ -1049,6 +1060,7 @@ func (g *Game) Update() {
 		for iter.HasNext() {
 			x, y := iter.GetNext()
 			if g.prevBoard.Flags.Get(x, y) != g.board.Flags.Get(x, y) {
+				newFlagsPlanted = true
 				if g.board.Flags.Get(x, y) {
 					g.QueueAddFlagAnimation(x, y)
 				} else {
@@ -1063,6 +1075,7 @@ func (g *Game) Update() {
 			x, y := iter.GetNext()
 			if g.board.Revealed.Get(x, y) && !g.prevBoard.Revealed.Get(x, y) {
 				// on reveal
+				newTilesRevealed = true
 				g.QueueRevealAnimation(
 					g.prevBoard.Revealed, g.board.Revealed,
 					Clamp(gi.BoardX, 0, g.board.Width-1),
@@ -1102,6 +1115,22 @@ func (g *Game) Update() {
 		} else { // something did happened
 			// pass
 		}
+	}
+
+	// ============================================
+	// check if we need to show flag tutorial
+	// ============================================
+	if newTilesRevealed && gi.ByTouch {
+		g.revealdTilesUsingTouch = true
+	}
+	if newFlagsPlanted {
+		g.plantedFlag = true
+	}
+
+	if g.revealdTilesUsingTouch && !g.plantedFlag && gi.Type == InputTypeNone {
+		g.FlagTutorial.ShowFlagTutorial = true
+	} else {
+		g.FlagTutorial.ShowFlagTutorial = false
 	}
 
 	// ============================
@@ -4213,6 +4242,11 @@ func (ft *FlagTutorial) Update(
 		ft.foundGoodTile = false
 		ft.animationTimer.Current = -ft.animationDelay
 	}
+	if !ft.ShowFlagTutorial {
+		findGoodTile = false
+		ft.foundGoodTile = false
+		ft.animationTimer.Current = -ft.animationDelay
+	}
 
 	if findGoodTile {
 		searchDist := 0
@@ -4298,7 +4332,7 @@ func (ft *FlagTutorial) Draw(
 	board Board,
 	boardRect FRectangle,
 ) {
-	if ft.foundGoodTile && ft.animationTimer.Current >= 0 {
+	if ft.foundGoodTile && ft.animationTimer.Current >= 0 && ft.ShowFlagTutorial {
 		tileW, tileH := GetBoardTileSize(boardRect, board.Width, board.Height)
 
 		numberTile := GetBoardTileRect(
