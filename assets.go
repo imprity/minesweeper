@@ -168,6 +168,7 @@ func LoadAssets() {
 			ErrLogger.Fatalf("failed to load sprite image \"%s\": %v", imgPath, err)
 		}
 		sprite.Image = img
+		sprite.BoundsRect = img.Bounds()
 		return sprite
 	}
 

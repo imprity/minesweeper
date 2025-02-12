@@ -1770,8 +1770,7 @@ var DBC = struct { // DrawBoard cache
 
 	WaterRenderTarget *eb.Image
 
-	FixedSizeFace     *ebt.GoTextFace
-	FixedSizeFaceSize float64
+	NumberGlyphCache *NumberGlyphCache
 }{}
 
 func init() {
@@ -1821,6 +1820,10 @@ func DrawBoard(
 
 	iter := NewBoardIterator(0, 0, boardWidth-1, boardHeight-1)
 
+	if DBC.NumberGlyphCache == nil {
+		DBC.NumberGlyphCache = NewNumberGlyphCache()
+	}
+
 	// ======================
 	// create WaterRenderTarget
 	// ======================
@@ -1839,18 +1842,6 @@ func DrawBoard(
 				&eb.NewImageOptions{Unmanaged: true},
 			)
 		}
-	}
-
-	// ======================
-	// create FixedSizeFace
-	// ======================
-	if DBC.FixedSizeFace == nil {
-		DBC.FixedSizeFaceSize = 128
-		DBC.FixedSizeFace = &ebt.GoTextFace{
-			Source: FaceSource,
-			Size:   DBC.FixedSizeFaceSize,
-		}
-		DBC.FixedSizeFace.SetVariation(ebt.MustParseTag("wght"), 600)
 	}
 
 	// ======================
@@ -1995,8 +1986,6 @@ func DrawBoard(
 
 	shapeBuf := DBC.VIBuffers[0]
 	spriteBuf := DBC.VIBuffers[1]
-
-	const segments = 6
 
 	// ============================
 	// draw background tiles
@@ -2207,6 +2196,7 @@ func DrawBoard(
 	}
 
 	/*
+		// DEBUG DEBUG DEBUG DEBUG
 		{
 			DebugPrint("Vertices 0", len(DBC.VIBuffers[0].Vertices))
 			DebugPrint("Indices  0", len(DBC.VIBuffers[0].Indices))
@@ -2214,31 +2204,17 @@ func DrawBoard(
 			DebugPrint("Vertices 1", len(DBC.VIBuffers[1].Vertices))
 			DebugPrint("Indices  1", len(DBC.VIBuffers[1].Indices))
 		}
+		// DEBUG DEBUG DEBUG DEBUG
 	*/
 
+	// ==================
 	// draw numbers
-	var numberFace *ebt.GoTextFace
-	var numberFaceScale float64 = 1
+	// ==================
 
-	{
-		_, tileSizeH := GetBoardTileSize(boardRect, boardWidth, boardHeight)
-		faceSize := tileSizeH * 0.95
+	tileSizeW, tileSizeH := GetBoardTileSize(boardRect, boardWidth, boardHeight)
+	faceSize := min(tileSizeH, tileSizeW) * 0.95
 
-		if zoomingInOut {
-			numberFace = DBC.FixedSizeFace
-			numberFaceScale = faceSize / DBC.FixedSizeFaceSize
-		} else {
-			numberFace = &ebt.GoTextFace{
-				Source: FaceSource,
-				Size:   faceSize,
-			}
-			numberFace.SetVariation(ebt.MustParseTag("wght"), 600)
-		}
-	}
-
-	BeginAntiAlias(false)
-	BeginFilter(eb.FilterNearest)
-	BeginMipMap(false)
+	DBC.NumberGlyphCache.ResetBuffer()
 
 	iter.Reset()
 	for iter.HasNext() {
@@ -2256,28 +2232,236 @@ func DrawBoard(
 		if style.FgType == TileFgTypeNumber {
 			count := style.FgNumber
 			if 1 <= count && count <= 8 {
-				op := &DrawTextOptions{}
-				op.PrimaryAlign = ebt.AlignCenter
-
 				center := FRectangleCenter(fgRect)
 
-				scale := numberFaceScale * fgScale
+				scale := fgScale
 
-				op.GeoM.Translate(0, -numberFace.Size*0.58)
-				op.GeoM.Scale(scale, scale)
-
-				op.GeoM.Translate(
-					center.X, center.Y,
+				DBC.NumberGlyphCache.AddNumberToBuffer(
+					zoomingInOut,
+					count,
+					faceSize,
+					center.X, center.Y-faceSize*0.58*scale,
+					scale,
+					modColor(fgColor, style.FgAlpha, style.Highlight, ColorFgHighLight),
 				)
-				op.ColorScale.ScaleWithColor(modColor(fgColor, style.FgAlpha, style.Highlight, ColorFgHighLight))
-
-				DrawText(dst, strconv.Itoa(count), numberFace, op)
 			}
 		}
 	}
+
+	DBC.NumberGlyphCache.FlushBuffer(dst)
+}
+
+type NumberGlyphCache struct {
+	FixedFaceSprite Sprite
+	FixedFaceSize   float64 // constant
+	FixedFaceBuffer *VIBuffer
+
+	FaceSprite Sprite
+	FaceSize   float64
+	FaceBuffer *VIBuffer
+	IsValid    [9]bool
+}
+
+func NewNumberGlyphCache() *NumberGlyphCache {
+	ng := new(NumberGlyphCache)
+	ng.FixedFaceSize = 128
+
+	ng.FixedFaceSprite = ng.createEmptyNumberSprite(
+		ng.FixedFaceSize, ng.FixedFaceSprite,
+	)
+
+	ng.FixedFaceBuffer = NewVIBuffer(2048, 2048)
+	ng.FaceBuffer = NewVIBuffer(2048, 2048)
+
+	for i := 0; i <= 8; i++ {
+		ng.drawNumberOnSprite(ng.FixedFaceSprite, ng.FixedFaceSize, i)
+	}
+
+	return ng
+}
+
+func (ng *NumberGlyphCache) getNumberFace(faceSize float64) *ebt.GoTextFace {
+	numberFace := &ebt.GoTextFace{
+		Source: FaceSource,
+		Size:   faceSize,
+	}
+	numberFace.SetVariation(ebt.MustParseTag("wght"), 600)
+	return numberFace
+}
+
+func (ng *NumberGlyphCache) createEmptyNumberSprite(
+	faceSize float64,
+	oldSprite Sprite,
+) Sprite {
+	numberFace := ng.getNumberFace(faceSize)
+	maxWidth := float64(-10)
+
+	for i := 0; i <= 8; i++ {
+		w, _ := ebt.Measure(
+			strconv.Itoa(i), numberFace, FaceLineSpacing(numberFace))
+
+		maxWidth = max(maxWidth, w)
+	}
+
+	const margin = 2
+
+	spriteW := int(math.Ceil(maxWidth))
+	spriteH := int(math.Ceil(ng.FixedFaceSize))
+
+	textureW := (spriteW + margin) * 3
+	textureH := (spriteH + margin) * 3
+
+	oldTexture := oldSprite.Image
+
+	if oldTexture == nil || oldTexture.Bounds().Dx() < textureW || oldTexture.Bounds().Dy() < textureH {
+		if oldTexture != nil {
+			oldTexture.Deallocate()
+		}
+		oldTexture = eb.NewImageWithOptions(
+			RectWH(textureW, textureH),
+			&eb.NewImageOptions{Unmanaged: true},
+		)
+	} else {
+		oldTexture.Clear()
+	}
+
+	return Sprite{
+		Image:      oldTexture,
+		BoundsRect: RectWH(textureW, textureH),
+		Width:      spriteW, Height: spriteH,
+		Margin: margin,
+		Count:  9,
+	}
+}
+
+func (ng *NumberGlyphCache) drawNumberOnSprite(
+	sprite Sprite,
+	faceSize float64,
+	number int,
+) {
+	if !(0 <= number && number <= 8) {
+		panic("number is not between 0 to 8")
+	}
+
+	numberFace := ng.getNumberFace(faceSize)
+
+	spriteRect := RectToFRect(SpriteRect(sprite, number))
+
+	BeginAntiAlias(false)
+	BeginFilter(eb.FilterNearest)
+	BeginMipMap(false)
+
+	op := &DrawTextOptions{}
+	op.GeoM.Translate(
+		spriteRect.Min.X+spriteRect.Dx()*0.5,
+		spriteRect.Min.Y,
+	)
+	op.PrimaryAlign = ebt.AlignCenter
+	op.ColorScale.ScaleWithColor(color.NRGBA{255, 255, 255, 255})
+	DrawText(sprite.Image, strconv.Itoa(number), numberFace, op)
+
 	EndMipMap()
 	EndAntiAlias()
 	EndFilter()
+}
+
+func (ng *NumberGlyphCache) ResetBuffer() {
+	ng.FixedFaceBuffer.Reset()
+	ng.FaceBuffer.Reset()
+}
+
+// Adds number below x, y position
+// horizontally centered to x.
+//
+// (I know, it's weird.)
+func (ng *NumberGlyphCache) AddNumberToBuffer(
+	useFixedSizeFace bool,
+	number int,
+	faceSize float64,
+	x, y float64,
+	scale float64,
+	color color.Color,
+) {
+	if !(0 <= number && number <= 8) {
+		panic("number is not between 0 to 8")
+	}
+
+	var subView SubView
+
+	if useFixedSizeFace {
+		subView = SpriteSubView(ng.FixedFaceSprite, number)
+	} else {
+		if !CloseToEx(faceSize, ng.FaceSize, 0.05) {
+			ng.IsValid = [9]bool{}
+			ng.FaceSprite = ng.createEmptyNumberSprite(faceSize, ng.FaceSprite)
+			ng.FaceSize = faceSize
+		}
+
+		if !ng.IsValid[number] {
+			ng.drawNumberOnSprite(ng.FaceSprite, faceSize, number)
+			ng.IsValid[number] = true
+		}
+
+		subView = SpriteSubView(ng.FaceSprite, number)
+	}
+
+	if useFixedSizeFace {
+		scale *= faceSize / ng.FixedFaceSize
+	}
+
+	op := &DrawSubViewOptions{}
+	op.GeoM.Scale(scale, scale)
+	op.GeoM.Translate(x-subView.Rect.Dx()*0.5*scale, y)
+	op.ColorScale.ScaleWithColor(color)
+
+	if useFixedSizeFace {
+		VIaddSubView(ng.FixedFaceBuffer, subView, op)
+	} else {
+		VIaddSubView(ng.FaceBuffer, subView, op)
+	}
+}
+
+func (ng *NumberGlyphCache) FlushBuffer(dst *eb.Image) {
+	BeginAntiAlias(false)
+	BeginFilter(eb.FilterNearest)
+	BeginMipMap(false)
+
+	op := &DrawTrianglesOptions{}
+	op.ColorScaleMode = eb.ColorScaleModePremultipliedAlpha
+
+	if len(ng.FixedFaceBuffer.Vertices) > 0 {
+		DrawTriangles(
+			dst,
+			ng.FixedFaceBuffer.Vertices, ng.FixedFaceBuffer.Indices,
+			ng.FixedFaceSprite.Image,
+			op,
+		)
+	}
+
+	if len(ng.FaceBuffer.Vertices) > 0 {
+		DrawTriangles(
+			dst,
+			ng.FaceBuffer.Vertices, ng.FaceBuffer.Indices,
+			ng.FaceSprite.Image,
+			op,
+		)
+	}
+
+	EndMipMap()
+	EndFilter()
+	EndAntiAlias()
+
+	// DEBUG DEBUG DEBUG DEBUG
+	/*
+		{
+			DebugPrint("FixedFaceBuffer V", len(ng.FixedFaceBuffer.Vertices))
+			DebugPrint("FixedFaceBuffer I", len(ng.FixedFaceBuffer.Indices))
+
+			DebugPrint("FaceBuffer V", len(ng.FaceBuffer.Vertices))
+			DebugPrint("FaceBuffer I", len(ng.FaceBuffer.Indices))
+		}
+	*/
+	// DEBUG DEBUG DEBUG DEBUG
 }
 
 func DrawParticles(

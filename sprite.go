@@ -12,6 +12,11 @@ import (
 type Sprite struct {
 	Image *eb.Image
 
+	// bounds of image you want to use as sprite
+	// if you want to use the whole image,
+	// set sprite.BoundsRect = sprite.Image.Bounds()
+	BoundsRect image.Rectangle
+
 	Width, Height int
 
 	Margin int
@@ -28,7 +33,7 @@ func SpriteRect(sprite Sprite, spriteN int) image.Rectangle {
 	w := sprite.Width + sprite.Margin
 	h := sprite.Height + sprite.Margin
 
-	imgRect := sprite.Image.Bounds()
+	imgRect := sprite.BoundsRect
 	spriteW, spriteH := imgRect.Dx(), imgRect.Dy()
 
 	colCount := spriteW / w
@@ -44,7 +49,7 @@ func SpriteRect(sprite Sprite, spriteN int) image.Rectangle {
 	col := spriteN % colCount
 	row := spriteN / colCount
 
-	imageMin := sprite.Image.Bounds().Min
+	imageMin := sprite.BoundsRect.Min
 
 	return image.Rectangle{
 		Min: image.Pt(col*w, row*h).Add(imageMin),
