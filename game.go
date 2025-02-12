@@ -2256,10 +2256,11 @@ type NumberGlyphCache struct {
 	FixedFaceSize   float64 // constant
 	FixedFaceBuffer *VIBuffer
 
-	FaceSprite Sprite
-	FaceSize   float64
-	FaceBuffer *VIBuffer
-	IsValid    [9]bool
+	FaceSprite       Sprite
+	FaceSize         float64
+	FaceBuffer       *VIBuffer
+	IsValid          [9]bool
+	AlreadyCachedOne bool
 }
 
 func NewNumberGlyphCache() *NumberGlyphCache {
@@ -2368,6 +2369,7 @@ func (ng *NumberGlyphCache) drawNumberOnSprite(
 func (ng *NumberGlyphCache) ResetBuffer() {
 	ng.FixedFaceBuffer.Reset()
 	ng.FaceBuffer.Reset()
+	ng.AlreadyCachedOne = false
 }
 
 // Adds number below x, y position
@@ -2380,41 +2382,56 @@ func (ng *NumberGlyphCache) AddNumberToBuffer(
 	faceSize float64,
 	x, y float64,
 	scale float64,
-	color color.Color,
+	clr color.Color,
 ) {
 	if !(0 <= number && number <= 8) {
 		panic("number is not between 0 to 8")
 	}
 
-	var subView SubView
+	var addToFixedBuffer bool
 
-	if useFixedSizeFace {
-		subView = SpriteSubView(ng.FixedFaceSprite, number)
-	} else {
+	if !useFixedSizeFace {
+		// invalidate cache
 		if !CloseToEx(faceSize, ng.FaceSize, 0.05) {
 			ng.IsValid = [9]bool{}
 			ng.FaceSprite = ng.createEmptyNumberSprite(faceSize, ng.FaceSprite)
 			ng.FaceSize = faceSize
 		}
 
-		if !ng.IsValid[number] {
-			ng.drawNumberOnSprite(ng.FaceSprite, faceSize, number)
-			ng.IsValid[number] = true
-		}
+		if ng.IsValid[number] {
+			addToFixedBuffer = false
+		} else {
+			if !ng.AlreadyCachedOne {
+				ng.AlreadyCachedOne = true
+				ng.drawNumberOnSprite(ng.FaceSprite, faceSize, number)
+				ng.IsValid[number] = true
 
-		subView = SpriteSubView(ng.FaceSprite, number)
+				addToFixedBuffer = false
+			} else {
+				addToFixedBuffer = true
+				// we will cache it in the future
+				SetRedraw()
+			}
+		}
+	} else {
+		addToFixedBuffer = true
 	}
 
-	if useFixedSizeFace {
+	var subView SubView
+
+	if addToFixedBuffer {
 		scale *= faceSize / ng.FixedFaceSize
+		subView = SpriteSubView(ng.FixedFaceSprite, number)
+	} else {
+		subView = SpriteSubView(ng.FaceSprite, number)
 	}
 
 	op := &DrawSubViewOptions{}
 	op.GeoM.Scale(scale, scale)
 	op.GeoM.Translate(x-subView.Rect.Dx()*0.5*scale, y)
-	op.ColorScale.ScaleWithColor(color)
+	op.ColorScale.ScaleWithColor(clr)
 
-	if useFixedSizeFace {
+	if addToFixedBuffer {
 		VIaddSubView(ng.FixedFaceBuffer, subView, op)
 	} else {
 		VIaddSubView(ng.FaceBuffer, subView, op)
