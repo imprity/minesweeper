@@ -454,6 +454,12 @@ func NewDifficultySelectUI() *DifficultySelectUI {
 	const idealMargin = 15
 	var idealBtnSize FPoint = FPt(70, 70)
 
+	ds.DifficultyButtonLeft.InputRectScaleY = TopUIIdealHeight / idealBtnSize.Y * 0.95
+	ds.DifficultyButtonRight.InputRectScaleY = TopUIIdealHeight / idealBtnSize.Y * 0.95
+
+	ds.DifficultyButtonLeft.InputRectScaleX = 1.6
+	ds.DifficultyButtonRight.InputRectScaleX = 1.6
+
 	var idealWidth float64 = idealBtnSize.X + idealMargin + idealMaxTextWidth + idealMargin + idealBtnSize.X
 
 	ds.GetIdealWidth = func() float64 {
@@ -780,6 +786,9 @@ func NewMuteButtonUI() *MuteButtonUI {
 	}
 
 	const idealBtnSize = 82
+
+	mu.MuteButton.InputRectScaleX = 1.4
+	mu.MuteButton.InputRectScaleY = f64(TopUIIdealHeight) / f64(idealBtnSize) * 0.95
 
 	var idealBtnRect FRectangle = FRectXYWH(
 		0, TopUIIdealHeight*0.5-idealBtnSize*0.5,

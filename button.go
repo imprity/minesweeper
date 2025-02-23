@@ -27,6 +27,9 @@ const (
 type BaseButton struct {
 	Rect FRectangle
 
+	InputRectScaleX float64
+	InputRectScaleY float64
+
 	Disabled bool
 
 	OnPress   func(byTouch bool)
@@ -49,7 +52,15 @@ type BaseButton struct {
 func NewBaseButton() BaseButton {
 	var b BaseButton
 	b.InputId = NewInputGroupId()
+	b.InputRectScaleX = 1
+	b.InputRectScaleY = 1
 	return b
+}
+
+func (b *BaseButton) GetInputRect() FRectangle {
+	return FRectScaleCentered(
+		b.Rect, b.InputRectScaleX, b.InputRectScaleY,
+	)
 }
 
 func (b *BaseButton) Update() {
@@ -63,8 +74,10 @@ func (b *BaseButton) Update() {
 
 	var touchId eb.TouchID
 
+	inputRect := b.GetInputRect()
+
 	cursor := CursorFPt()
-	touchingInside := (IsTouching(b.Rect, &touchId) && !IsTouching(b.NoInputZone, nil))
+	touchingInside := (IsTouching(inputRect, &touchId) && !IsTouching(b.NoInputZone, nil))
 
 	if touchingInside {
 		if info, ok := GetTouchInfo(touchId); ok {
@@ -78,13 +91,13 @@ func (b *BaseButton) Update() {
 		}
 	}
 
-	inRect := (cursor.In(b.Rect) && !cursor.In(b.NoInputZone)) || touchingInside
+	inRect := (cursor.In(inputRect) && !cursor.In(b.NoInputZone)) || touchingInside
 
 	if inRect { // if mouse in rect
 		firedOnJustPress := false
 		{
 			justPressed := IsMouseButtonJustPressed(eb.MouseButtonLeft)
-			justTouched := IsTouchJustPressed(b.Rect, nil)
+			justTouched := IsTouchJustPressed(inputRect, nil)
 			if justPressed || justTouched {
 				b.State = ButtonStateDown
 				b.readyToCallOnRelease = true
@@ -101,14 +114,14 @@ func (b *BaseButton) Update() {
 		if b.State == ButtonStateDown {
 			repeat := HandleMouseButtonRepeat(
 				b.InputId,
-				b.Rect,
+				inputRect,
 				b.FirstRate, b.RepeatRate,
 				eb.MouseButtonLeft,
 			)
 
 			touchRepeat := HandleTouchRepeat(
 				b.InputId,
-				b.Rect,
+				inputRect,
 				b.FirstRate, b.RepeatRate,
 			)
 
@@ -126,7 +139,7 @@ func (b *BaseButton) Update() {
 	}
 
 	if b.readyToCallOnRelease {
-		touchReleased := (IsTouchJustReleased(b.Rect, &touchId) && !IsTouchJustReleased(b.NoInputZone, nil))
+		touchReleased := (IsTouchJustReleased(inputRect, &touchId) && !IsTouchJustReleased(b.NoInputZone, nil))
 		if touchReleased {
 			if info, ok := GetTouchInfo(touchId); ok {
 				if info.StartedPos.In(b.NoInputZone) {
@@ -153,7 +166,7 @@ func (b *BaseButton) Update() {
 		}
 	}
 
-	if ((cursor.In(b.Rect) && !cursor.In(b.NoInputZone)) && !(IsMouseButtonPressed(eb.MouseButtonLeft) && b.State == ButtonStateDown)) ||
+	if ((cursor.In(inputRect) && !cursor.In(b.NoInputZone)) && !(IsMouseButtonPressed(eb.MouseButtonLeft) && b.State == ButtonStateDown)) ||
 		(touchingInside && b.State != ButtonStateDown) {
 		b.State = ButtonStateHover
 	}
