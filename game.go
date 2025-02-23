@@ -304,7 +304,7 @@ func (gi *GameInputHandler) Update(
 			gi.draggingForFlag = false
 		}
 
-		if !gi.ignoreForFlag[touchId] && startedInNum && info.DidEnd {
+		if !gi.ignoreForFlag[touchId] && startedInNum && justReleased {
 			var foundNeighboar bool = false
 			var neighborX, neighborY int
 
@@ -373,9 +373,6 @@ func (gi *GameInputHandler) Update(
 					gi.dragPastLimit = true
 				}
 			}
-		} else {
-			gi.dragPastLimit = false
-			gi.dragStarted = false
 		}
 	}
 
