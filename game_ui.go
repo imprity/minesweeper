@@ -49,7 +49,8 @@ type GameUI struct {
 
 	TopUI *TopUI
 
-	TopUIHeight float64 // constant, relative to ScreenHeight
+	TopUIHeight    float64 // constant, relative to ScreenHeight
+	TopUIMinHeight float64 // constant
 
 	ResourceEditor *ResourceEditor
 
@@ -78,6 +79,7 @@ func NewGameUI() *GameUI {
 	gu.ButtonSizeRatioMobile = 0.33
 
 	gu.TopUIHeight = 0.075
+	gu.TopUIMinHeight = 45
 
 	gu.BoardMarginTop = 10
 	gu.BoardMarginBottom = 10
@@ -148,6 +150,8 @@ func (gu *GameUI) Update() {
 		SetRedraw()
 	}
 	gu.ResourceEditor.Update()
+
+	DebugPrint("Top UI Height", gu.TopUIRect().Dy())
 }
 
 func (gu *GameUI) Draw(dst *eb.Image) {
@@ -219,7 +223,7 @@ func (gu *GameUI) BoardRect() FRectangle {
 
 func (gu *GameUI) TopUIRect() FRectangle {
 	w := ScreenWidth
-	h := ScreenHeight * gu.TopUIHeight
+	h := max(ScreenHeight*gu.TopUIHeight, gu.TopUIMinHeight)
 
 	x := ScreenWidth*0.5 - w*0.5
 	y := float64(0)
