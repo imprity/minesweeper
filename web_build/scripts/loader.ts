@@ -5,17 +5,9 @@ declare var MINESWEEPER_WASM_SIZE : number
     async function loadData(
         path : string,
         knownDataSize : number,
-        onProgress : (readData : number, dataSize : number, contentLengthMissing : boolean) => void
+        onProgress : (readData : number, dataSize : number) => void
     ) : Promise<Uint8Array>{
         const response = await fetch(path)
-
-        let dataSize : number = parseInt(response.headers.get('Content-Length'))
-        let contentLengthMissing : boolean = false
-
-        if (isNaN(dataSize)) {
-            dataSize = knownDataSize
-            contentLengthMissing = true
-        }
 
         let data = []
         let dataRead : number = 0
@@ -34,7 +26,7 @@ declare var MINESWEEPER_WASM_SIZE : number
                     data.push(bodyRead.value[i])
                 }
 
-                onProgress(dataRead, dataSize, contentLengthMissing)
+                onProgress(dataRead, knownDataSize)
             }
         }
 
@@ -58,7 +50,7 @@ declare var MINESWEEPER_WASM_SIZE : number
         const data = await loadData(
             'minesweeper.wasm',
             MINESWEEPER_WASM_SIZE,
-            (readData : number, dataSize : number, contentLengthMissing : boolean) => {
+            (readData : number, dataSize : number) => {
                 const progress = readData / dataSize
                 progressFill.style.width = `${progress * 100}%`
             }

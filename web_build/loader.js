@@ -11,12 +11,6 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     function loadData(path, knownDataSize, onProgress) {
         return __awaiter(this, void 0, void 0, function* () {
             const response = yield fetch(path);
-            let dataSize = parseInt(response.headers.get('Content-Length'));
-            let contentLengthMissing = false;
-            if (isNaN(dataSize)) {
-                dataSize = knownDataSize;
-                contentLengthMissing = true;
-            }
             let data = [];
             let dataRead = 0;
             const reader = response.body.getReader();
@@ -30,7 +24,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
                     for (let i = 0; i < bodyRead.value.length; i++) {
                         data.push(bodyRead.value[i]);
                     }
-                    onProgress(dataRead, dataSize, contentLengthMissing);
+                    onProgress(dataRead, knownDataSize);
                 }
             }
             return new Uint8Array(data);
@@ -46,7 +40,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     const crashErrortext = document.getElementById('crash-error-text');
     // load wasm
     try {
-        const data = yield loadData('minesweeper.wasm', MINESWEEPER_WASM_SIZE, (readData, dataSize, contentLengthMissing) => {
+        const data = yield loadData('minesweeper.wasm', MINESWEEPER_WASM_SIZE, (readData, dataSize) => {
             const progress = readData / dataSize;
             progressFill.style.width = `${progress * 100}%`;
         });
